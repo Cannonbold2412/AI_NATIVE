@@ -1,0 +1,268 @@
+{
+  "version": "1.0.0",
+  "confidence": {
+    "thresholds": {
+      "dom_execute": 0.9,
+      "semantic_execute": 0.85,
+      "visual_execute": 0.8
+    },
+    "recovery_global_weights": {
+      "dom": 0.3,
+      "semantic": 0.35,
+      "visual": 0.15,
+      "context": 0.2
+    },
+    "layer_scorers": {
+      "dom": { "id": 0.35, "tag": 0.15, "class": 0.25, "xpath": 0.25 },
+      "semantic": {
+        "text": 0.35,
+        "role": 0.25,
+        "intent": 0.2,
+        "context": 0.2,
+        "parent_mix": 0.5,
+        "form_mix": 0.5
+      },
+      "visual": {
+        "viewport_mismatch_penalty": 0.85,
+        "iou_weight": 0.65,
+        "pos_weight": 0.35
+      },
+      "context": { "url": 0.6, "title": 0.4 }
+    }
+  },
+  "uncertainty": {
+    "candidate_ambiguity_margin": 0.03,
+    "assist_min_confidence": 0.75,
+    "recovery_candidate_budget": 5,
+    "min_anchors_warn": 1,
+    "destructive_min_anchors_warn": 2,
+    "failure_first": true,
+    "patch_llm_min_confidence": 0.8
+  },
+  "llm_budgets": {
+    "max_calls_per_step": 1,
+    "timeout_ms_floor": 2000
+  },
+  "workflow": {
+    "submit_text_tokens": [
+      "sign in",
+      "log in",
+      "login",
+      "submit",
+      "continue",
+      "next",
+      "place order",
+      "pay now",
+      "confirm"
+    ],
+    "submit_intent_substrings": ["submit"],
+    "commit_intent_substrings": ["submit", "confirm"],
+    "submit_button_types": ["submit", "button"],
+    "navigation_actions": ["navigate", "go_to", "open"],
+    "truncate_after_terminal_submit": false,
+    "normalize_editable_click_to_focus": true,
+    "synthetic_focus_before_type": true,
+    "dependency_ranks": {
+      "focus": 0,
+      "prep_editable_click": 0,
+      "type": 1,
+      "fill": 1,
+      "click": 2,
+      "scroll": 3,
+      "submit_click": 4,
+      "navigate": 0,
+      "go_to": 0,
+      "open": 0,
+      "default": 2
+    }
+  },
+  "anchors": {
+    "semantic_anchors": {
+      "enabled": true,
+      "allow_unlisted_phrases": true,
+      "allow_structural_form_fallback": false,
+      "allow_sibling_input_fallback": true,
+      "skip_redundant_structural_when_semantic": true,
+      "suggest_structural_extras": true,
+      "max_phrase_len": 56,
+      "min_phrase_len": 3,
+      "min_unlisted_phrase_chars": 6,
+      "min_multiword_body_chars": 4,
+      "max_sibling_anchor_candidates": 2,
+      "phrase_stopwords": [],
+      "structural_only_when_no_phrase_anchors": true
+    },
+    "input_type_anchor_map": {
+      "email": "email_input",
+      "password": "password_input"
+    },
+    "allowed_elements": [
+      "input",
+      "label",
+      "sibling_input",
+      "password_input",
+      "email_input",
+      "heading",
+      "nav",
+      "main",
+      "dialog",
+      "combobox",
+      "listbox",
+      "region",
+      "article"
+    ],
+    "generic_skip": ["header", "h1", "h2", "h3", "title", "page"]
+  },
+  "selectors": {
+    "canonical_order": ["css", "aria", "text_based", "xpath"],
+    "kind_base_scores": {
+      "aria": 100,
+      "name": 95,
+      "text_based": 90,
+      "role": 80,
+      "css": 70,
+      "xpath": 50
+    },
+    "xpath_length_penalty_per_50": 3,
+    "empty_css_penalty": 0
+  },
+  "validation": {
+    "submit_min_timeout_ms": 8000,
+    "navigation_min_timeout_ms": 8000,
+    "default_timeout_ms": 5000,
+    "channel_weights": {
+      "url": 1.0,
+      "dom_fingerprint": 0.85,
+      "element_set": 0.35,
+      "text": 0.2
+    },
+    "commit_no_evidence_wait": "intent_outcome",
+    "commit_no_evidence_intent_first": false,
+    "non_commit_dom_wait_on_diff": "intent_outcome",
+    "infer_element_appear_for_disclosure_roles": true,
+    "disclosure_roles_for_element_appear": ["combobox", "listbox", "menu", "disclosure"],
+    "disclosure_appear_min_timeout_ms": 0,
+    "destructive_require_confirmation_wait": true,
+    "destructive_wait_for_type": "element_appear",
+    "destructive_min_timeout_ms": 0,
+    "destructive_intent_substrings": ["erase", "trash", "wipe"],
+    "destructive_confirm_expected_tokens": ["delete", "remove", "permanently", "confirm", "cannot be undone"],
+    "wait_for_recovery_strategy_hints": {
+      "url_change": ["url_state_match"],
+      "element_appear": ["overlay_anchor", "role_match"],
+      "intent_outcome": ["semantic match", "intent_outcome_probe"]
+    }
+  },
+  "decision_layer": {
+    "intent_primary_validation": true,
+    "intent_tokens_as_anchors": true,
+    "semantic_anchor_ranking": true,
+    "success_add_intent_tokens": true,
+    "commit_intent_prefer_url_substrings": ["navigate", "redirect", "checkout", "payment"],
+    "commit_intent_prefer_dom_substrings": ["modal", "dialog", "drawer", "toast", "inline"],
+    "intent_validation_facets": [
+      {
+        "intent_substrings": ["navigate", "redirect", "follow", "visit", "go to"],
+        "actions": ["click"],
+        "skip_when_commit": true,
+        "wait_for_type": "url_change"
+      },
+      {
+        "intent_substrings": ["menu", "dropdown", "popover", "drawer", "expand", "collapse", "toggle", "combobox", "listbox"],
+        "actions": ["click"],
+        "skip_when_commit": true,
+        "wait_for_type": "element_appear"
+      }
+    ],
+    "anchor_deprioritize_elements": [],
+    "anchor_low_information_substrings": ["header", "nav", "footer", "main", "h1", "h2", "h3"],
+    "anchor_rank_weights": {
+      "intent_token_hit": 2.0,
+      "selector_scope_bonus": 1.0,
+      "multiword_phrase_bonus": 0.55,
+      "short_singleword_without_signal_penalty": -0.45,
+      "short_token_char_max": 6
+    },
+    "intent_token_stopwords": ["the", "and", "for", "to", "a", "an", "of", "in", "on"],
+    "intent_recovery_from_facets": true,
+    "intent_recovery_facets": [
+      {
+        "substrings": ["navigate", "redirect", "follow", "visit"],
+        "add": "url_state_match"
+      },
+      {
+        "substrings": ["menu", "dropdown", "modal", "dialog", "drawer", "popover"],
+        "add": "overlay_anchor"
+      }
+    ]
+  },
+  "recovery_defaults": {
+    "strategies": ["semantic match", "position match", "visual match"],
+    "intent_strategy_glue": [
+      { "substrings": ["scroll"], "add": "scroll_anchor" },
+      { "substrings": ["select", "dropdown", "combobox", "listbox"], "add": "role_match" }
+    ],
+    "confidence_threshold": 0.85,
+    "max_attempts": 2,
+    "require_diverse_attempts": true
+  },
+  "intent": {
+    "rewrite_click_on_editable_to_focus": true,
+    "collapse_tag_only_action_intents": true,
+    "generic_intents": [
+      "",
+      "interact",
+      "perform_action",
+      "provide_input",
+      "advance_ui_flow",
+      "enter_form_value",
+      "activate_control",
+      "focus_input",
+      "click_button",
+      "click_input",
+      "focus_button"
+    ],
+    "semantic_fallback_confidence": {
+      "button_submit_like": 0.82,
+      "field_token": 0.78,
+      "input_generic": 0.7,
+      "default": 0.6
+    }
+  },
+  "signals": {
+    "pipeline_siblings_max": 4,
+    "build_inner_text_max": 240,
+    "page_fingerprint_slice": 4000,
+    "semantic_normalized_max": 500,
+    "credential_bindings": {
+      "email": "{{user_email}}",
+      "password": "{{user_password}}"
+    },
+    "input_type_detectors": [
+      { "regex": "email|e-mail", "value": "email" },
+      { "regex": "password|passphrase", "value": "password" },
+      { "regex": "phone|tel|mobile", "value": "tel" },
+      { "regex": "otp|verification code", "value": "text" }
+    ]
+  },
+  "capture_profile": {
+    "css_path_max_depth": 8,
+    "xpath_max_depth": 10,
+    "anchor_candidates_max": 40,
+    "class_slice_max": 2,
+    "safe_text_max": 120,
+    "page_fingerprint_slice": 4000,
+    "siblings_summarize_max": 6,
+    "input_debounce_ms": 350,
+    "scroll_debounce_ms": 220
+  },
+  "scroll_defaults": { "direction": "down", "delta": 150 },
+  "timing_by_action": {
+    "default": { "wait_for": "load", "timeout_ms": null },
+    "type": { "wait_for": "load", "timeout_ms": null },
+    "fill": { "wait_for": "load", "timeout_ms": null },
+    "focus": { "wait_for": "load", "timeout_ms": null },
+    "click": { "wait_for": "load", "timeout_ms": null },
+    "scroll": { "wait_for": "load", "timeout_ms": null }
+  }
+}

@@ -1,0 +1,10 @@
+data/
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.obsidian_vault/
+graphify-out/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.example
