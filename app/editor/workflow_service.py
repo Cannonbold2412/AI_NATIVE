@@ -24,6 +24,27 @@ from app.policy.bundle import get_policy_bundle
 from app.policy.intent_ontology import generic_intents
 
 
+def _parse_scroll_amount(step: dict[str, Any]) -> int | None:
+    action = step.get("action")
+    if isinstance(action, dict):
+        raw = action.get("delta")
+        try:
+            if raw is not None:
+                return int(raw)
+        except (TypeError, ValueError):
+            pass
+    signals = step.get("signals") if isinstance(step.get("signals"), dict) else {}
+    visual = signals.get("visual") if isinstance(signals.get("visual"), dict) else {}
+    pos = str(visual.get("scroll_position") or "").strip()
+    if not pos:
+        return None
+    _, _, y = pos.partition(",")
+    try:
+        return int(float(y.strip() or 0))
+    except ValueError:
+        return None
+
+
 def _build_reference_for_audit(step: dict[str, Any]) -> dict[str, Any]:
     signals = step.get("signals") or {}
     context = signals.get("context") or {}
@@ -48,11 +69,11 @@ def _editable_fields(step: dict[str, Any], policy: dict[str, Any]) -> dict[str, 
     is_scroll = act == "scroll"
     dest = destructive_compiler_step(skill_step_for_destructive_check(step), policy)
     return {
-        "intent": not is_scroll,
+        "intent": True,
         "action": False,
         "selectors": not is_scroll,
         "anchors": not is_scroll,
-        "validation": True,
+        "validation": not is_scroll,
         "recovery_strategies": not is_scroll,
         "value": act in {"fill", "type"},
         "parameterization": not is_scroll,
@@ -227,6 +248,7 @@ def step_to_dto(skill_id: str, step: dict[str, Any], step_index: int, policy: di
         },
         recovery=dict(recovery),
         value=step.get("value"),
+        scroll_amount=_parse_scroll_amount(step),
         input_binding=step.get("input_binding"),
         screenshot=_screenshot_dto(skill_id, visual, asset_base_url),
         editable_fields=_editable_fields(step, policy),

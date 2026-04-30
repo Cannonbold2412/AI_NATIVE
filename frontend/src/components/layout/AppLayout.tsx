@@ -152,7 +152,7 @@ function SidebarRail({
 
 type AppShellProps = {
   title: string
-  description?: string
+  description?: ReactNode
   actions?: ReactNode
   mainClassName?: string
   children: ReactNode
@@ -225,8 +225,24 @@ export function AppShell({ title, description, actions, mainClassName, children 
             <div className="flex min-h-16 items-center gap-3 px-4 py-3 sm:px-6">
               {mobileNav}
               <div className="min-w-0 flex-1">
-                <h1 className="truncate text-base font-semibold text-white sm:text-lg">{title}</h1>
-                {description ? <p className="mt-0.5 truncate text-sm text-zinc-500">{description}</p> : null}
+                <h1
+                  className={cn(
+                    'truncate text-base font-semibold text-white sm:text-lg',
+                    description != null && description !== false && 'leading-snug',
+                  )}
+                >
+                  {title}
+                </h1>
+                {description != null && description !== false ? (
+                  <div
+                    className={cn(
+                      'mt-0 min-w-0',
+                      typeof description === 'string' ? 'truncate text-sm text-zinc-500' : 'text-zinc-500',
+                    )}
+                  >
+                    {description}
+                  </div>
+                ) : null}
               </div>
               {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
             </div>

@@ -8,7 +8,6 @@ from app.compiler.intent_access import get_effective_intent_from_skill_step
 from app.compiler.recovery_policy import (
     merge_recovery_strategies_for_wait_shape,
     recovery_strategies_for_intent,
-    suggest_anchors_from_context,
 )
 from app.confidence.layered import layered_decision
 from app.confidence.uncertainty import audit_reference
@@ -67,8 +66,6 @@ def _enhance_step_with_llm(step: dict[str, Any]) -> dict[str, Any]:
         recovery["intent"] = resolved or llm.intent
         recovery["final_intent"] = str(recovery.get("intent") or "").strip()
         anchors = list(recovery.get("anchors") or [])
-        if not anchors:
-            anchors = suggest_anchors_from_context(context, semantic, pol, target=dict(dom or {}))
         recovery["anchors"] = anchors
         intent_for_recovery = str(recovery.get("intent") or resolved or llm.intent or "").strip()
         strategies = list(recovery_strategies_for_intent(intent_for_recovery, pol))
@@ -80,6 +77,10 @@ def _enhance_step_with_llm(step: dict[str, Any]) -> dict[str, Any]:
 
 
 def _apply_top_level_step_fields(step: dict[str, Any], patch: dict[str, Any]) -> None:
+    if "action" in patch and isinstance(patch["action"], dict):
+        current = step.get("action")
+        base = dict(current) if isinstance(current, dict) else {"action": str(current or "")}
+        step["action"] = deep_merge(base, dict(patch["action"]))
     if "intent" in patch and isinstance(patch["intent"], str):
         raw = str(patch["intent"]).strip()
         prev = str(step.get("intent") or "").strip()

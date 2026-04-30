@@ -1,15 +1,26 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { fetchSkillList } from './api/workflowApi'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { deleteSkillPackage, type SkillSummary, fetchSkillList } from './api/workflowApi'
 import { AppShell } from '@/components/layout/AppLayout'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { Boxes, Clock3, RefreshCw, Rows3, Search } from 'lucide-react'
+import { Boxes, Clock3, FileJson, Pencil, RefreshCw, Search, Trash2 } from 'lucide-react'
 
 function formatModifiedAt(value: number) {
   return new Date(value * 1000).toLocaleString([], {
@@ -24,6 +35,9 @@ type Mode = 'packages' | 'skills'
 
 export function SkillLibraryPage({ mode }: { mode: Mode }) {
   const [search, setSearch] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<SkillSummary | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const qc = useQueryClient()
   const q = useQuery({
     queryKey: ['skillList'],
     queryFn: fetchSkillList,
@@ -50,6 +64,22 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
       ? 'Browse compiled packages with clear metadata and quick access into editing.'
       : 'Operational list view for saved skills, versions, and step counts.'
 
+  const confirmDelete = async () => {
+    if (!pendingDelete || isDeleting) return
+    setIsDeleting(true)
+    try {
+      await deleteSkillPackage(pendingDelete.skill_id)
+      toast.success(`${pendingDelete.title} deleted`)
+      setPendingDelete(null)
+      await qc.invalidateQueries({ queryKey: ['skillList'] })
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'Could not delete skill'
+      toast.error(message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <AppShell
       title={pageTitle}
@@ -75,7 +105,7 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
             <CardHeader className="border-b border-white/8">
               <CardTitle className="text-white">{pageTitle}</CardTitle>
               <CardDescription className="text-zinc-500">
-                Search by title or skill id, then open a workflow directly into the editor.
+                Search by title or skill id, then open the stored JSON package or move into editing.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-4">
@@ -158,9 +188,31 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
                       <Boxes className="size-3.5" />
                       Compiled package
                     </div>
-                    <Button asChild size="sm">
-                      <Link to={`/edit/${skill.skill_id}`}>Open</Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                        title={`Delete ${skill.title}`}
+                        onClick={() => setPendingDelete(skill)}
+                        aria-label={`Delete ${skill.title}`}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                      <Button asChild size="sm" variant="secondary">
+                        <Link to={`/edit/${skill.skill_id}`}>
+                          <Pencil className="size-3.5" />
+                          Edit
+                        </Link>
+                      </Button>
+                      <Button asChild size="sm">
+                        <Link to={`/skills/${skill.skill_id}/json`}>
+                          <FileJson className="size-3.5" />
+                          Open
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -170,7 +222,7 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
 
         {!q.isLoading && !q.isError && filtered.length > 0 && mode === 'skills' ? (
           <Card className="border-white/8 bg-white/[0.035] shadow-none">
-            <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem_8rem_8rem] gap-4 border-b border-white/8 px-4 py-3 text-xs uppercase tracking-[0.16em] text-zinc-500">
+            <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem_8rem_11rem] gap-4 border-b border-white/8 px-4 py-3 text-xs uppercase tracking-[0.16em] text-zinc-500">
               <span>Title</span>
               <span>Skill ID</span>
               <span>Version</span>
@@ -181,7 +233,7 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
               {filtered.map((skill) => (
                 <div
                   key={skill.skill_id}
-                  className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem_8rem_8rem] items-center gap-4 border-b border-white/6 px-4 py-3 last:border-b-0"
+                  className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem_8rem_11rem] items-center gap-4 border-b border-white/6 px-4 py-3 last:border-b-0"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-white">{skill.title}</p>
@@ -193,12 +245,24 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
                   <p className="truncate font-mono text-xs text-zinc-400">{skill.skill_id}</p>
                   <p className="text-sm text-zinc-200">v{skill.version}</p>
                   <p className="text-sm text-zinc-200">{skill.step_count}</p>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
                     <Button asChild size="sm" variant="secondary">
                       <Link to={`/edit/${skill.skill_id}`}>
-                        <Rows3 className="size-3.5" />
-                        Open
+                        <Pencil className="size-3.5" />
+                        Edit
                       </Link>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                      title={`Delete ${skill.title}`}
+                      onClick={() => setPendingDelete(skill)}
+                      aria-label={`Delete ${skill.title}`}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Delete
                     </Button>
                   </div>
                 </div>
@@ -207,6 +271,29 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
           </Card>
         ) : null}
       </div>
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setPendingDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {mode === 'packages' ? 'package' : 'skill'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `This will permanently delete ${pendingDelete.title} (${pendingDelete.skill_id}). This action cannot be undone.`
+                : 'This action cannot be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={isDeleting} onClick={confirmDelete}>
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   )
 }

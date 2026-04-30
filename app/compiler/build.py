@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from app.compiler.decision_layer import rank_merged_anchors
@@ -10,7 +11,6 @@ from app.compiler.destructive_semantics import destructive_compiler_step
 from app.compiler.recovery_policy import (
     default_recovery_block,
     merge_recovery_strategies_for_wait_shape,
-    suggest_anchors_from_context,
 )
 from app.compiler.selector_filters import filter_selectors_dict, selector_passes_filters
 from app.compiler.v3 import (
@@ -22,9 +22,11 @@ from app.compiler.v3 import (
     generate_stable_selector,
     optimize_scroll,
     rank_selectors,
+    scroll_payload,
     validation_from_diff,
 )
 from app.config import settings
+from app.llm.anchor_vision_llm import VisionAnchorGenerationError, generate_anchors_for_step_or_raise
 from app.llm.intent_llm import generate_intent_with_llm
 from app.models.events import RecordedEvent
 from app.models.skill_spec import (
@@ -61,6 +63,28 @@ def _merge_compile_warnings(
         cw["destructive_low_anchor_count"] = True
         out["compile_warnings"] = cw
     return out
+
+
+def _persisted_visual_asset_path(
+    ev: dict[str, Any],
+    rel: str | None,
+    *,
+    session_id_fallback: str = "",
+) -> str:
+    """Turn recorder-relative paths (files under sessions/<id>/) into paths under data_dir."""
+    if not rel or not isinstance(rel, str):
+        return ""
+    r = rel.strip().replace("\\", "/")
+    if not r or ".." in r:
+        return ""
+    if r.startswith("sessions/"):
+        return r
+    session_id = str((ev.get("extras") or {}).get("session_id") or "").strip()
+    if not session_id:
+        session_id = str(session_id_fallback or "").strip()
+    if session_id:
+        return f"sessions/{session_id}/{r}"
+    return r
 
 
 def build_signal_reference(ev: dict[str, Any]) -> dict[str, Any]:
@@ -131,6 +155,7 @@ def _build_signals(
     resolved_intent: str,
     policy: dict[str, Any],
     anchors_override: list[dict[str, Any]] | None = None,
+    asset_session_id: str = "",
 ) -> dict[str, Any]:
     visual = ev.get("visual") or {}
     target = dict(ev.get("target") or {})
@@ -181,6 +206,12 @@ def _build_signals(
             "bbox": visual.get("bbox") or {},
             "viewport": visual.get("viewport") or "",
             "scroll_position": visual.get("scroll_position") or "",
+            "full_screenshot": _persisted_visual_asset_path(
+                ev, visual.get("full_screenshot"), session_id_fallback=asset_session_id
+            ),
+            "element_snapshot": _persisted_visual_asset_path(
+                ev, visual.get("element_snapshot"), session_id_fallback=asset_session_id
+            ),
         },
     }
     if is_scroll:
@@ -220,33 +251,35 @@ def _build_validation(ev: dict[str, Any], state_diff: dict[str, Any], policy: di
     )
 
 
-def _build_step(ev: dict[str, Any], bundle: PolicyBundle) -> SkillStep:
+def _build_step(
+    ev: dict[str, Any],
+    bundle: PolicyBundle,
+    *,
+    session_root: Path,
+    step_index: int,
+) -> SkillStep:
     policy = bundle.data
     action_payload = optimize_scroll(ev)
     if action_payload == "scroll":
+        scroll_action = scroll_payload(ev, policy)
         visual = ev.get("visual") or {}
-        scroll_screenshot = (
-            visual.get("full_screenshot")
-            or visual.get("element_snapshot")
-            or ""
+        scroll_rel = visual.get("full_screenshot") or visual.get("element_snapshot")
+        scroll_screenshot = _persisted_visual_asset_path(
+            ev,
+            scroll_rel if isinstance(scroll_rel, str) else None,
+            session_id_fallback=session_root.name,
         )
         scroll_position = visual.get("scroll_position") or ""
         visual_signals: dict[str, Any] = {"scroll_position": scroll_position}
         if scroll_screenshot:
             visual_signals["scroll_screenshot"] = scroll_screenshot
         return SkillStep(
-            action=action_payload,
+            action=scroll_action,
+            intent="scroll_viewport",
             signals={
                 "visual": visual_signals,
             },
         )
-    anchors = clean_anchors(
-        ev.get("anchors") or [],
-        ev.get("context") or {},
-        policy,
-        target=dict(ev.get("target") or {}),
-        semantic=dict(ev.get("semantic") or {}),
-    )
     llm_raw = generate_intent_with_llm(ev)
     intent = normalize_compiler_intent(ev, llm_raw, policy)
     state_before = capture_state_snapshot(ev, before=True)
@@ -261,15 +294,14 @@ def _build_step(ev: dict[str, Any], bundle: PolicyBundle) -> SkillStep:
     semantic["llm_intent"] = intent
     semantic["intent_specificity_score"] = intent_specificity_score(intent, policy)
     ev_with_intent["semantic"] = semantic
-    extra_anchors = suggest_anchors_from_context(
-        ev.get("context") or {},
-        semantic,
-        policy,
-        target=dict(ev.get("target") or {}),
-        page=dict(ev.get("page") or {}),
+    merged_anchors = generate_anchors_for_step_or_raise(
+        ev_with_intent,
+        session_root=session_root,
+        final_intent=intent,
+        policy=policy,
+        step_index=step_index,
     )
-    merged_anchors = anchors + [a for a in extra_anchors if a not in anchors]
-    merged_anchors = rank_merged_anchors(merged_anchors, ev, intent, policy)
+    merged_anchors = rank_merged_anchors(merged_anchors, ev_with_intent, intent, policy)
     validation = _build_validation(ev_with_intent, state_diff, policy)
     recovery_dict = default_recovery_block(intent, merged_anchors, policy)
     recovery_dict = merge_recovery_strategies_for_wait_shape(
@@ -279,7 +311,13 @@ def _build_step(ev: dict[str, Any], bundle: PolicyBundle) -> SkillStep:
     )
     recovery = RecoveryBlock(**recovery_dict)
     target = _build_target(ev, policy)
-    signals = _build_signals(ev, resolved_intent=intent, policy=policy, anchors_override=merged_anchors)
+    signals = _build_signals(
+        ev,
+        resolved_intent=intent,
+        policy=policy,
+        anchors_override=merged_anchors,
+        asset_session_id=session_root.name,
+    )
     value, input_binding = _derive_input_binding(ev, policy)
     confidence_protocol = _merge_compile_warnings(
         _default_confidence_protocol(bundle),
@@ -317,8 +355,12 @@ def compile_skill_package(
     pol = bundle.data
     for e in events:
         RecordedEvent.model_validate(e)
+    sid = str(source_session_id or "").strip()
+    if not sid:
+        raise VisionAnchorGenerationError("source_session_id_required")
+    session_root = (settings.data_dir / "sessions" / sid).resolve()
     cleaned_events = fix_step_order(clean_steps(events, pol), pol)
-    steps = [_build_step(e, bundle) for e in cleaned_events]
+    steps = [_build_step(e, bundle, session_root=session_root, step_index=i) for i, e in enumerate(cleaned_events)]
     now = datetime.now(timezone.utc).isoformat()
     meta = SkillMeta(
         id=skill_id,
@@ -338,6 +380,7 @@ def compile_skill_package(
             "enabled": settings.llm_enabled,
             "semantic_enrichment": settings.llm_semantic_enrichment,
             "vision_reasoning": settings.llm_vision_reasoning,
+            "anchor_vision": settings.llm_anchor_vision,
             "recovery_assist": settings.llm_recovery_assist,
             "max_calls_per_step": settings.llm_max_calls_per_step,
             "timeout_ms": settings.llm_timeout_ms,

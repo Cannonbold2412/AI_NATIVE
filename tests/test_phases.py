@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 import unittest
+from contextlib import ExitStack
+from pathlib import Path
+from unittest.mock import patch
+
+from PIL import Image
+
+from app.config import settings
 
 
 def _minimal_click_event() -> dict:
@@ -45,6 +54,36 @@ def _minimal_click_event() -> dict:
     }
 
 
+def _write_minimal_screenshot(session_id: str, ev: dict, *, data_dir: Path) -> None:
+    rel = str(ev["visual"]["full_screenshot"])
+    dest = data_dir / "sessions" / session_id / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (320, 240), (210, 210, 210)).save(dest, "JPEG")
+
+
+_VISION_ANCHOR_OK = {
+    "primary_phrase": "Submit control in form",
+    "secondary": [{"element": "login form", "relation": "inside"}],
+}
+
+
+def _compile_with_vision_mocks(session_id: str, events: list[dict], *, call_llm_return=_VISION_ANCHOR_OK):
+    """Prepare temp session JPEGs and return (data_dir, patch context managers)."""
+    data_dir = Path(tempfile.mkdtemp())
+    for ev in events:
+        if str((ev.get("action") or {}).get("action") or "") != "scroll":
+            _write_minimal_screenshot(session_id, ev, data_dir=data_dir)
+    return (
+        data_dir,
+        patch.object(settings, "data_dir", data_dir),
+        patch.object(settings, "llm_endpoint", "https://example.com/v1"),
+        patch.object(settings, "llm_enabled", True),
+        patch.object(settings, "llm_anchor_vision", True),
+        patch("app.llm.intent_llm.call_llm", return_value=None),
+        patch("app.llm.anchor_vision_llm.call_llm", return_value=call_llm_return),
+    )
+
+
 class PhaseTests(unittest.TestCase):
     def test_phase2_pipeline_cleans_and_enriches(self) -> None:
         from app.pipeline.run import PIPELINE_VERSION, run_pipeline
@@ -72,13 +111,20 @@ class PhaseTests(unittest.TestCase):
         from app.pipeline.run import run_pipeline
 
         evs = run_pipeline([_minimal_click_event()])
-        pkg = compile_skill_package(
-            evs,
-            skill_id="skill_test",
-            source_session_id="sess",
-            title="t",
-            version=1,
-        )
+        data_dir, *patchers = _compile_with_vision_mocks("sess", evs)
+        try:
+            with ExitStack() as stack:
+                for p in patchers:
+                    stack.enter_context(p)
+                pkg = compile_skill_package(
+                    evs,
+                    skill_id="skill_test",
+                    source_session_id="sess",
+                    title="t",
+                    version=1,
+                )
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
         self.assertEqual(pkg.meta.id, "skill_test")
         self.assertEqual(len(pkg.skills[0].steps), 1)
         self.assertEqual(pkg.skills[0].steps[0].action, "click")
@@ -89,19 +135,32 @@ class PhaseTests(unittest.TestCase):
         sem = dumped.get("signals", {}).get("semantic") or {}
         self.assertEqual(sem.get("final_intent"), dumped.get("intent"))
         self.assertEqual(sem.get("llm_intent"), dumped.get("intent"))
+        anchors = dumped.get("signals", {}).get("anchors") or []
+        self.assertTrue(anchors)
+        self.assertEqual(anchors[0].get("relation"), "target")
+        blob = " ".join(str(a.get("element") or "") for a in anchors)
+        self.assertNotIn("h1", blob)
 
     def test_phase6_patch_bumps_version(self) -> None:
         from app.compiler.build import compile_skill_package
         from app.compiler.patch import apply_step_patch
         from app.pipeline.run import run_pipeline
 
-        pkg = compile_skill_package(
-            run_pipeline([_minimal_click_event()]),
-            skill_id="skill_x",
-            source_session_id="s",
-            title="t",
-            version=1,
-        )
+        evs = run_pipeline([_minimal_click_event()])
+        data_dir, *patchers = _compile_with_vision_mocks("s", evs)
+        try:
+            with ExitStack() as stack:
+                for p in patchers:
+                    stack.enter_context(p)
+                pkg = compile_skill_package(
+                    evs,
+                    skill_id="skill_x",
+                    source_session_id="s",
+                    title="t",
+                    version=1,
+                )
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
         doc = pkg.model_dump(mode="json")
         patched = apply_step_patch(
             doc,
@@ -119,13 +178,21 @@ class PhaseTests(unittest.TestCase):
         from app.llm.semantic_llm import SemanticLLMOutput
         from app.pipeline.run import run_pipeline
 
-        pkg = compile_skill_package(
-            run_pipeline([_minimal_click_event()]),
-            skill_id="skill_nav_patch",
-            source_session_id="s",
-            title="t",
-            version=1,
-        )
+        evs = run_pipeline([_minimal_click_event()])
+        data_dir, *patchers = _compile_with_vision_mocks("s", evs)
+        try:
+            with ExitStack() as stack:
+                for p in patchers:
+                    stack.enter_context(p)
+                pkg = compile_skill_package(
+                    evs,
+                    skill_id="skill_nav_patch",
+                    source_session_id="s",
+                    title="t",
+                    version=1,
+                )
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
         doc = pkg.model_dump(mode="json")
         step = doc["skills"][0]["steps"][0]
         step["intent"] = ""
@@ -637,6 +704,45 @@ class PhaseTests(unittest.TestCase):
         out = normalize_compiler_intent(ev, "click_path", pol)
         self.assertNotIn("path", out)
         self.assertNotEqual(out, "click_path")
+
+    def test_compile_requires_source_session_for_vision_anchors(self) -> None:
+        from app.compiler.build import compile_skill_package
+        from app.llm.anchor_vision_llm import VisionAnchorGenerationError
+        from app.pipeline.run import run_pipeline
+
+        evs = run_pipeline([_minimal_click_event()])
+        with self.assertRaises(VisionAnchorGenerationError) as ctx:
+            compile_skill_package(
+                evs,
+                skill_id="x",
+                source_session_id="   ",
+                title="t",
+                version=1,
+            )
+        self.assertEqual(ctx.exception.reason, "source_session_id_required")
+
+    def test_vision_llm_failure_aborts_compile(self) -> None:
+        from app.compiler.build import compile_skill_package
+        from app.llm.anchor_vision_llm import VisionAnchorGenerationError
+        from app.pipeline.run import run_pipeline
+
+        evs = run_pipeline([_minimal_click_event()])
+        data_dir, *patchers = _compile_with_vision_mocks("sess", evs, call_llm_return=None)
+        try:
+            with ExitStack() as stack:
+                for p in patchers:
+                    stack.enter_context(p)
+                with self.assertRaises(VisionAnchorGenerationError) as ctx:
+                    compile_skill_package(
+                        evs,
+                        skill_id="y",
+                        source_session_id="sess",
+                        title="t",
+                        version=1,
+                    )
+                self.assertEqual(ctx.exception.reason, "vision_llm_empty_response")
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

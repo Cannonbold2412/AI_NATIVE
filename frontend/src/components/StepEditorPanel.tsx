@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
 import { FormProvider, useForm, useFormState } from 'react-hook-form'
 import { toast } from 'sonner'
 import type { StepEditorDTO, WorkflowResponse } from '../types/workflow'
@@ -18,6 +18,7 @@ import { GripVertical, Trash2 } from 'lucide-react'
 
 type FormValues = {
   intent: string
+  scroll_amount: string
   selectors: string[]
   value: string
   css: string
@@ -75,6 +76,7 @@ const RECOVERY_STRATEGY_OPTIONS = [
 
 const emptyForm: FormValues = {
   intent: '',
+  scroll_amount: '',
   selectors: [''],
   value: '',
   css: '',
@@ -170,6 +172,7 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
   const strat = ((step.recovery.strategies || []) as string[])
   return {
     intent: step.intent || step.final_intent,
+    scroll_amount: step.scroll_amount === null || step.scroll_amount === undefined ? '' : String(step.scroll_amount),
     selectors: [String(tgt.primary_selector || ''), ...(tgt.fallback_selectors || [])].filter(
       (selector, index, arr) => index === 0 || Boolean(selector) || arr.length === 1,
     ),
@@ -205,6 +208,11 @@ type Props = {
   onWorkflowUpdated: (wf: WorkflowResponse) => void
 }
 
+export type StepEditorPanelHandle = {
+  /** Saves the open step form if dirty. Returns whether save succeeded or was not needed. */
+  submitIfDirty: () => Promise<boolean>
+}
+
 function compactStepLabel(label: string): string {
   return label.replace(/^Step\s+\d+:\s*/i, '').trim()
 }
@@ -213,6 +221,13 @@ function humanizeAction(action: string): string {
   const cleaned = action.trim().replace(/[_-]+/g, ' ')
   if (!cleaned) return 'Action'
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+}
+
+function parseScrollAmount(raw: string): number {
+  const trimmed = raw.trim()
+  if (!trimmed) throw new Error('Scroll amount is required')
+  if (!/^-?\d+$/.test(trimmed)) throw new Error('Scroll amount must be a whole number')
+  return Number.parseInt(trimmed, 10)
 }
 
 function DirtySync({ stepIndex }: { stepIndex: number }) {
@@ -226,13 +241,113 @@ function DirtySync({ stepIndex }: { stepIndex: number }) {
   return null
 }
 
-export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
+export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
+  function StepEditorPanel({ step, skillId, onWorkflowUpdated }, ref) {
   const methods = useForm<FormValues>({ defaultValues: emptyForm })
   const [draggingRecoveryIndex, setDraggingRecoveryIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (step) methods.reset(defaultsFromStep(step))
   }, [step, methods])
+
+  const persistStepValues = useCallback(
+    async (values: FormValues, options?: { silentToast?: boolean }) => {
+      if (!step) return
+      const silent = options?.silentToast ?? false
+      const editable = step.editable_fields
+      const canEditField = (key: string) => editable[key] !== false
+      if (step.flags.is_scroll) {
+        const scrollAmount = parseScrollAmount(values.scroll_amount)
+        const patch: Record<string, unknown> = {
+          intent: values.intent,
+          action: {
+            action: 'scroll',
+            delta: scrollAmount,
+          },
+        }
+        try {
+          const res = await patchStep(skillId, step.step_index, patch, false)
+          onWorkflowUpdated(res.workflow)
+          const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
+          if (next) methods.reset(defaultsFromStep(next))
+          if (!silent) toast.success('Step saved')
+          return
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Save failed'
+          methods.setError('root', { message: msg })
+          if (!silent) toast.error(msg)
+          throw e
+        }
+      }
+      const selectors = values.selectors
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const primarySelector = selectors[0] || ''
+      const fallbackSelectors = selectors.slice(1)
+      const strategies = (values.strategies_selected || []).map((s) => s.trim()).filter(Boolean)
+      const anchors = parseAnchorRows(values.anchors)
+      const patch: Record<string, unknown> = {
+        intent: values.intent,
+        target: {
+          primary_selector: primarySelector,
+          fallback_selectors: fallbackSelectors,
+        },
+        signals: {
+          selectors: {
+            css: values.css || primarySelector,
+            aria: values.aria,
+            text_based: values.text_based,
+            xpath: values.xpath,
+          },
+          anchors,
+        },
+        validation: {
+          wait_for: buildWaitFor(values),
+        },
+        recovery: {
+          strategies,
+        },
+      }
+      if (canEditField('value')) patch.value = values.value
+      try {
+        const res = await patchStep(skillId, step.step_index, patch, false)
+        onWorkflowUpdated(res.workflow)
+        const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
+        if (next) methods.reset(defaultsFromStep(next))
+        if (!silent) toast.success('Step saved')
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Save failed'
+        methods.setError('root', { message: msg })
+        if (!silent) toast.error(msg)
+        throw e
+      }
+    },
+    [methods, onWorkflowUpdated, skillId, step],
+  )
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      submitIfDirty: async () => {
+        if (!step) return true
+        if (!methods.formState.isDirty) return true
+        return await new Promise<boolean>((resolve) => {
+          void methods.handleSubmit(
+            async (values) => {
+              try {
+                await persistStepValues(values, { silentToast: true })
+                resolve(true)
+              } catch {
+                resolve(false)
+              }
+            },
+            () => resolve(false),
+          )()
+        })
+      },
+    }),
+    [methods, persistStepValues, step],
+  )
 
   if (!step) {
     return (
@@ -244,6 +359,7 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
 
   const editable = step.editable_fields
   const canEdit = (key: string) => editable[key] !== false
+  const isScrollStep = step.flags.is_scroll
   const selectors = methods.watch('selectors') || ['']
   const anchors = methods.watch('anchors') || ['']
   const selectedStrategies = methods.watch('strategies_selected') || []
@@ -287,46 +403,10 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
   }
 
   const onSubmit = methods.handleSubmit(async (values) => {
-    const selectors = values.selectors
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const primarySelector = selectors[0] || ''
-    const fallbackSelectors = selectors.slice(1)
-    const strategies = (values.strategies_selected || []).map((s) => s.trim()).filter(Boolean)
-    const anchors = parseAnchorRows(values.anchors)
-    const patch: Record<string, unknown> = {
-      intent: values.intent,
-      target: {
-        primary_selector: primarySelector,
-        fallback_selectors: fallbackSelectors,
-      },
-      signals: {
-        selectors: {
-          css: values.css || primarySelector,
-          aria: values.aria,
-          text_based: values.text_based,
-          xpath: values.xpath,
-        },
-        anchors,
-      },
-      validation: {
-        wait_for: buildWaitFor(values),
-      },
-      recovery: {
-        strategies,
-      },
-    }
-    if (canEdit('value')) patch.value = values.value
     try {
-      const res = await patchStep(skillId, step.step_index, patch, false)
-      onWorkflowUpdated(res.workflow)
-      const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
-      if (next) methods.reset(defaultsFromStep(next))
-      toast.success('Step saved')
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Save failed'
-      methods.setError('root', { message: msg })
-      toast.error(msg)
+      await persistStepValues(values, { silentToast: false })
+    } catch {
+      /* persistStepValues surfaces toast/error state */
     }
   })
 
@@ -350,60 +430,82 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
                   {...methods.register('intent')}
                 />
               </div>
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="selector_0">Selectors</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!canEdit('selectors')}
-                    onClick={() => methods.setValue('selectors', [...selectors, ''], { shouldDirty: true })}
-                  >
-                    Add selector
-                  </Button>
+              {isScrollStep ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="scroll_amount">Scroll amount</Label>
+                  <Input
+                    id="scroll_amount"
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="150"
+                    disabled={!canEdit('intent')}
+                    {...methods.register('scroll_amount')}
+                  />
+                  <p className="text-muted-foreground text-xs">Use a signed number. Positive scrolls down; negative scrolls up.</p>
                 </div>
-                <p className="text-muted-foreground text-xs">Top selector is primary. Selectors below are fallbacks.</p>
-                <div className="space-y-2">
-                  {selectors.map((_, index) => (
-                    <div key={`selector-${index}`} className="flex items-center gap-2">
-                      <Input
-                        id={`selector_${index}`}
-                        type="text"
-                        placeholder={index === 0 ? 'Primary selector' : `Fallback selector ${index}`}
-                        disabled={!canEdit('selectors')}
-                        {...methods.register(`selectors.${index}` as const)}
-                      />
+              ) : null}
+              {!isScrollStep ? (
+                <>
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="selector_0">Selectors</Label>
                       <Button
                         type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive h-7 w-7"
-                        disabled={!canEdit('selectors') || selectors.length <= 1}
-                        onClick={() =>
-                          methods.setValue(
-                            'selectors',
-                            selectors.filter((_, i) => i !== index),
-                            { shouldDirty: true },
-                          )
-                        }
-                        aria-label={`Remove selector ${index + 1}`}
+                        size="sm"
+                        variant="outline"
+                        disabled={!canEdit('selectors')}
+                        onClick={() => methods.setValue('selectors', [...selectors, ''], { shouldDirty: true })}
                       >
-                        <Trash2 className="size-3.5" />
+                        Add selector
                       </Button>
                     </div>
-                  ))}
-                </div>
-              </div>
-              {canEdit('value') ? (
-                <div className="grid gap-2">
-                  <Label htmlFor="value">Value (for type/fill)</Label>
-                  <Input id="value" type="text" {...methods.register('value')} />
-                </div>
+                    <p className="text-muted-foreground text-xs">
+                      Top selector is primary. Selectors below are fallbacks.
+                    </p>
+                    <div className="space-y-2">
+                      {selectors.map((_, index) => (
+                        <div key={`selector-${index}`} className="flex items-center gap-2">
+                          <Input
+                            id={`selector_${index}`}
+                            type="text"
+                            placeholder={index === 0 ? 'Primary selector' : `Fallback selector ${index}`}
+                            disabled={!canEdit('selectors')}
+                            {...methods.register(`selectors.${index}` as const)}
+                          />
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive h-7 w-7"
+                            disabled={!canEdit('selectors') || selectors.length <= 1}
+                            onClick={() =>
+                              methods.setValue(
+                                'selectors',
+                                selectors.filter((_, i) => i !== index),
+                                { shouldDirty: true },
+                              )
+                            }
+                            aria-label={`Remove selector ${index + 1}`}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {canEdit('value') ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor="value">Value (for type/fill)</Label>
+                      <Input id="value" type="text" {...methods.register('value')} />
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </CardContent>
           </Card>
 
+          {!isScrollStep ? (
+          <>
           <Card className="gap-2 py-3">
             <CardHeader className="p-2.5 pb-1">
               <CardTitle className="text-sm">Selector channels</CardTitle>
@@ -491,6 +593,8 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
             </CardContent>
           </Card>
 
+          <ValidationEditor />
+
           <Card className="gap-2 py-3">
             <CardHeader className="p-2.5 pb-1">
               <CardTitle className="text-sm">Recovery (ordered)</CardTitle>
@@ -564,8 +668,9 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
               </div>
             </CardContent>
           </Card>
+          </>
+          ) : null}
 
-          <ValidationEditor />
           <Separator />
           <div className="flex items-center justify-end">
             <Button type="submit" size="default" disabled={methods.formState.isSubmitting}>
@@ -582,4 +687,4 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
       </div>
     </div>
   )
-}
+})

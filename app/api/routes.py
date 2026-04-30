@@ -11,6 +11,7 @@ from app.compiler.build import compile_skill_package
 from app.compiler.patch import apply_step_patch, revalidate_step
 from app.compiler.wait_for_shape import leaf_wait_for_conditions, leaf_wait_type
 from app.confidence.uncertainty import audit_reference
+from app.llm.anchor_vision_llm import VisionAnchorGenerationError
 from app.metrics.store import metrics
 from app.pipeline.run import run_pipeline
 from app.recorder.session import registry
@@ -122,6 +123,9 @@ async def start_record(body: StartRecordBody) -> dict[str, Any]:
                 "Restart uvicorn after latest code changes so Windows uses a Proactor event loop."
             ),
         ) from exc
+    except RuntimeError as exc:
+        registry.pop(sess.session_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception:
         registry.pop(sess.session_id)
         raise
@@ -174,6 +178,10 @@ async def compile_skill(body: CompileBody) -> dict[str, Any]:
             status_code=400,
             detail="No events for this session. Poll GET /record/{id}/events or use a stopped session with events.jsonl.",
         )
+    skill_title = body.skill_title.strip()
+    if not skill_title:
+        metrics.inc("compile_failures")
+        raise HTTPException(status_code=400, detail="Skill Name is required.")
     skill_id = f"skill_{body.session_id}"
     try:
         normalized = run_pipeline(raw)
@@ -186,7 +194,7 @@ async def compile_skill(body: CompileBody) -> dict[str, Any]:
             normalized,
             skill_id=skill_id,
             source_session_id=body.session_id,
-            title=body.skill_title or skill_id,
+            title=skill_title,
             version=version,
         )
         audit_report, hard_failures = _build_audit_report(package.skills[0].steps)
@@ -204,6 +212,9 @@ async def compile_skill(body: CompileBody) -> dict[str, Any]:
         metrics.inc("fallback_usage", len(package.skills[0].steps))
     except HTTPException:
         raise
+    except VisionAnchorGenerationError as exc:
+        metrics.inc("compile_failures")
+        raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
     except Exception as exc:
         metrics.inc("compile_failures")
         raise HTTPException(status_code=500, detail=f"compile_failed: {exc!s}") from exc
@@ -224,13 +235,16 @@ async def compile_preview(session_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="No events for this session.")
     skill_id = f"skill_{session_id}"
     normalized = run_pipeline(raw)
-    package = compile_skill_package(
-        normalized,
-        skill_id=skill_id,
-        source_session_id=session_id,
-        title=skill_id,
-        version=1,
-    )
+    try:
+        package = compile_skill_package(
+            normalized,
+            skill_id=skill_id,
+            source_session_id=session_id,
+            title=skill_id,
+            version=1,
+        )
+    except VisionAnchorGenerationError as exc:
+        raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
     package_json = package.model_dump(mode="json")
     steps = ((package_json.get("skills") or [{}])[0].get("steps") or [])
     _, hard_failures = _build_audit_report(package.skills[0].steps)

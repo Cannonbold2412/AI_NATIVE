@@ -130,7 +130,7 @@ export function HomePage() {
                 </div>
                 <div className="grid gap-1.5">
                   <Label className="text-zinc-200" htmlFor="skillName">
-                    Skill name
+                    Skill Name
                   </Label>
                   <Input
                     id="skillName"
@@ -147,7 +147,7 @@ export function HomePage() {
                 <Button
                   type="button"
                   size="lg"
-                  disabled={isRecording || isCompiling}
+                  disabled={isRecording || isCompiling || !startUrl.trim() || !skillTitle.trim()}
                   onClick={() => void startFlow()}
                   className="h-10 min-w-44 bg-white text-black hover:bg-zinc-200"
                 >

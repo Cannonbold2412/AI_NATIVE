@@ -20,10 +20,11 @@ from app.editor.workflow_service import (
     reorder_steps,
     validate_skill_document,
 )
+from app.llm.anchor_vision_llm import VisionAnchorGenerationError
 from app.metrics.store import metrics
 from app.pipeline.run import run_pipeline
 from app.policy.bundle import get_policy_bundle
-from app.storage.json_store import list_skill_summaries, read_skill, write_skill
+from app.storage.json_store import delete_skill, list_skill_summaries, read_skill, write_skill
 from app.storage.session_events import read_session_events
 
 from app.api.routes import _build_audit_report
@@ -67,6 +68,17 @@ def get_workflow(skill_id: str, request: Request) -> dict[str, Any]:
     return wf.model_dump(mode="json")
 
 
+@router.delete("/{skill_id}")
+def delete_skill_package(skill_id: str) -> dict[str, Any]:
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    title = str((doc.get("meta") or {}).get("title") or skill_id)
+    if not delete_skill(skill_id):
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    return {"skill_id": skill_id, "title": title, "deleted": True}
+
+
 @router.patch("/{skill_id}/steps/{step_index}")
 def patch_step(skill_id: str, step_index: int, body: StepPatchBody, request: Request) -> dict[str, Any]:
     metrics.inc("workflow_patch_step_attempts")
@@ -104,8 +116,10 @@ def patch_skill_package(skill_id: str, body: SkillPatchBody) -> dict[str, Any]:
     doc = read_skill(skill_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Unknown skill_id")
+    if body.title is not None and not body.title.strip():
+        raise HTTPException(status_code=400, detail="Skill Name is required.")
     inputs = body.inputs if body.inputs is not None else list(doc.get("inputs") or [])
-    new_doc = merge_skill_inputs(doc, inputs, body.title)
+    new_doc = merge_skill_inputs(doc, inputs, body.title.strip() if body.title is not None else None)
     write_skill(skill_id, new_doc)
     return {"skill_id": skill_id, "meta": new_doc.get("meta"), "inputs": new_doc.get("inputs")}
 
@@ -166,7 +180,10 @@ async def compile_updated(skill_id: str, body: CompileUpdatedBody) -> dict[str, 
     try:
         normalized = run_pipeline(raw)
         version = int((doc.get("meta") or {}).get("version") or 0) + 1
-        title = body.skill_title or str((doc.get("meta") or {}).get("title") or skill_id)
+        title_override = body.skill_title.strip() if body.skill_title is not None else None
+        if body.skill_title is not None and not title_override:
+            raise HTTPException(status_code=400, detail="Skill Name is required.")
+        title = title_override or str((doc.get("meta") or {}).get("title") or skill_id)
         package = compile_skill_package(
             normalized,
             skill_id=skill_id,
@@ -187,6 +204,8 @@ async def compile_updated(skill_id: str, body: CompileUpdatedBody) -> dict[str, 
         write_skill(skill_id, package_json)
     except HTTPException:
         raise
+    except VisionAnchorGenerationError as exc:
+        raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"compile_updated_failed: {exc!s}") from exc
     return {"skill_id": skill_id, "version": package_json["meta"]["version"], "step_count": len(package.skills[0].steps)}

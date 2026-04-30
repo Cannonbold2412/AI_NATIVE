@@ -403,6 +403,71 @@ def generate_stable_selector(element: dict[str, Any], policy: dict[str, Any] | N
     }
 
 
+def _vision_anchor_config(policy: dict[str, Any] | None) -> dict[str, Any]:
+    pol = policy or get_policy_bundle().data
+    sec = pol.get("anchors") if isinstance(pol.get("anchors"), dict) else {}
+    raw = sec.get("vision")
+    return raw if isinstance(raw, dict) else {}
+
+
+_REL_ALLOWED_VISION_SECONDARY = frozenset({"inside", "above", "below", "near"})
+
+
+def finalize_vision_anchors(
+    primary_phrase: str,
+    secondary_raw: list[dict[str, Any]] | None,
+    policy: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Post-process Vision LLM output only: sanitize, dedupe, cap count. No DOM imports."""
+    pol = policy or get_policy_bundle().data
+    cfg = _vision_anchor_config(pol)
+    max_total = max(1, min(8, int(cfg.get("max_total_anchors", 4))))
+    max_len = int(cfg.get("max_phrase_len", 96))
+    min_chars = max(1, int(cfg.get("min_primary_chars", 4)))
+    generic_extra = [str(x).strip().lower() for x in (cfg.get("cleanup_generic_terms") or []) if str(x).strip()]
+    generic = _generic_anchors(pol) | set(generic_extra)
+
+    def _scrub_phrase(text: str) -> str:
+        t = " ".join(str(text).lower().split()).strip()[:max_len]
+        if not t:
+            return ""
+        parts = []
+        for w in t.replace(":", " ").split():
+            wl = w.strip().lower()
+            if wl in generic or not wl:
+                continue
+            parts.append(wl)
+        return " ".join(parts).strip()[:max_len]
+
+    primary = _scrub_phrase(primary_phrase)
+    if len(primary) < min_chars:
+        return []
+
+    out: list[dict[str, Any]] = [{"element": primary, "relation": "target"}]
+    seen: set[tuple[str, str]] = {(primary, "target")}
+
+    for raw in secondary_raw or []:
+        if not isinstance(raw, dict):
+            continue
+        if len(out) >= max_total:
+            break
+        el = _scrub_phrase(str(raw.get("element") or ""))
+        rel = str(raw.get("relation") or "near").strip().lower()
+        if rel not in _REL_ALLOWED_VISION_SECONDARY:
+            rel = "near"
+        if not el or len(el) < min_chars:
+            continue
+        if el == primary:
+            continue
+        key = (el, rel)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"element": el, "relation": rel})
+
+    return out[:max_total]
+
+
 def clean_anchors(
     anchors: list[dict[str, Any]],
     context: dict[str, Any],
@@ -424,7 +489,7 @@ def clean_anchors(
     def _push(element: str, relation: str, *, bypass_allowlist: bool = False) -> None:
         el = str(element or "").strip().lower()
         rel = str(relation or "inside").strip().lower()
-        if rel not in {"inside", "above", "below", "near"}:
+        if rel not in {"inside", "above", "below", "near", "target"}:
             rel = "inside"
         if not el or el in generic:
             return
@@ -480,9 +545,14 @@ def scroll_payload(step: Step, policy: dict[str, Any] | None = None) -> dict[str
         return {}
     pol = policy or get_policy_bundle().data
     sd = pol.get("scroll_defaults") if isinstance(pol.get("scroll_defaults"), dict) else {}
+    extras = step.get("extras") if isinstance(step.get("extras"), dict) else {}
+    try:
+        delta = int(extras.get("scroll_amount")) if extras.get("scroll_amount") is not None else int(sd.get("delta", 150))
+    except (TypeError, ValueError):
+        delta = int(sd.get("delta", 150))
     return {
-        "direction": str(sd.get("direction", "down")),
-        "delta": int(sd.get("delta", 150)),
+        "action": "scroll",
+        "delta": delta,
     }
 
 
@@ -609,4 +679,3 @@ def wait_for_condition(step: dict[str, Any], timeout: int = 8000) -> bool:
         if _placeholder_tree_ok(wf):
             return True
     return False
-

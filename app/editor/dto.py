@@ -38,6 +38,7 @@ class StepEditorDTO(BaseModel):
     validation: dict[str, Any] = Field(default_factory=dict)
     recovery: dict[str, Any] = Field(default_factory=dict)
     value: Any = None
+    scroll_amount: int | None = None
     input_binding: str | None = None
     screenshot: StepScreenshotDTO = Field(default_factory=StepScreenshotDTO)
     editable_fields: dict[str, bool] = Field(default_factory=dict)

@@ -28,6 +28,14 @@ def read_skill(skill_id: str) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def delete_skill(skill_id: str) -> bool:
+    path = skills_dir() / f"{skill_id}.json"
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True
+
+
 def list_skill_summaries() -> list[dict[str, Any]]:
     """Return newest-first summaries for skills under ``data_dir/skills``."""
     out: list[dict[str, Any]] = []

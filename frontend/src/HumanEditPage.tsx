@@ -14,7 +14,7 @@ import {
   postValidate,
 } from './api/workflowApi'
 import { WorkflowViewer } from './components/WorkflowViewer'
-import { StepEditorPanel } from './components/StepEditorPanel'
+import { StepEditorPanel, type StepEditorPanelHandle } from './components/StepEditorPanel'
 import { SuggestionsInlinePanel } from './components/SuggestionsPanel'
 import { ParameterizationInlinePanel } from './components/ParameterizationDrawer'
 import { useEditorStore } from './store/editorStore'
@@ -28,7 +28,21 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ValidationReportPanel } from './components/ValidationReportPanel'
 import { fieldSelectClass } from '@/lib/fieldStyles'
 import { cn } from '@/lib/utils'
-import { AlertCircle, ChevronDown, CircleHelp, Home, Lightbulb, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import {
+  AlertCircle,
+  ChevronDown,
+  CircleHelp,
+  Copy,
+  Home,
+  Lightbulb,
+  RefreshCw,
+  ShieldCheck,
+  SlidersHorizontal,
+} from 'lucide-react'
+
+/** Monospace caption — max width + truncate only; alignment set per placement. */
+const SKILL_ID_CAPTION_CLASS =
+  'max-w-[12rem] truncate font-mono text-[10px] leading-none text-zinc-500 sm:max-w-[16rem]'
 
 export function HumanEditPage() {
   const EDITOR_SIDEBAR_WIDTH_KEY = 'ai-native-editor-sidebar-width'
@@ -41,7 +55,6 @@ export function HumanEditPage() {
   const [flowStatus, setFlowStatus] = useState('Load a saved skill to edit, or go home to record a new one.')
   const [resumePick, setResumePick] = useState('')
   const [manualSkillId, setManualSkillId] = useState('')
-  const [switchSkillPick, setSwitchSkillPick] = useState('')
   const [workflowPaneWidth, setWorkflowPaneWidth] = useState(340)
   const [isResizingPane, setIsResizingPane] = useState(false)
   const [showValidationPane, setShowValidationPane] = useState(false)
@@ -49,6 +62,7 @@ export function HumanEditPage() {
   const [showVariablesPane, setShowVariablesPane] = useState(false)
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null)
   const splitPaneRef = useRef<HTMLDivElement | null>(null)
+  const stepEditorRef = useRef<StepEditorPanelHandle>(null)
   const selected = useEditorStore((s) => s.selectedStepIndex)
   const setValidationReport = useEditorStore((s) => s.setValidationReport)
   const validationReport = useEditorStore((s) => s.validationReport)
@@ -84,7 +98,6 @@ export function HumanEditPage() {
 
   useEffect(() => {
     if (skillId) {
-      setSwitchSkillPick(skillId)
       setFlowStatus('Editing workflow.')
     }
   }, [skillId])
@@ -164,16 +177,43 @@ export function HumanEditPage() {
     })
   }
 
-  const compileUpdated = () => {
+  /** Re-runs compile from recorded session JSON — replaces the skill package and wipes hand-edited patches. */
+  const rebuildSkillFromRecording = () => {
     if (!skillId) return
+    const ok = window.confirm(
+      'Rebuild this skill from the original recording? Any changes you saved in the editor (selectors, validation, etc.) will be replaced by a fresh compile from the session.',
+    )
+    if (!ok) return
     postCompileUpdated(skillId)
       .then(() => {
         void q.refetch()
-        toast.success('Recompiled from session')
+        toast.success('Skill rebuilt from recording')
       })
       .catch((e: Error) => {
         toast.error(e.message)
       })
+  }
+
+  const finishEditing = async () => {
+    if (!skillId) return
+    const savedOk = await (stepEditorRef.current?.submitIfDirty() ?? Promise.resolve(true))
+    if (!savedOk) {
+      toast.error('Could not save the open step — fix errors or tap Save step, then try Finish.')
+      return
+    }
+    const dirtySteps = useEditorStore.getState().dirtySteps
+    if (dirtySteps.size > 0) {
+      const label =
+        dirtySteps.size === 1
+          ? `step ${[...dirtySteps][0]}`
+          : `${dirtySteps.size} steps (${[...dirtySteps].sort((a, b) => a - b).join(', ')})`
+      toast.warning(`Still have unsaved changes on ${label} — switch to each and save before finishing`)
+      return
+    }
+    setFlowStatus('Finished editing; your skill stays the same id and title on disk.')
+    void qc.invalidateQueries({ queryKey: ['skillList'] })
+    toast.success(`${skillId} saved in place — same skill id as when you compiled from the recording.`)
+    navigate('/edit')
   }
 
   const toggleToolsPane = (pane: 'validation' | 'suggestions' | 'variables') => {
@@ -197,7 +237,6 @@ export function HumanEditPage() {
       setSelectedStepIndex(0)
       setValidationReport(null)
       setFlowStatus(`Opened skill ${sid} for editing.`)
-      setSwitchSkillPick(sid)
       navigate(`/edit/${sid}`)
       void qc.invalidateQueries({ queryKey: ['workflow', sid] })
       void qc.invalidateQueries({ queryKey: ['skillList'] })
@@ -221,7 +260,7 @@ export function HumanEditPage() {
     return (
       <AppShell
         title="Edit Skill"
-        description="Open a compiled skill, then tune selectors, validation, and recovery behavior."
+        description="After recording compiles into a skill, open it here — your edits overwrite that same skill package (same id/title)."
         actions={
           <>
             <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
@@ -239,7 +278,7 @@ export function HumanEditPage() {
               <CardHeader className="border-b border-white/8">
                 <CardTitle className="text-white">Open a skill</CardTitle>
                 <CardDescription className="text-zinc-500">
-                  Load from your saved list or paste a skill id to continue editing in the three-panel workspace.
+                  Flow: Record → Compile → tune steps here → Finish saves to the same skill id. Use "Rebuild from recording" only if you want to discard edits and regenerate from raw events.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 pt-6">
@@ -405,6 +444,10 @@ export function HumanEditPage() {
   if (!q.data) return null
 
   const wf = q.data
+  const skillTitle =
+    typeof wf.package_meta.title === 'string' && wf.package_meta.title.trim()
+      ? wf.package_meta.title.trim()
+      : skillId
   const suggestionCount = wf.suggestions.length
   const splitPaneStyle = {
     ['--workflow-pane-width' as string]: `${workflowPaneWidth}px`,
@@ -412,54 +455,37 @@ export function HumanEditPage() {
 
   return (
     <AppShell
-      title="Edit Skill"
-      description={`${skillId} - v${version} - ${flowStatus}`}
+      title={`Skill: ${skillTitle}`}
+      description={
+        skillId ? (
+          <div className="flex max-w-full flex-wrap items-center gap-0.5">
+            <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide leading-none text-zinc-600">
+              Skill id
+            </span>
+            <span className={cn(SKILL_ID_CAPTION_CLASS, 'min-w-0 text-left')} title={skillId}>
+              {skillId}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-5 w-5 shrink-0 p-0 text-zinc-500 hover:bg-white/10 hover:text-zinc-200 [&_svg]:size-2.5"
+              title="Copy skill id"
+              aria-label="Copy skill id"
+              onClick={() =>
+                navigator.clipboard
+                  .writeText(skillId)
+                  .then(() => toast.success('Skill id copied'))
+                  .catch(() => toast.error('Could not copy'))
+              }
+            >
+              <Copy className="size-2.5" />
+            </Button>
+          </div>
+        ) : null
+      }
       actions={
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <label className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-zinc-400">
-            <span className="shrink-0">Skill</span>
-            <select
-              className={cn(
-                fieldSelectClass,
-                'h-7 min-w-0 max-w-[9rem] border-white/10 bg-black/20 py-0 text-xs text-zinc-100 sm:max-w-[11rem]',
-              )}
-              value={switchSkillPick}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => setSwitchSkillPick(e.target.value)}
-              title="Switch to another saved skill"
-              aria-label="Select saved skill to open"
-            >
-              <option value="">Choose id…</option>
-              {(skillsListQ.data?.skills ?? []).map((s) => (
-                <option key={s.skill_id} value={s.skill_id}>
-                  {s.skill_id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
-            onClick={() => {
-              const next = switchSkillPick.trim()
-              if (next) openSkillForEdit(next)
-            }}
-            disabled={!switchSkillPick.trim() || switchSkillPick === skillId}
-          >
-            Load
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
-            onClick={() => void q.refetch()}
-            title="Reload this workflow from the server"
-          >
-            <RefreshCw className="size-3.5" />
-            <span className="hidden sm:inline">Reload</span>
-          </Button>
           <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]" asChild>
             <Link to="/" title="Start a new recording (home)">
               <Home className="size-3.5" />
@@ -479,9 +505,19 @@ export function HumanEditPage() {
           <Button
             type="button"
             size="sm"
-            className="bg-white text-black hover:bg-zinc-200"
-            onClick={compileUpdated}
-            title="Rebuilds this skill from original recorded session events"
+            variant="outline"
+            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
+            onClick={rebuildSkillFromRecording}
+            title="Discard editor changes and regenerate the skill from the raw recording (destructive)"
+          >
+            Rebuild from recording
+          </Button>
+          <Button
+            type="button"
+            size="default"
+            className="h-10 bg-white px-5 text-[0.9375rem] font-medium text-black hover:bg-zinc-200 sm:min-w-[6.75rem]"
+            onClick={() => void finishEditing()}
+            title="Saves the open step if needed, keeps this skill id and title — does not create a copy"
           >
             Finish
           </Button>
@@ -512,7 +548,7 @@ export function HumanEditPage() {
         >
           <div className="mx-auto h-full w-px bg-white/10 transition-colors group-hover:bg-white/35 group-active:bg-white/45" />
         </div>
-        <StepEditorPanel step={currentStep} skillId={skillId} onWorkflowUpdated={onWorkflowUpdated} />
+        <StepEditorPanel ref={stepEditorRef} step={currentStep} skillId={skillId} onWorkflowUpdated={onWorkflowUpdated} />
         <aside className="border-border/60 bg-card/20 supports-[backdrop-filter]:bg-card/10 hidden min-h-0 overflow-hidden border-l p-2 backdrop-blur-sm md:flex md:flex-col md:gap-2">
           <section className="shrink-0 space-y-2 px-1 py-1">
             <h2 className="px-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Tools</h2>

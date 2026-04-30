@@ -58,6 +58,9 @@ def _anchor_score(anchor: dict[str, Any], ev: dict[str, Any], final_intent: str,
     relation = str(anchor.get("relation") or "").strip().lower()
     if not el:
         return -1.0
+    score = 0.0
+    if relation == "target":
+        score += 10.0
     target = ev.get("target") or {}
     semantic = ev.get("semantic") or {}
     ctx = ev.get("context") or {}
@@ -71,7 +74,6 @@ def _anchor_score(anchor: dict[str, Any], ev: dict[str, Any], final_intent: str,
             final_intent.replace("_", " "),
         ]
     ).lower()
-    score = 0.0
     if el in blob:
         score += 4.0
     for tok in el.replace(":", " ").split():

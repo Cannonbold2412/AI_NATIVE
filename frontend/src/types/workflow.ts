@@ -32,6 +32,7 @@ export type StepEditorDTO = {
   }
   recovery: Record<string, unknown>
   value: unknown
+  scroll_amount: number | null
   input_binding: string | null
   screenshot: StepScreenshotDTO
   editable_fields: Record<string, boolean>

@@ -23,6 +23,17 @@ from app.policy.timing import resolve_event_timing
 from app.recorder.visual import save_action_images
 
 
+def format_startup_error(exc: Exception) -> str:
+    """Normalize Playwright launch failures into concise user-facing text."""
+    message = str(exc).strip() or exc.__class__.__name__
+    if "Executable doesn't exist" in message:
+        return (
+            "Playwright browser binaries are missing. "
+            "Run `.venv\\Scripts\\playwright install chromium` and restart the API server."
+        )
+    return message
+
+
 def _load_bridge_script() -> str:
     here = Path(__file__).resolve().parent / "bridge.js"
     bridge = here.read_text(encoding="utf-8")
@@ -208,7 +219,7 @@ class RecordingSession:
                     break
                 time.sleep(0.05)
         except Exception as exc:  # noqa: BLE001
-            self._startup_error = str(exc)
+            self._startup_error = format_startup_error(exc)
             self.binding_errors.append(f"start_error: {exc!s}")
             self._startup_done.set()
         finally:

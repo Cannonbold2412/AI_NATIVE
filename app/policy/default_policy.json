@@ -77,6 +77,15 @@
     }
   },
   "anchors": {
+    "vision": {
+      "enabled": true,
+      "max_total_anchors": 4,
+      "min_primary_chars": 4,
+      "max_phrase_len": 96,
+      "highlight_alpha": 0.35,
+      "prompt_version": "1",
+      "cleanup_generic_terms": ["div", "container", "element", "widget"]
+    },
     "semantic_anchors": {
       "enabled": true,
       "allow_unlisted_phrases": true,

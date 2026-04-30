@@ -97,6 +97,33 @@ def _semantic_enrich_one(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str
     return out
 
 
+def _parse_scroll_position(raw: object) -> tuple[int, int]:
+    text = str(raw or "").strip()
+    if not text:
+        return 0, 0
+    left, _, right = text.partition(",")
+    try:
+        return int(float(left.strip() or 0)), int(float(right.strip() or 0))
+    except ValueError:
+        return 0, 0
+
+
+def _annotate_scroll_amounts(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    last_y = 0
+    for ev in events:
+        row = dict(ev)
+        visual = dict(row.get("visual") or {})
+        _, current_y = _parse_scroll_position(visual.get("scroll_position"))
+        extras = dict(row.get("extras") or {})
+        if str((row.get("action") or {}).get("action") or "").strip().lower() == "scroll":
+            extras["scroll_amount"] = current_y - last_y
+        row["extras"] = extras
+        out.append(row)
+        last_y = current_y
+    return out
+
+
 def run_pipeline(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     bundle = get_policy_bundle()
     policy = bundle.data
@@ -106,6 +133,7 @@ def run_pipeline(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cleaned = [_clean_one(e, policy) for e in validated]
     sem_enriched = [_semantic_enrich_one(e, policy) for e in cleaned]
     deduped = dedupe_scroll_events(sem_enriched)
+    scroll_annotated = _annotate_scroll_amounts(deduped)
     return [
-        enrich_event(e, pipeline_version=PIPELINE_VERSION, ordinal=i) for i, e in enumerate(deduped)
+        enrich_event(e, pipeline_version=PIPELINE_VERSION, ordinal=i) for i, e in enumerate(scroll_annotated)
     ]

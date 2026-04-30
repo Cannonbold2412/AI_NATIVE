@@ -51,7 +51,7 @@ export function ValidationEditor() {
   return (
     <Card size="sm" className="border-border/50 shadow-none ring-0">
       <CardHeader className="px-3 pb-2 pt-3 sm:px-4">
-        <CardTitle className="text-sm font-medium">Preconditions</CardTitle>
+        <CardTitle className="text-sm font-medium">Validation</CardTitle>
         <p className="text-muted-foreground mt-0.5 text-xs leading-snug">
           Conditions that must be satisfied (or time out) before this step is considered done.
         </p>

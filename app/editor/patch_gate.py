@@ -28,6 +28,10 @@ def _merge_step_shell(step: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
         if key in patch and isinstance(patch[key], dict):
             base = out.get(key) or {}
             out[key] = deep_merge(dict(base), dict(patch[key]))
+    if "action" in patch and isinstance(patch["action"], dict):
+        current = out.get("action")
+        base = dict(current) if isinstance(current, dict) else {"action": str(current or "")}
+        out["action"] = deep_merge(base, dict(patch["action"]))
     if "intent" in patch and isinstance(patch["intent"], str):
         out["intent"] = str(patch["intent"]).strip()
         signals = dict(out.get("signals") or {})
@@ -43,6 +47,15 @@ def _merge_step_shell(step: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
     return out
 
 
+def _coerce_scroll_delta(raw: Any) -> int:
+    if raw is None:
+        raise ValueError("scroll_amount_required")
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("scroll_amount_must_be_integer") from exc
+
+
 def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: dict[str, Any]) -> None:
     """Raise ValueError with a human-readable message if the patch is not allowed."""
     merged = _merge_step_shell(step, patch)
@@ -55,6 +68,18 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
             raise ValueError("invalid_intent_slug")
 
     act = action_name(merged).lower()
+    if act == "scroll":
+        invalid_keys = sorted(set(patch) - {"intent", "action"})
+        if invalid_keys:
+            raise ValueError("scroll_step_allows_only_intent_and_action")
+        action_patch = patch.get("action")
+        if not isinstance(action_patch, dict):
+            raise ValueError("scroll_action_patch_required")
+        if str(action_patch.get("action") or "scroll").strip().lower() != "scroll":
+            raise ValueError("scroll_action_kind_invalid")
+        delta = _coerce_scroll_delta(action_patch.get("delta"))
+        if abs(delta) > 20000:
+            raise ValueError("scroll_amount_out_of_range")
     if act != "scroll":
         eff = get_effective_intent_from_skill_step(merged) or str(merged.get("intent") or "").strip()
         if not eff.strip():

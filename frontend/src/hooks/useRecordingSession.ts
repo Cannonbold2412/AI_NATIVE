@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
+  errorMessage,
   fetchMetrics,
   postCompileSession,
   postStartRecording,
@@ -68,10 +69,10 @@ export function useRecordingSession(options?: Options) {
         )
         onCompileSuccess?.(result.skill_id)
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err, 'Compile failed.')
         setFlowStatus('Compile failed. Check logs and retry.')
         appendLog(`compile_error: ${msg}`)
-        toast.error('Compile failed')
+        toast.error(msg)
       } finally {
         setIsCompiling(false)
       }
@@ -83,6 +84,11 @@ export function useRecordingSession(options?: Options) {
     if (!startUrl.trim()) {
       setFlowStatus('Start URL is required.')
       toast.error('Start URL is required')
+      return
+    }
+    if (!skillTitle.trim()) {
+      setFlowStatus('Skill Name is required.')
+      toast.error('Skill Name is required')
       return
     }
     if (isRecording || isCompiling) return
@@ -99,12 +105,12 @@ export function useRecordingSession(options?: Options) {
       appendLog(`recording_started: session=${start.session_id}`)
       toast.success('Recording started')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setFlowStatus('Could not start recorder.')
+      const msg = errorMessage(err, 'Could not start recorder.')
+      setFlowStatus(msg)
       appendLog(`start_error: ${msg}`)
-      toast.error('Could not start recorder')
+      toast.error(msg)
     }
-  }, [appendLog, isCompiling, isRecording, startUrl, stopPolling])
+  }, [appendLog, isCompiling, isRecording, skillTitle, startUrl, stopPolling])
 
   useEffect(() => {
     if (!isRecording || !sessionId) return
@@ -129,8 +135,9 @@ export function useRecordingSession(options?: Options) {
           stopPolling()
           setIsRecording(false)
           setFlowStatus('Polling failed. Check logs and retry.')
-          appendLog(`polling_error: ${err.message}`)
-          toast.error('Recording status poll failed')
+          const msg = errorMessage(err, 'Recording status poll failed.')
+          appendLog(`polling_error: ${msg}`)
+          toast.error(msg)
         })
     }, 2000)
 
