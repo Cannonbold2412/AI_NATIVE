@@ -8,7 +8,7 @@ Skill compiler single-flow editor: record actions, compile JSON, human-in-the-lo
 
 **21st.dev Magic (optional):** With the Magic MCP in Cursor, use the component builder for new sub-patterns (e.g. timeline, log strip); align generated code with this stack (`@/` imports, Tailwind, `components/ui/*`). A reference pattern lives in `ValidationReportPanel` (collapsible JSON readout).
 
-**Resilience:** [ErrorBoundary](src/components/ErrorBoundary.tsx) wraps the app shell in `main.tsx` with a recovery affordance. Prefer visible focus (`focus-visible:ring` on shadcn controls) and `aria-live` on recording status in `SkillReviewPage`. Global `prefers-reduced-motion` is respected for scroll behavior in [index.css](src/index.css).
+**Resilience:** [ErrorBoundary](src/components/ErrorBoundary.tsx) wraps the app shell in `main.tsx` with a recovery affordance. Prefer visible focus (`focus-visible:ring` on shadcn controls) and `aria-live` on recording status in `HomePage` / `HumanEditPage`. Global `prefers-reduced-motion` is respected for scroll behavior in [index.css](src/index.css).
 
 ## Run
 

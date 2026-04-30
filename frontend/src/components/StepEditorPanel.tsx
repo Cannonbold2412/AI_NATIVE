@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { FormProvider, useForm, useFormState } from 'react-hook-form'
 import { toast } from 'sonner'
 import type { StepEditorDTO, WorkflowResponse } from '../types/workflow'
@@ -12,13 +12,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { fieldTextareaClass } from '@/lib/fieldStyles'
+import { fieldSelectClass } from '@/lib/fieldStyles'
 import { cn } from '@/lib/utils'
+import { GripVertical, Trash2 } from 'lucide-react'
 
 type FormValues = {
   intent: string
-  primary_selector: string
-  fallback_selectors: string
+  selectors: string[]
   value: string
   css: string
   aria: string
@@ -26,7 +26,7 @@ type FormValues = {
   xpath: string
   wait_validation_shape: 'single' | 'compound'
   wait_tree: WaitNode
-  anchor_rows: string
+  anchors: string[]
   strategies_selected: string[]
 }
 
@@ -75,8 +75,7 @@ const RECOVERY_STRATEGY_OPTIONS = [
 
 const emptyForm: FormValues = {
   intent: '',
-  primary_selector: '',
-  fallback_selectors: '',
+  selectors: [''],
   value: '',
   css: '',
   aria: '',
@@ -84,7 +83,7 @@ const emptyForm: FormValues = {
   xpath: '',
   wait_validation_shape: 'single',
   wait_tree: { kind: 'leaf', type: 'none', target: '', timeout: 5000 },
-  anchor_rows: '',
+  anchors: [''],
   strategies_selected: [],
 }
 
@@ -168,26 +167,26 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
       const o = a as Record<string, string>
       return `${o.kind || o.type || 'text'}:${o.value || o.text || JSON.stringify(a)}`
     })
-    .join('\n')
   const strat = ((step.recovery.strategies || []) as string[])
   return {
     intent: step.intent || step.final_intent,
-    primary_selector: String(tgt.primary_selector || ''),
-    fallback_selectors: (tgt.fallback_selectors || []).join('\n'),
+    selectors: [String(tgt.primary_selector || ''), ...(tgt.fallback_selectors || [])].filter(
+      (selector, index, arr) => index === 0 || Boolean(selector) || arr.length === 1,
+    ),
     value: typeof step.value === 'string' ? step.value : '',
     css: String(sel.css || ''),
     aria: String(sel.aria || ''),
     text_based: String(sel.text_based || ''),
     xpath: String(sel.xpath || ''),
     ...waitBits,
-    anchor_rows: anc,
+    anchors: anc.length > 0 ? anc : [''],
     strategies_selected: strat,
   }
 }
 
-function parseAnchorRows(text: string): Record<string, unknown>[] {
+function parseAnchorRows(rows: string[]): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = []
-  for (const line of text.split('\n')) {
+  for (const line of rows) {
     const t = line.trim()
     if (!t) continue
     const idx = t.indexOf(':')
@@ -206,6 +205,16 @@ type Props = {
   onWorkflowUpdated: (wf: WorkflowResponse) => void
 }
 
+function compactStepLabel(label: string): string {
+  return label.replace(/^Step\s+\d+:\s*/i, '').trim()
+}
+
+function humanizeAction(action: string): string {
+  const cleaned = action.trim().replace(/[_-]+/g, ' ')
+  if (!cleaned) return 'Action'
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+}
+
 function DirtySync({ stepIndex }: { stepIndex: number }) {
   const { isDirty } = useFormState()
   const markDirty = useEditorStore((s) => s.markStepDirty)
@@ -217,10 +226,9 @@ function DirtySync({ stepIndex }: { stepIndex: number }) {
   return null
 }
 
-const checkboxClass = 'border-input size-4 shrink-0 rounded border'
-
 export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
   const methods = useForm<FormValues>({ defaultValues: emptyForm })
+  const [draggingRecoveryIndex, setDraggingRecoveryIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (step) methods.reset(defaultsFromStep(step))
@@ -228,7 +236,7 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
 
   if (!step) {
     return (
-      <div className="text-muted-foreground border-border/60 flex min-h-0 min-w-0 items-center justify-center border-x p-4 text-sm">
+      <div className="text-muted-foreground border-border/60 bg-card/25 supports-[backdrop-filter]:bg-card/15 flex min-h-0 min-w-0 items-center justify-center border-x p-4 text-sm backdrop-blur-sm">
         Select a step to edit
       </div>
     )
@@ -236,23 +244,65 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
 
   const editable = step.editable_fields
   const canEdit = (key: string) => editable[key] !== false
+  const selectors = methods.watch('selectors') || ['']
+  const anchors = methods.watch('anchors') || ['']
+  const selectedStrategies = methods.watch('strategies_selected') || []
+  const recoveryOptions = [
+    ...RECOVERY_STRATEGY_OPTIONS,
+    ...((step.recovery.strategies || []) as string[])
+      .filter((v) => !RECOVERY_STRATEGY_OPTIONS.some((o) => o.value === v))
+      .map((v) => ({ value: v, label: v, help: 'Existing strategy on this step.' })),
+  ]
+  const recoveryHelpByValue = new Map(recoveryOptions.map((opt) => [opt.value, opt.help]))
+
+  const addRecoveryStrategy = (value: string) => {
+    if (!canEdit('recovery_strategies')) return
+    if (!value) return
+    const current = methods.getValues('strategies_selected') || []
+    const existingIndex = current.indexOf(value)
+    if (existingIndex === 0) return
+    if (existingIndex > 0) {
+      const next = [value, ...current.filter((v) => v !== value)]
+      methods.setValue('strategies_selected', next, { shouldDirty: true })
+      return
+    }
+    methods.setValue('strategies_selected', [value, ...current], { shouldDirty: true })
+  }
+
+  const moveRecoveryStrategy = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || to >= selectedStrategies.length) return
+    const next = [...selectedStrategies]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    methods.setValue('strategies_selected', next, { shouldDirty: true })
+  }
+
+  const removeRecoveryStrategy = (value: string) => {
+    const current = methods.getValues('strategies_selected') || []
+    methods.setValue(
+      'strategies_selected',
+      current.filter((v) => v !== value),
+      { shouldDirty: true },
+    )
+  }
 
   const onSubmit = methods.handleSubmit(async (values) => {
-    const fallbacks = values.fallback_selectors
-      .split(/\n+/)
+    const selectors = values.selectors
       .map((s) => s.trim())
       .filter(Boolean)
+    const primarySelector = selectors[0] || ''
+    const fallbackSelectors = selectors.slice(1)
     const strategies = (values.strategies_selected || []).map((s) => s.trim()).filter(Boolean)
-    const anchors = parseAnchorRows(values.anchor_rows)
+    const anchors = parseAnchorRows(values.anchors)
     const patch: Record<string, unknown> = {
       intent: values.intent,
       target: {
-        primary_selector: values.primary_selector,
-        fallback_selectors: fallbacks,
+        primary_selector: primarySelector,
+        fallback_selectors: fallbackSelectors,
       },
       signals: {
         selectors: {
-          css: values.css || values.primary_selector,
+          css: values.css || primarySelector,
           aria: values.aria,
           text_based: values.text_based,
           xpath: values.xpath,
@@ -281,19 +331,16 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
   })
 
   return (
-    <div className="bg-background border-border/60 min-h-0 min-w-0 space-y-3 border-x p-2 md:overflow-y-auto">
+    <div className="bg-card/30 border-border/60 supports-[backdrop-filter]:bg-card/20 relative z-0 min-h-0 min-w-0 space-y-2 border-t p-2 backdrop-blur-sm md:border-t-0 md:border-l md:overflow-x-hidden md:overflow-y-auto">
       <FormProvider {...methods}>
         <DirtySync stepIndex={step.step_index} />
-        <form onSubmit={onSubmit} className="space-y-3">
-          <Card>
-            <CardHeader className="p-3 pb-2">
-              <CardTitle className="text-base">Edit step</CardTitle>
-              <CardDescription className="line-clamp-2">{step.human_readable_description}</CardDescription>
-              <p className="text-muted-foreground font-mono text-xs">
-                Action: <code>{step.action_type}</code>
-              </p>
+        <form onSubmit={onSubmit} className="space-y-2">
+          <Card className="gap-2 py-3">
+            <CardHeader className="p-2.5 pb-1">
+              <CardTitle className="text-lg font-semibold tracking-tight">Action: {humanizeAction(step.action_type)}</CardTitle>
+              <CardDescription className="line-clamp-2">{compactStepLabel(step.human_readable_description)}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 p-3 pt-0">
+            <CardContent className="space-y-2 p-2.5 pt-0">
               <div className="grid gap-2">
                 <Label htmlFor="intent">Intent</Label>
                 <Input
@@ -304,23 +351,49 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="primary_selector">Primary selector</Label>
-                <Input
-                  id="primary_selector"
-                  type="text"
-                  disabled={!canEdit('selectors')}
-                  {...methods.register('primary_selector')}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="fallback_selectors">Fallback selectors (one per line)</Label>
-                <textarea
-                  id="fallback_selectors"
-                  className={fieldTextareaClass}
-                  rows={3}
-                  disabled={!canEdit('selectors')}
-                  {...methods.register('fallback_selectors')}
-                />
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="selector_0">Selectors</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!canEdit('selectors')}
+                    onClick={() => methods.setValue('selectors', [...selectors, ''], { shouldDirty: true })}
+                  >
+                    Add selector
+                  </Button>
+                </div>
+                <p className="text-muted-foreground text-xs">Top selector is primary. Selectors below are fallbacks.</p>
+                <div className="space-y-2">
+                  {selectors.map((_, index) => (
+                    <div key={`selector-${index}`} className="flex items-center gap-2">
+                      <Input
+                        id={`selector_${index}`}
+                        type="text"
+                        placeholder={index === 0 ? 'Primary selector' : `Fallback selector ${index}`}
+                        disabled={!canEdit('selectors')}
+                        {...methods.register(`selectors.${index}` as const)}
+                      />
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive h-7 w-7"
+                        disabled={!canEdit('selectors') || selectors.length <= 1}
+                        onClick={() =>
+                          methods.setValue(
+                            'selectors',
+                            selectors.filter((_, i) => i !== index),
+                            { shouldDirty: true },
+                          )
+                        }
+                        aria-label={`Remove selector ${index + 1}`}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
               {canEdit('value') ? (
                 <div className="grid gap-2">
@@ -331,11 +404,11 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="p-3 pb-2">
+          <Card className="gap-2 py-3">
+            <CardHeader className="p-2.5 pb-1">
               <CardTitle className="text-sm">Selector channels</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 p-3 pt-0">
+            <CardContent className="grid gap-2 p-2.5 pt-0">
               <div className="grid gap-1.5">
                 <Label htmlFor="css">CSS</Label>
                 <Input id="css" disabled={!canEdit('selectors')} {...methods.register('css')} />
@@ -367,42 +440,128 @@ export function StepEditorPanel({ step, skillId, onWorkflowUpdated }: Props) {
             </CardContent>
           </Card>
 
-          <div className="grid gap-2">
-            <Label htmlFor="anchor_rows">Anchors (kind:value per line)</Label>
-            <textarea
-              id="anchor_rows"
-              className={fieldTextareaClass}
-              rows={4}
-              disabled={!canEdit('anchors')}
-              {...methods.register('anchor_rows')}
-            />
-          </div>
-
-          <Card>
-            <CardHeader className="p-3 pb-2">
-              <CardTitle className="text-sm">Recovery (multi-select)</CardTitle>
+          <Card className="gap-2 py-3">
+            <CardHeader className="p-2.5 pb-1">
+              <CardTitle className="text-sm">Anchors</CardTitle>
+              <CardDescription className="text-xs">Use format `kind:value` such as `text:Sign in`.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2 p-3 pt-0">
-              {[
-                ...RECOVERY_STRATEGY_OPTIONS,
-                ...((step.recovery.strategies || []) as string[])
-                  .filter((v) => !RECOVERY_STRATEGY_OPTIONS.some((o) => o.value === v))
-                  .map((v) => ({ value: v, label: v, help: 'Existing strategy on this step.' })),
-              ].map((opt) => (
-                <label key={opt.value} className="hover:bg-muted/30 flex cursor-pointer gap-2 rounded-md p-1.5">
-                  <input
-                    type="checkbox"
-                    className={cn(checkboxClass, 'mt-0.5')}
-                    value={opt.value}
-                    disabled={!canEdit('recovery_strategies')}
-                    {...methods.register('strategies_selected')}
-                  />
-                  <span className="min-w-0 text-sm">
-                    {opt.label}
-                    <span className="text-muted-foreground block text-xs">— {opt.help}</span>
-                  </span>
-                </label>
-              ))}
+            <CardContent className="space-y-2.5 p-2.5 pt-0">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="anchor_0">Anchors</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!canEdit('anchors')}
+                  onClick={() => methods.setValue('anchors', [...anchors, ''], { shouldDirty: true })}
+                >
+                  Add anchor
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                {anchors.map((_, index) => (
+                  <div key={`anchor-${index}`} className="flex items-center gap-1.5">
+                    <Input
+                      id={`anchor_${index}`}
+                      type="text"
+                      placeholder={index === 0 ? 'text:Sign in' : `Anchor ${index + 1}`}
+                      disabled={!canEdit('anchors')}
+                      {...methods.register(`anchors.${index}` as const)}
+                    />
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive h-7 w-7"
+                      disabled={!canEdit('anchors') || anchors.length <= 1}
+                      onClick={() =>
+                        methods.setValue(
+                          'anchors',
+                          anchors.filter((_, i) => i !== index),
+                          { shouldDirty: true },
+                        )
+                      }
+                      aria-label={`Remove anchor ${index + 1}`}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="gap-2 py-3">
+            <CardHeader className="p-2.5 pb-1">
+              <CardTitle className="text-sm">Recovery (ordered)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1.5 p-2.5 pt-0">
+              <p className="text-muted-foreground text-xs">Choose from dropdown to add/move to top. Drag rows to reorder.</p>
+              <div className="grid gap-1.5">
+                <Label htmlFor="recovery_strategy_picker">Recovery strategy</Label>
+                <select
+                  id="recovery_strategy_picker"
+                  className={fieldSelectClass}
+                  disabled={!canEdit('recovery_strategies')}
+                  value=""
+                  onChange={(event) => {
+                    addRecoveryStrategy(event.target.value)
+                    event.currentTarget.value = ''
+                  }}
+                >
+                  <option value="">Select recovery strategy...</option>
+                  {recoveryOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5 pt-1">
+                {selectedStrategies.map((strategy, index) => (
+                  <div
+                    key={`${strategy}-${index}`}
+                    className={cn(
+                      'border-border bg-background/40 flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs',
+                      draggingRecoveryIndex === index && 'opacity-70',
+                    )}
+                    draggable={canEdit('recovery_strategies')}
+                    onDragStart={() => setDraggingRecoveryIndex(index)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggingRecoveryIndex === null) return
+                      moveRecoveryStrategy(draggingRecoveryIndex, index)
+                      setDraggingRecoveryIndex(null)
+                    }}
+                    onDragEnd={() => setDraggingRecoveryIndex(null)}
+                  >
+                    <span className="text-muted-foreground shrink-0" aria-hidden>
+                      <GripVertical className="size-3.5" />
+                    </span>
+                    <span className="text-muted-foreground">{index + 1}.</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words">{strategy}</span>
+                      <span className="text-muted-foreground block break-words text-[11px] leading-4">
+                        {recoveryHelpByValue.get(strategy) || 'Recovery strategy selected for this step.'}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive h-7 w-7"
+                      disabled={!canEdit('recovery_strategies')}
+                      onClick={() => removeRecoveryStrategy(strategy)}
+                      aria-label={`Remove recovery strategy ${strategy}`}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                {selectedStrategies.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">No recovery strategy selected.</p>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
 

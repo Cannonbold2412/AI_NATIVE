@@ -1,5 +1,6 @@
 import type { WorkflowResponse } from '../types/workflow'
 import { apiUrl } from '@/lib/apiBase'
+import { z } from 'zod'
 
 const json = (r: Response) => {
   if (!r.ok) {
@@ -8,6 +9,95 @@ const json = (r: Response) => {
     })
   }
   return r.json()
+}
+
+const recordUnknown = z.record(z.string(), z.unknown())
+const recordNumber = z.record(z.string(), z.number())
+
+const stepFlagsSchema = z.object({
+  is_destructive: z.boolean(),
+  is_scroll: z.boolean(),
+  generic_intent: z.boolean(),
+})
+
+const stepScreenshotSchema = z.object({
+  full_url: z.string().nullable(),
+  element_url: z.string().nullable(),
+  scroll_url: z.string().nullable(),
+  bbox: recordNumber,
+  viewport: z.string(),
+  scroll_position: z.string(),
+})
+
+const stepEditorSchema = z.object({
+  id: z.string(),
+  step_index: z.number(),
+  human_readable_description: z.string(),
+  action_type: z.string(),
+  intent: z.string(),
+  final_intent: z.string(),
+  target: recordUnknown,
+  selectors: recordUnknown,
+  anchors_signals: z.array(recordUnknown),
+  anchors_recovery: z.array(recordUnknown),
+  validation: z.object({
+    wait_for: recordUnknown,
+    success_conditions: recordUnknown,
+  }),
+  recovery: recordUnknown,
+  value: z.unknown(),
+  input_binding: z.string().nullable(),
+  screenshot: stepScreenshotSchema,
+  editable_fields: z.record(z.string(), z.boolean()),
+  flags: stepFlagsSchema,
+  parameter_bindings: z.array(recordUnknown),
+})
+
+const suggestionSchema = z.object({
+  step_index: z.number(),
+  severity: z.enum(['info', 'warn', 'error']),
+  code: z.string(),
+  message: z.string(),
+})
+
+const workflowSchema = z.object({
+  skill_id: z.string(),
+  package_meta: recordUnknown,
+  inputs: z.array(recordUnknown),
+  steps: z.array(stepEditorSchema),
+  suggestions: z.array(suggestionSchema),
+  asset_base_url: z.string(),
+})
+
+const skillSummarySchema = z.object({
+  skill_id: z.string(),
+  title: z.string(),
+  version: z.number(),
+  step_count: z.number(),
+  modified_at: z.number(),
+})
+
+const skillListSchema = z.object({
+  skills: z.array(skillSummarySchema),
+})
+
+const workflowMutationSchema = z.object({
+  skill_id: z.string(),
+  meta: recordUnknown,
+  workflow: workflowSchema,
+})
+
+const patchStepSchema = z.object({
+  skill_id: z.string(),
+  meta: recordUnknown,
+  revalidation: recordUnknown,
+  workflow: workflowSchema,
+})
+
+function parseOrThrow<T>(schema: z.ZodType<T>, payload: unknown, endpoint: string): T {
+  const parsed = schema.safeParse(payload)
+  if (parsed.success) return parsed.data
+  throw new Error(`Invalid API response from ${endpoint}: ${parsed.error.issues[0]?.message ?? 'unknown schema error'}`)
 }
 
 export type SkillSummary = {
@@ -19,11 +109,16 @@ export type SkillSummary = {
 }
 
 export function fetchSkillList(): Promise<{ skills: SkillSummary[] }> {
-  return fetch(apiUrl('/skills')).then(json)
+  return fetch(apiUrl('/skills'))
+    .then(json)
+    .then((payload) => parseOrThrow(skillListSchema, payload, '/skills'))
 }
 
 export function fetchWorkflow(skillId: string): Promise<WorkflowResponse> {
-  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}/workflow`)).then(json)
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/workflow`
+  return fetch(apiUrl(endpoint))
+    .then(json)
+    .then((payload) => parseOrThrow(workflowSchema, payload, endpoint))
 }
 
 export function patchStep(
@@ -37,6 +132,7 @@ export function patchStep(
   revalidation: Record<string, unknown>
   workflow: WorkflowResponse
 }> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}`
   return fetch(
     apiUrl(`/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}`),
     {
@@ -44,7 +140,9 @@ export function patchStep(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patch, assist_llm: assistLlm }),
     },
-  ).then(json)
+  )
+    .then(json)
+    .then((payload) => parseOrThrow(patchStepSchema, payload, endpoint))
 }
 
 export function patchSkillInputs(
@@ -69,11 +167,14 @@ export function postReorder(skillId: string, newOrder: number[]): Promise<{
   meta: Record<string, unknown>
   workflow: WorkflowResponse
 }> {
-  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}/steps:reorder`), {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps:reorder`
+  return fetch(apiUrl(endpoint), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ new_order: newOrder }),
-  }).then(json)
+  })
+    .then(json)
+    .then((payload) => parseOrThrow(workflowMutationSchema, payload, endpoint))
 }
 
 export function deleteStep(skillId: string, stepIndex: number): Promise<{
@@ -81,10 +182,13 @@ export function deleteStep(skillId: string, stepIndex: number): Promise<{
   meta: Record<string, unknown>
   workflow: WorkflowResponse
 }> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}`
   return fetch(
     apiUrl(`/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}`),
     { method: 'DELETE' },
-  ).then(json)
+  )
+    .then(json)
+    .then((payload) => parseOrThrow(workflowMutationSchema, payload, endpoint))
 }
 
 export function postCompileUpdated(

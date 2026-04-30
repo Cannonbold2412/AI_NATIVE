@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-/** Consistent form controls (matches SkillReviewPage native selects). */
+/** Consistent form controls (matches native selects in HumanEditPage). */
 export const fieldSelectClass = cn(
   'border-input bg-background text-foreground flex h-9 w-full min-w-0 rounded-md border px-3 text-sm shadow-xs',
   'focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none',

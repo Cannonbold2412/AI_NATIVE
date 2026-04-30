@@ -17,8 +17,8 @@ export function ValidationReportPanel({ data, title = 'Validation report', defau
   const [open, setOpen] = useState(defaultOpen)
   if (!data) return null
   return (
-    <div className="bg-muted/20 border-border w-full border-b">
-      <Collapsible open={open} onOpenChange={setOpen} className="w-full">
+    <div className="bg-muted/20 border-border flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border">
+      <Collapsible open={open} onOpenChange={setOpen} className="flex min-h-0 flex-1 flex-col">
         <CollapsibleTrigger
           className="hover:bg-muted/40 text-muted-foreground focus-visible:ring-ring/50 flex w-full items-center justify-between gap-2 border-0 bg-transparent px-3 py-2 text-left text-xs font-medium tracking-wide uppercase focus-visible:ring-2 focus-visible:outline-none"
           aria-expanded={open}
@@ -29,8 +29,8 @@ export function ValidationReportPanel({ data, title = 'Validation report', defau
             aria-hidden
           />
         </CollapsibleTrigger>
-        <CollapsibleContent>
-          <ScrollArea className="h-40 border-t" role="region" aria-label="Validation result JSON" tabIndex={0}>
+        <CollapsibleContent className="flex min-h-0 flex-1 flex-col">
+          <ScrollArea className="min-h-0 flex-1 border-t" role="region" aria-label="Validation result JSON" tabIndex={0}>
             <pre className="text-muted-foreground p-3 font-mono text-xs break-words whitespace-pre-wrap">
               {JSON.stringify(data, null, 2)}
             </pre>
