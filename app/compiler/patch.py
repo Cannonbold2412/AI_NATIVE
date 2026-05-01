@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.anchors.schema import normalize_anchor_list
 from app.compiler.intent_access import get_effective_intent_from_skill_step
 from app.compiler.recovery_policy import (
     merge_recovery_strategies_for_wait_shape,
@@ -97,6 +98,17 @@ def _apply_top_level_step_fields(step: dict[str, Any], patch: dict[str, Any]) ->
         step["value"] = patch["value"]
 
 
+def _normalize_step_anchor_blocks(step: dict[str, Any]) -> dict[str, Any]:
+    out = dict(step)
+    signals = dict(out.get("signals") or {})
+    recovery = dict(out.get("recovery") or {})
+    signals["anchors"] = normalize_anchor_list(signals.get("anchors") or [])
+    recovery["anchors"] = normalize_anchor_list(recovery.get("anchors") or [])
+    out["signals"] = signals
+    out["recovery"] = recovery
+    return out
+
+
 def _sync_recovery_deterministic(step: dict[str, Any]) -> dict[str, Any]:
     """After a non-LLM patch, align recovery strategies with intent + wait_for (deterministic)."""
     pol = get_policy_bundle().data
@@ -155,6 +167,7 @@ def apply_step_patch(
             base = step.get(key) or {}
             step[key] = deep_merge(dict(base), dict(patch[key]))
     _apply_top_level_step_fields(step, patch)
+    step = _normalize_step_anchor_blocks(step)
     if assist_llm:
         step = _enhance_step_with_llm(step)
     else:

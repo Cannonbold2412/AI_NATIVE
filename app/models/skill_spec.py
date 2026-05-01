@@ -51,7 +51,6 @@ class SkillStep(BaseModel):
     target: dict[str, Any] = Field(default_factory=dict)
     signals: dict[str, Any] = Field(default_factory=dict)
     state: dict[str, Any] = Field(default_factory=dict)
-    state_diff: dict[str, Any] = Field(default_factory=dict)
     value: Any = None
     input_binding: str | None = None
     validation: ValidationBlock = Field(default_factory=ValidationBlock)

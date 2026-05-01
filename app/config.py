@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # Vision multimodal requests (large payloads) need a separate, usually longer, timeout.
     llm_vision_timeout_ms: int = 120000
     llm_anchor_vision: bool = True
+    # When multiple SKILL_LLM_API_KEYS are set, anchor_vision fires one request per key in parallel and uses the first success.
+    llm_parallel_fanout_anchor_vision: bool = True
 
     # Optional provider endpoint for helper calls. If unset, deterministic fallback is used.
     llm_endpoint: str = ""
@@ -34,6 +36,12 @@ class Settings(BaseSettings):
     # NVIDIA / OpenAI-style VLMs (e.g. google/gemma-4-31b-it) via chat completions + image attachment.
     llm_vision_model: str = "google/gemma-4-31b-it"
     llm_debug: bool = False
+    pack_llm_enabled: bool = True
+    pack_llm_endpoint: str = ""
+    pack_llm_api_key: str = ""
+    pack_llm_api_keys: str = ""
+    pack_llm_model: str = ""
+    pack_llm_timeout_ms: int = 20000
 
     @field_validator("llm_timeout_ms", mode="before")
     @classmethod
@@ -52,6 +60,15 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             timeout = 120000
         return max(10000, timeout)
+
+    @field_validator("pack_llm_timeout_ms", mode="before")
+    @classmethod
+    def _enforce_min_pack_timeout(cls, value: object) -> int:
+        try:
+            timeout = int(value)
+        except (TypeError, ValueError):
+            timeout = 20000
+        return max(2000, timeout)
 
 
 settings = Settings()

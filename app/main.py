@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.api.skill_pack_routes import router as skill_pack_router
 from app.api.workflow_routes import router as workflow_router
 from app.config import settings
 
@@ -23,6 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(skill_pack_router)
 app.include_router(workflow_router)
 
 

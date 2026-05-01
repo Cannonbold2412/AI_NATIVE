@@ -331,7 +331,6 @@ def _build_step(
         target=target,
         signals=signals,
         state={"before": state_before, "after": state_after},
-        state_diff=state_diff,
         value=value,
         input_binding=input_binding,
         validation=validation,

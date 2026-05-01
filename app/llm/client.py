@@ -6,6 +6,8 @@ import itertools
 import json
 import re
 import threading
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from typing import Any
 from urllib import error, request
@@ -40,9 +42,14 @@ def _safe_error_snippet(text: str, limit: int = 280) -> str:
     return t
 
 
-def _append_llm_detail(sink: list[str] | None, msg: str) -> None:
+def _append_llm_detail(sink: list[str] | None, msg: str, *, sink_lock: threading.Lock | None = None) -> None:
     _debug_log(msg)
-    if sink is not None:
+    if sink is None:
+        return
+    if sink_lock is not None:
+        with sink_lock:
+            sink.append(msg)
+    else:
         sink.append(msg)
 
 
@@ -290,6 +297,150 @@ def _decode_http_error_body(exc: error.HTTPError) -> str:
         return ""
 
 
+def _openai_complete_request(
+    ep: str,
+    raw_body: bytes,
+    headers: dict[str, str],
+    timeout_s: float,
+    *,
+    attempt_tag: str,
+    req_id: int,
+    task: str,
+    error_detail: list[str] | None,
+    sink_lock: threading.Lock | None,
+) -> dict[str, Any] | None:
+    req = request.Request(ep, data=raw_body, headers=headers, method="POST")
+    try:
+        with request.urlopen(req, timeout=timeout_s) as res:
+            raw = res.read().decode("utf-8")
+    except error.HTTPError as exc:
+        bod = _decode_http_error_body(exc)
+        snippet = _safe_error_snippet(bod or str(exc.reason or exc))
+        _append_llm_detail(
+            error_detail,
+            f"HTTPError {exc.code} ({attempt_tag}): {snippet}",
+            sink_lock=sink_lock,
+        )
+        return None
+    except (error.URLError, TimeoutError, OSError) as exc:
+        _append_llm_detail(
+            error_detail,
+            f"{type(exc).__name__} ({attempt_tag}): {exc}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    try:
+        data_raw = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        snippet = _safe_error_snippet(raw)
+        pos = getattr(exc, "pos", None)
+        loc = f"@{pos}" if pos is not None else ""
+        _append_llm_detail(
+            error_detail,
+            f"JSONDecodeError ({attempt_tag}) body{loc}: {snippet}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    if not isinstance(data_raw, dict):
+        _append_llm_detail(
+            error_detail,
+            f"unexpected_json_root ({attempt_tag}): {type(data_raw).__name__}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    prov_msg = _provider_top_level_error(data_raw)
+    if prov_msg:
+        _append_llm_detail(
+            error_detail,
+            f"provider_error ({attempt_tag}): {prov_msg}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    data = _normalize_openai_response(data_raw)
+
+    _debug_log(
+        "response_received "
+        f"req_id={req_id} task={task} attempt={attempt_tag} status_ok"
+    )
+    return data if isinstance(data, dict) else None
+
+
+def _parallel_anchor_vision_first_success(
+    *,
+    keys: list[str],
+    ep: str,
+    raw_body: bytes,
+    timeout_s: float,
+    attempt_tag: str,
+    req_id: int,
+    task: str,
+    error_detail: list[str] | None,
+) -> dict[str, Any] | None:
+    """One HTTP POST per API key; return the first successful parsed body."""
+    if len(keys) < 2:
+        return None
+    detail_lock = threading.Lock()
+    max_workers = min(32, len(keys))
+    ex = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        futs = []
+        for i, api_key in enumerate(keys):
+            slot = i + 1
+            hdrs: dict[str, str] = {"Content-Type": "application/json"}
+            if api_key:
+                hdrs["Authorization"] = f"Bearer {api_key}"
+            label = f"key{slot}/{len(keys)} {attempt_tag}"
+            futs.append(
+                ex.submit(
+                    _openai_complete_request,
+                    ep,
+                    raw_body,
+                    hdrs,
+                    timeout_s,
+                    attempt_tag=label,
+                    req_id=req_id,
+                    task=task,
+                    error_detail=error_detail,
+                    sink_lock=detail_lock,
+                )
+            )
+        pending = set(futs)
+        # Wall clock: allow all in-flight urllib timeouts to resolve, plus small slack.
+        wall_deadline = time.monotonic() + timeout_s + 15.0
+        while pending:
+            now = time.monotonic()
+            wait_timeout = min(1.0, max(0.05, wall_deadline - now))
+            if wait_timeout <= 0:
+                break
+            done, pending = wait(pending, timeout=wait_timeout, return_when=FIRST_COMPLETED)
+            for fut in done:
+                try:
+                    out = fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    _append_llm_detail(
+                        error_detail,
+                        f"worker_error ({attempt_tag}): {type(exc).__name__}: {exc}",
+                        sink_lock=detail_lock,
+                    )
+                    continue
+                if out is not None:
+                    try:
+                        ex.shutdown(wait=False, cancel_futures=True)
+                    except TypeError:
+                        ex.shutdown(wait=False)
+                    return out
+        return None
+    finally:
+        try:
+            ex.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            ex.shutdown(wait=False)
+
+
 def call_llm(
     task: str,
     payload: dict[str, Any],
@@ -301,6 +452,7 @@ def call_llm(
         return None
 
     req_id = next(_REQUEST_COUNTER)
+    keys = _configured_keys()
     api_key, key_slot, key_count = _next_api_key()
     headers = {"Content-Type": "application/json"}
     if api_key:
@@ -309,73 +461,51 @@ def call_llm(
     _debug_log(
         "request_sent "
         f"req_id={req_id} task={task} endpoint={settings.llm_endpoint} "
-        f"key_slot={key_slot}/{key_count} timeout_ms={timeout_ms}"
+        f"key_slot={key_slot}/{key_count} timeout_ms={timeout_ms} keys={len(keys)}"
     )
     endpoint_raw = settings.llm_endpoint
     use_openai_shape = _is_openai_compatible_endpoint(endpoint_raw)
 
     timeout_s = max(0.2, timeout_ms / 1000.0)
 
-    def _single_openai_post(*, json_mode: bool, attempt_tag: str) -> dict[str, Any] | None:
-        ep = _chat_completions_url(endpoint_raw) if use_openai_shape else endpoint_raw
-        body_dict = _openai_body_dict(task, payload, json_mode=json_mode)
-        raw_body = json.dumps(body_dict).encode("utf-8")
-        req = request.Request(ep, data=raw_body, headers=headers, method="POST")
-        try:
-            with request.urlopen(req, timeout=timeout_s) as res:
-                raw = res.read().decode("utf-8")
-        except error.HTTPError as exc:
-            bod = _decode_http_error_body(exc)
-            snippet = _safe_error_snippet(bod or str(exc.reason or exc))
-            _append_llm_detail(
-                error_detail,
-                f"HTTPError {exc.code} ({attempt_tag}): {snippet}",
-            )
-            return None
-        except (error.URLError, TimeoutError, OSError) as exc:
-            _append_llm_detail(error_detail, f"{type(exc).__name__} ({attempt_tag}): {exc}")
-            return None
-
-        try:
-            data_raw = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            snippet = _safe_error_snippet(raw)
-            pos = getattr(exc, "pos", None)
-            loc = f"@{pos}" if pos is not None else ""
-            _append_llm_detail(
-                error_detail,
-                f"JSONDecodeError ({attempt_tag}) body{loc}: {snippet}",
-            )
-            return None
-
-        if not isinstance(data_raw, dict):
-            _append_llm_detail(
-                error_detail,
-                f"unexpected_json_root ({attempt_tag}): {type(data_raw).__name__}",
-            )
-            return None
-
-        prov_msg = _provider_top_level_error(data_raw)
-        if prov_msg:
-            _append_llm_detail(error_detail, f"provider_error ({attempt_tag}): {prov_msg}")
-            return None
-
-        data = _normalize_openai_response(data_raw)
-
-        _debug_log(
-            "response_received "
-            f"req_id={req_id} task={task} json_mode={json_mode} "
-            f"attempt={attempt_tag} status_ok"
-        )
-        return data if isinstance(data, dict) else None
+    parallel_anchor = (
+        use_openai_shape
+        and task == "anchor_vision"
+        and bool(settings.llm_parallel_fanout_anchor_vision)
+        and len(keys) > 1
+    )
 
     try:
         if use_openai_shape:
             modes = [(True, "json_mode")]
             if task == "anchor_vision":
                 modes.append((False, "compat_no_json_format"))
+            ep = _chat_completions_url(endpoint_raw)
             for json_mode, tag in modes:
-                out = _single_openai_post(json_mode=json_mode, attempt_tag=tag)
+                raw_body = json.dumps(_openai_body_dict(task, payload, json_mode=json_mode)).encode("utf-8")
+                if parallel_anchor:
+                    out = _parallel_anchor_vision_first_success(
+                        keys=keys,
+                        ep=ep,
+                        raw_body=raw_body,
+                        timeout_s=timeout_s,
+                        attempt_tag=tag,
+                        req_id=req_id,
+                        task=task,
+                        error_detail=error_detail,
+                    )
+                else:
+                    out = _openai_complete_request(
+                        ep,
+                        raw_body,
+                        headers,
+                        timeout_s,
+                        attempt_tag=tag,
+                        req_id=req_id,
+                        task=task,
+                        error_detail=error_detail,
+                        sink_lock=None,
+                    )
                 if out is not None:
                     return out
                 if task != "anchor_vision":

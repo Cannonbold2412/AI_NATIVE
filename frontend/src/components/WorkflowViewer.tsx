@@ -15,20 +15,34 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import type { StepEditorDTO } from '../types/workflow'
 import { useEditorStore } from '../store/editorStore'
-import { GripVertical, Trash2 } from 'lucide-react'
+import { RECORDING_DRAG_MODE_CLEAR_VISUAL, RECORDING_SCREENSHOT_DRAG_MIME } from '@/api/workflowApi'
+import { GripVertical, Info, Trash2 } from 'lucide-react'
 
 type Props = {
   steps: StepEditorDTO[]
   version: number
   onReorder: (newOrder: number[]) => void
   onDelete: (index: number) => void
+  /** Drop a recording screenshot (custom drag payload) onto a step to swap visuals and refresh anchors. */
+  onDroppedRecordingScreenshot?: (stepIndex: number, eventIndex: number) => void
+  /** Drop “No image” payload to detach screenshot and clear anchors. */
+  onClearStepVisual?: (stepIndex: number) => void
+  recordingShotDragActive?: boolean
 }
 
 function compactStepLabel(label: string): string {
   return label.replace(/^Step\s+\d+:\s*/i, '').trim()
 }
 
-export function WorkflowViewer({ steps, version, onReorder, onDelete }: Props) {
+export function WorkflowViewer({
+  steps,
+  version,
+  onReorder,
+  onDelete,
+  onDroppedRecordingScreenshot,
+  onClearStepVisual,
+  recordingShotDragActive,
+}: Props) {
   const selected = useEditorStore((s) => s.selectedStepIndex)
   const dirty = useEditorStore((s) => s.dirtySteps)
   const setSel = useEditorStore((s) => s.setSelectedStepIndex)
@@ -47,7 +61,16 @@ export function WorkflowViewer({ steps, version, onReorder, onDelete }: Props) {
     <>
       <aside className="border-border bg-card/35 supports-[backdrop-filter]:bg-card/25 relative z-10 flex min-h-0 min-w-0 flex-col border-b backdrop-blur-[2px] md:border-r md:border-b-0">
         <div className="border-border/80 space-y-0.5 border-b bg-muted/5 p-3">
-          <h2 className="text-foreground text-sm font-semibold tracking-tight">Workflow</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-foreground text-sm font-semibold tracking-tight">Workflow</h2>
+            <span
+              className="text-muted-foreground hover:text-foreground/80 inline-flex shrink-0"
+              title="Drag steps to reorder. From Tools → Recording screenshots: drag a frame or No image onto a step to swap/clear screenshots and anchors."
+            >
+              <Info className="size-3.5" aria-hidden />
+              <span className="sr-only">Workflow tips</span>
+            </span>
+          </div>
           <p className="text-muted-foreground text-xs">Version {version}</p>
         </div>
         <ScrollArea className="min-h-[12rem] w-full flex-1 md:min-h-0">
@@ -60,8 +83,30 @@ export function WorkflowViewer({ steps, version, onReorder, onDelete }: Props) {
                 onDragStart={() => setDraggingIndex(st.step_index)}
                 onDragOver={(event) => {
                   event.preventDefault()
+                  event.dataTransfer.dropEffect =
+                    recordingShotDragActive || event.dataTransfer.types.includes(RECORDING_SCREENSHOT_DRAG_MIME)
+                      ? 'copy'
+                      : 'move'
                 }}
-                onDrop={() => {
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const raw = event.dataTransfer.getData(RECORDING_SCREENSHOT_DRAG_MIME).trim()
+                  if (raw && (onClearStepVisual || onDroppedRecordingScreenshot)) {
+                    try {
+                      const parsed = JSON.parse(raw) as { event_index?: unknown; mode?: unknown }
+                      if (parsed.mode === RECORDING_DRAG_MODE_CLEAR_VISUAL && onClearStepVisual) {
+                        void onClearStepVisual(st.step_index)
+                      } else if (onDroppedRecordingScreenshot) {
+                        const evIdx = parsed.event_index
+                        if (typeof evIdx === 'number' && Number.isFinite(evIdx) && evIdx >= 0) {
+                          void onDroppedRecordingScreenshot(st.step_index, Math.floor(evIdx))
+                        }
+                      }
+                    } catch {
+                      // ignore malformed payload
+                    }
+                    return
+                  }
                   if (draggingIndex === null) return
                   move(draggingIndex, st.step_index)
                   setDraggingIndex(null)

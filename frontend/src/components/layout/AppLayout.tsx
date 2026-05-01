@@ -19,6 +19,7 @@ import {
   Home,
   Layers,
   Menu,
+  Package,
 } from 'lucide-react'
 
 const DESKTOP_SIDEBAR_KEY = 'ai-native-sidebar-collapsed'
@@ -27,6 +28,7 @@ const navItems = [
   { to: '/', label: 'Home', icon: Home, exact: true },
   { to: '/skills', label: 'Skills', icon: BookOpen, exact: false },
   { to: '/packages', label: 'Skill Packages', icon: FolderKanban, exact: false },
+  { to: '/skill-pack-builder', label: 'Skill Pack Builder', icon: Package, exact: false },
 ] as const
 
 export function ProductMark({ className }: { className?: string }) {

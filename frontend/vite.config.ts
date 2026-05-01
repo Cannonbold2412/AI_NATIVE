@@ -1,13 +1,27 @@
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
 const src = fileURLToPath(new URL('./src', import.meta.url))
 
+function packagePageFallback(): Plugin {
+  return {
+    name: 'package-page-fallback',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url === '/package') {
+          req.url = '/index.html'
+        }
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [packagePageFallback(), react(), tailwindcss()],
   resolve: {
     alias: {
       '@': src,

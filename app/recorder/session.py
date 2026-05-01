@@ -41,6 +41,17 @@ def _load_bridge_script() -> str:
     return f"window.__SKILL_CAPTURE_PROFILE__ = {profile};\n" + bridge
 
 
+def _typing_target_key(event: RecordedEvent) -> tuple[str, str, str, str]:
+    selectors = event.selectors
+    semantic = event.semantic
+    return (
+        str(selectors.css or ""),
+        str(selectors.xpath or ""),
+        str(semantic.input_type or ""),
+        str(event.page.url or ""),
+    )
+
+
 @dataclass
 class RecordingSession:
     """
@@ -110,17 +121,43 @@ class RecordingSession:
         except Exception as exc:  # noqa: BLE001 — recorder must never crash from page callback
             self.binding_errors.append(f"binding_error: {exc!s}")
 
+    def _delete_visual_assets(self, session_dir: Path, event: RecordedEvent) -> None:
+        visual = event.visual
+        for rel in (visual.full_screenshot, visual.element_snapshot):
+            if not rel:
+                continue
+            try:
+                p = (session_dir / rel).resolve()
+                p.unlink(missing_ok=True)
+            except Exception:
+                # Best effort cleanup; recorder should never fail due to file deletion.
+                continue
+
+    def _rewrite_events_jsonl(self, session_dir: Path) -> None:
+        out = session_dir / "events.jsonl"
+        with out.open("w", encoding="utf-8") as f:
+            for ev in self._materialized:
+                f.write(json.dumps(ev.model_dump(mode="json"), ensure_ascii=False) + "\n")
+
+    def _should_merge_typing(self, prev: RecordedEvent, curr: RecordedEvent) -> bool:
+        if prev.action.action != "type" or curr.action.action != "type":
+            return False
+        return _typing_target_key(prev) == _typing_target_key(curr)
+
     def _consume_payload_sync(self, payload: dict[str, Any], src_page: Any | None = None) -> None:
         session_dir = self.data_root / "sessions" / self.session_id
         session_dir.mkdir(parents=True, exist_ok=True)
         page_for_visuals = src_page or self._page
         event = self._finalize_payload_sync(page_for_visuals, session_dir, payload)
         with self._lock:
-            self._materialized.append(event)
+            if self._materialized and self._should_merge_typing(self._materialized[-1], event):
+                prev = self._materialized[-1]
+                self._delete_visual_assets(session_dir, prev)
+                self._materialized[-1] = event
+            else:
+                self._materialized.append(event)
+        self._rewrite_events_jsonl(session_dir)
         metrics.inc("events_captured")
-        line = event.model_dump(mode="json")
-        with (session_dir / "events.jsonl").open("a", encoding="utf-8") as f:
-            f.write(json.dumps(line, ensure_ascii=False) + "\n")
 
     def _finalize_payload_sync(self, page, session_dir: Path, payload: dict[str, Any]) -> RecordedEvent:
         self._seq += 1

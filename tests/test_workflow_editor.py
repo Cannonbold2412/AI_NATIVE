@@ -93,6 +93,10 @@ class WorkflowEditorTests(unittest.TestCase):
         self.assertEqual(len(wf.steps), 1)
         self.assertIn("Click", wf.steps[0].human_readable_description)
         self.assertTrue(wf.steps[0].screenshot.full_url.startswith("http://"))
+        self.assertEqual(
+            wf.steps[0].anchors_signals,
+            [{"element": "Submit", "relation": "near"}],
+        )
 
     def test_apply_step_patch_assist_llm_false_skips_enrich(self) -> None:
         from app.compiler.patch import apply_step_patch
@@ -101,6 +105,23 @@ class WorkflowEditorTests(unittest.TestCase):
         with patch("app.compiler.patch.enrich_semantic") as es:
             apply_step_patch(doc, 0, {"target": {"primary_selector": "#go2"}}, assist_llm=False)
             es.assert_not_called()
+
+    def test_apply_step_patch_normalizes_legacy_anchor_schema(self) -> None:
+        from app.compiler.patch import apply_step_patch
+
+        doc = _minimal_skill_doc()
+        updated = apply_step_patch(
+            doc,
+            0,
+            {
+                "signals": {"anchors": [{"kind": "text", "value": "Confirm"}]},
+                "recovery": {"anchors": [{"type": "above", "text": "Password"}]},
+            },
+            assist_llm=False,
+        )
+        step = updated["skills"][0]["steps"][0]
+        self.assertEqual(step["signals"]["anchors"], [{"element": "Confirm", "relation": "near"}])
+        self.assertEqual(step["recovery"]["anchors"], [{"element": "Password", "relation": "above"}])
 
     def test_validate_editor_patch_rejects_bad_selector(self) -> None:
         from app.editor.patch_gate import validate_editor_patch
@@ -168,3 +189,18 @@ class WorkflowEditorTests(unittest.TestCase):
         d = delete_step_at(r, 0)
         self.assertEqual(len(d["skills"][0]["steps"]), 1)
         self.assertEqual(d["skills"][0]["steps"][0]["intent"], "click_submit_button")
+
+    def test_clear_step_visual_strips_images_and_anchors(self) -> None:
+        from app.editor.recording_visual import clear_step_visual_screenshots_or_raise
+
+        doc = _minimal_skill_doc()
+        sig_before = doc["skills"][0]["steps"][0]["signals"]
+        self.assertEqual(sig_before["visual"]["full_screenshot"], "images/evt_0001_full.jpg")
+
+        cleared = clear_step_visual_screenshots_or_raise(dict(doc), 0)
+        sig_after = cleared["skills"][0]["steps"][0]["signals"]
+        visual = dict(sig_after["visual"])
+        self.assertNotIn("full_screenshot", visual)
+        self.assertNotIn("bbox", visual)
+        self.assertEqual(sig_after["anchors"], [])
+        self.assertGreater(int((cleared.get("meta") or {}).get("version", 0)), int((doc.get("meta") or {}).get("version", 0)))  # type: ignore[arg-type]

@@ -132,6 +132,7 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("signals", dumped)
         self.assertIn("decision_policy", dumped)
         self.assertIn("intent", dumped)
+        self.assertNotIn("state_diff", dumped)
         sem = dumped.get("signals", {}).get("semantic") or {}
         self.assertEqual(sem.get("final_intent"), dumped.get("intent"))
         self.assertEqual(sem.get("llm_intent"), dumped.get("intent"))

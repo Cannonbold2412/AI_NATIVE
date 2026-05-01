@@ -116,8 +116,23 @@ def _apply_bbox_highlight(
 
 
 def resolve_screenshot_path(session_root: Path, rel: str) -> Path:
+    """Resolve a screenshot path relative to ``session_root``.
+
+    Compiled skills persist paths like ``sessions/<id>/images/foo.jpg``. Strip that
+    prefix when it matches ``session_root`` so the same vision pipeline works for
+    raw recorder events (``images/...`` only) and for editor-swapped visuals.
+    """
     root = session_root.resolve()
-    candidate = (root / rel).resolve()
+    raw = rel.strip().replace("\\", "/")
+    if not raw or ".." in raw:
+        raise VisionAnchorGenerationError("screenshot_path_invalid")
+    sid = session_root.name
+    prefix = f"sessions/{sid}/"
+    if raw.startswith(prefix):
+        raw = raw[len(prefix) :]
+    elif raw.startswith("sessions/"):
+        raise VisionAnchorGenerationError("screenshot_path_wrong_session")
+    candidate = (root / raw).resolve()
     if root not in candidate.parents and candidate != root:
         raise VisionAnchorGenerationError("screenshot_path_escapes_session")
     return candidate

@@ -20,6 +20,11 @@ from app.editor.workflow_service import (
     reorder_steps,
     validate_skill_document,
 )
+from app.editor.recording_visual import (
+    apply_recording_event_visual_to_step_or_raise,
+    clear_step_visual_screenshots_or_raise,
+    screenshot_items_for_skill,
+)
 from app.llm.anchor_vision_llm import VisionAnchorGenerationError
 from app.metrics.store import metrics
 from app.pipeline.run import run_pipeline
@@ -54,9 +59,24 @@ class CompileUpdatedBody(BaseModel):
     skill_title: str | None = None
 
 
+class ApplyRecordingVisualBody(BaseModel):
+    """Pick a raw session event index from ``recording-screenshots`` and attach its frame to this step."""
+
+    event_index: int = Field(ge=0)
+
+
 @router.get("", summary="List stored skill packages (newest first)")
 def list_skills() -> dict[str, Any]:
     return {"skills": list_skill_summaries()}
+
+
+@router.get("/{skill_id}/recording-screenshots")
+def list_recording_screenshots(skill_id: str, request: Request) -> dict[str, Any]:
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    session_id, items = screenshot_items_for_skill(skill_id, doc, asset_base_url=_asset_base_url(request))
+    return {"skill_id": skill_id, "session_id": session_id, "items": items}
 
 
 @router.get("/{skill_id}/workflow")
@@ -107,6 +127,73 @@ def patch_step(skill_id: str, step_index: int, body: StepPatchBody, request: Req
         "skill_id": skill_id,
         "meta": new_doc.get("meta"),
         "revalidation": reval,
+        "workflow": wf.model_dump(mode="json"),
+    }
+
+
+@router.post("/{skill_id}/steps/{step_index}/apply-recording-visual")
+def post_apply_recording_visual(
+    skill_id: str,
+    step_index: int,
+    body: ApplyRecordingVisualBody,
+    request: Request,
+) -> dict[str, Any]:
+    """Attach a recording screenshot (+ bbox) and regenerate vision-backed anchors via the LLM."""
+    metrics.inc("workflow_apply_recording_visual_attempts")
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    steps = ((doc.get("skills") or [{}])[0]).get("steps") or []
+    if step_index < 0 or step_index >= len(steps):
+        raise HTTPException(status_code=400, detail="step_index_out_of_range")
+    try:
+        new_doc = apply_recording_event_visual_to_step_or_raise(doc, step_index, body.event_index)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except VisionAnchorGenerationError as exc:
+        raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
+
+    steps_after = (new_doc.get("skills") or [{}])[0].get("steps") or []
+    rev = revalidate_step(dict(steps_after[step_index]))
+    write_skill(skill_id, new_doc)
+    metrics.inc("workflow_apply_recording_visual_successes")
+    wf = build_workflow_response(skill_id, new_doc, asset_base_url=_asset_base_url(request))
+    return {
+        "skill_id": skill_id,
+        "meta": new_doc.get("meta"),
+        "revalidation": rev,
+        "workflow": wf.model_dump(mode="json"),
+    }
+
+
+@router.post("/{skill_id}/steps/{step_index}/clear-step-visual")
+def post_clear_step_visual(
+    skill_id: str,
+    step_index: int,
+    request: Request,
+) -> dict[str, Any]:
+    """Remove screenshot paths from ``signals.visual`` and clear vision-backed anchors."""
+    metrics.inc("workflow_clear_step_visual_attempts")
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    steps = ((doc.get("skills") or [{}])[0]).get("steps") or []
+    if step_index < 0 or step_index >= len(steps):
+        raise HTTPException(status_code=400, detail="step_index_out_of_range")
+    try:
+        new_doc = clear_step_visual_screenshots_or_raise(doc, step_index)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    steps_after = (new_doc.get("skills") or [{}])[0].get("steps") or []
+    rev = revalidate_step(dict(steps_after[step_index]))
+    write_skill(skill_id, new_doc)
+    metrics.inc("workflow_clear_step_visual_successes")
+    wf = build_workflow_response(skill_id, new_doc, asset_base_url=_asset_base_url(request))
+    return {
+        "skill_id": skill_id,
+        "meta": new_doc.get("meta"),
+        "revalidation": rev,
         "workflow": wf.model_dump(mode="json"),
     }
 

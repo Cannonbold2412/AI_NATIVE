@@ -151,6 +151,12 @@ function parseOrThrow<T>(schema: z.ZodType<T>, payload: unknown, endpoint: strin
   throw new Error(`Invalid API response from ${endpoint}: ${parsed.error.issues[0]?.message ?? 'unknown schema error'}`)
 }
 
+/** Custom DataTransfer type for dragging a recording frame onto a workflow step. */
+export const RECORDING_SCREENSHOT_DRAG_MIME = 'application/x-ai-native-recording-shot'
+
+/** Drag payload `{ "mode": "clear_visual" }` — removes step screenshot and clears vision anchors. */
+export const RECORDING_DRAG_MODE_CLEAR_VISUAL = 'clear_visual' as const
+
 export type SkillSummary = {
   skill_id: string
   title: string
@@ -158,6 +164,80 @@ export type SkillSummary = {
   step_count: number
   modified_at: number
 }
+
+export type SkillPackageSummary = {
+  package_name: string
+  modified_at: number
+  files: string[]
+}
+
+export type SkillPackageFiles = {
+  package_name: string
+  files: Record<string, string>
+}
+
+export type RecordingScreenshotItemDTO = {
+  event_index: number
+  sequence: number
+  persisted_full_screenshot: string
+  preview_url: string
+  viewport: string
+  has_element_snapshot: boolean
+}
+
+const recordingScreenshotsSchema = z.object({
+  skill_id: z.string(),
+  session_id: z.string().nullable(),
+  items: z.array(
+    z.object({
+      event_index: z.number(),
+      sequence: z.number(),
+      persisted_full_screenshot: z.string(),
+      preview_url: z.string(),
+      viewport: z.string(),
+      has_element_snapshot: z.boolean(),
+    }),
+  ),
+})
+
+const applyRecordingVisualResponseSchema = z.object({
+  skill_id: z.string(),
+  meta: recordUnknown,
+  revalidation: recordUnknown,
+  workflow: workflowSchema,
+})
+
+const skillPackBuildSchema = z.object({
+  name: z.string(),
+  skill_md: z.string(),
+  skill_json: z.string(),
+  input_json: z.string(),
+  manifest_json: z.string(),
+  input_count: z.number(),
+  step_count: z.number(),
+  used_llm: z.boolean(),
+  warnings: z.array(z.string()),
+})
+
+const skillPackageSummarySchema = z.object({
+  package_name: z.string(),
+  modified_at: z.number(),
+  files: z.array(z.string()),
+})
+
+const skillPackageListSchema = z.object({
+  packages: z.array(skillPackageSummarySchema),
+})
+
+const skillPackageFilesSchema = z.object({
+  package_name: z.string(),
+  files: z.record(z.string(), z.string()),
+})
+
+const deleteSkillPackageRecordSchema = z.object({
+  package_name: z.string(),
+  deleted: z.boolean(),
+})
 
 export function fetchSkillList(): Promise<{ skills: SkillSummary[] }> {
   return fetch(apiUrl('/skills'))
@@ -177,6 +257,75 @@ export function fetchWorkflow(skillId: string): Promise<WorkflowResponse> {
   return fetch(apiUrl(endpoint))
     .then(json)
     .then((payload) => parseOrThrow(workflowSchema, payload, endpoint) as WorkflowResponse)
+}
+
+export function fetchRecordingScreenshots(skillId: string): Promise<{
+  skill_id: string
+  session_id: string | null
+  items: RecordingScreenshotItemDTO[]
+}> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/recording-screenshots`
+  return fetch(apiUrl(endpoint))
+    .then(json)
+    .then((payload) => {
+      const parsed = parseOrThrow(recordingScreenshotsSchema, payload, endpoint)
+      return {
+        skill_id: parsed.skill_id,
+        session_id: parsed.session_id ?? null,
+        items: parsed.items,
+      }
+    })
+}
+
+export function postApplyRecordingVisual(
+  skillId: string,
+  stepIndex: number,
+  body: { event_index: number },
+): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  revalidation: Record<string, unknown>
+  workflow: WorkflowResponse
+}> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}/apply-recording-visual`
+  return fetch(apiUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(json)
+    .then(
+      (payload) =>
+        parseOrThrow(applyRecordingVisualResponseSchema, payload, endpoint) as {
+          skill_id: string
+          meta: Record<string, unknown>
+          revalidation: Record<string, unknown>
+          workflow: WorkflowResponse
+        },
+    )
+}
+
+export function postClearStepVisual(
+  skillId: string,
+  stepIndex: number,
+): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  revalidation: Record<string, unknown>
+  workflow: WorkflowResponse
+}> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}/clear-step-visual`
+  return fetch(apiUrl(endpoint), { method: 'POST' })
+    .then(json)
+    .then(
+      (payload) =>
+        parseOrThrow(applyRecordingVisualResponseSchema, payload, endpoint) as {
+          skill_id: string
+          meta: Record<string, unknown>
+          revalidation: Record<string, unknown>
+          workflow: WorkflowResponse
+        },
+    )
 }
 
 export function patchStep(
@@ -219,6 +368,14 @@ export function patchSkillInputs(
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  }).then((r) => json<Record<string, unknown>>(r))
+}
+
+export function renameSkill(skillId: string, title: string): Promise<Record<string, unknown>> {
+  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
   }).then((r) => json<Record<string, unknown>>(r))
 }
 
@@ -340,4 +497,59 @@ export function fetchSkillDocument(skillId: string): Promise<Record<string, unkn
 
 export function fetchMetrics(): Promise<Record<string, unknown>> {
   return fetch(apiUrl('/metrics')).then((r) => json<Record<string, unknown>>(r))
+}
+
+export function postBuildSkillPack(body: { json_text: string }): Promise<{
+  name: string
+  skill_md: string
+  skill_json: string
+  input_json: string
+  manifest_json: string
+  input_count: number
+  step_count: number
+  used_llm: boolean
+  warnings: string[]
+}> {
+  const endpoint = '/skill-pack/build'
+  return fetch(apiUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(json)
+    .then(
+      (payload) =>
+        parseOrThrow(skillPackBuildSchema, payload, endpoint) as {
+          name: string
+          skill_md: string
+          skill_json: string
+          input_json: string
+          manifest_json: string
+          input_count: number
+          step_count: number
+          used_llm: boolean
+          warnings: string[]
+        },
+    )
+}
+
+export function fetchSkillPackageList(): Promise<{ packages: SkillPackageSummary[] }> {
+  const endpoint = '/skill-pack/packages'
+  return fetch(apiUrl(endpoint))
+    .then((r) => json<{ packages: SkillPackageSummary[] }>(r))
+    .then((payload) => parseOrThrow(skillPackageListSchema, payload, endpoint))
+}
+
+export function fetchSkillPackageFiles(packageName: string): Promise<SkillPackageFiles> {
+  const endpoint = `/skill-pack/${encodeURIComponent(packageName)}`
+  return fetch(apiUrl(endpoint))
+    .then((r) => json<SkillPackageFiles>(r))
+    .then((payload) => parseOrThrow(skillPackageFilesSchema, payload, endpoint))
+}
+
+export function deleteStoredSkillPackage(packageName: string): Promise<{ package_name: string; deleted: boolean }> {
+  const endpoint = `/skill-pack/${encodeURIComponent(packageName)}`
+  return fetch(apiUrl(endpoint), { method: 'DELETE' })
+    .then(json)
+    .then((payload) => parseOrThrow(deleteSkillPackageRecordSchema, payload, endpoint))
 }

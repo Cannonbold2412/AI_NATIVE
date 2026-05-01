@@ -89,6 +89,8 @@ const emptyForm: FormValues = {
   strategies_selected: [],
 }
 
+const ANCHOR_RELATIONS = new Set(['target', 'inside', 'above', 'below', 'near'])
+
 function isGroupRecord(w: Record<string, unknown>): boolean {
   const op = String(w.op || '').toLowerCase()
   return (op === 'and' || op === 'or') && Array.isArray(w.conditions) && (w.conditions as unknown[]).length > 0
@@ -167,8 +169,12 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
   const anc = (step.anchors_signals || [])
     .map((a) => {
       const o = a as Record<string, string>
-      return `${o.kind || o.type || 'text'}:${o.value || o.text || JSON.stringify(a)}`
+      const element = String(o.element || o.value || o.text || '').trim()
+      if (!element) return ''
+      const relation = String(o.relation || '').trim().toLowerCase()
+      return `${ANCHOR_RELATIONS.has(relation) ? relation : 'near'}:${element}`
     })
+    .filter(Boolean)
   const strat = ((step.recovery.strategies || []) as string[])
   return {
     intent: step.intent || step.final_intent,
@@ -194,9 +200,15 @@ function parseAnchorRows(rows: string[]): Record<string, unknown>[] {
     if (!t) continue
     const idx = t.indexOf(':')
     if (idx === -1) {
-      out.push({ kind: 'text', value: t })
+      out.push({ element: t, relation: 'near' })
     } else {
-      out.push({ kind: t.slice(0, idx).trim(), value: t.slice(idx + 1).trim() })
+      const left = t.slice(0, idx).trim().toLowerCase()
+      const right = t.slice(idx + 1).trim()
+      if (!right) continue
+      out.push({
+        element: right,
+        relation: ANCHOR_RELATIONS.has(left) ? left : 'near',
+      })
     }
   }
   return out
@@ -206,6 +218,9 @@ type Props = {
   step: StepEditorDTO | null
   skillId: string
   onWorkflowUpdated: (wf: WorkflowResponse) => void
+  recordingShotDragActive?: boolean
+  onDroppedRecordingScreenshot?: (stepIndex: number, eventIndex: number) => void | Promise<void>
+  onClearStepVisual?: (stepIndex: number) => void | Promise<void>
 }
 
 export type StepEditorPanelHandle = {
@@ -242,13 +257,52 @@ function DirtySync({ stepIndex }: { stepIndex: number }) {
 }
 
 export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
-  function StepEditorPanel({ step, skillId, onWorkflowUpdated }, ref) {
+  function StepEditorPanel(
+    {
+      step,
+      skillId,
+      onWorkflowUpdated,
+      recordingShotDragActive,
+      onDroppedRecordingScreenshot,
+      onClearStepVisual,
+    },
+    ref,
+  ) {
   const methods = useForm<FormValues>({ defaultValues: emptyForm })
   const [draggingRecoveryIndex, setDraggingRecoveryIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (step) methods.reset(defaultsFromStep(step))
   }, [step, methods])
+
+  const saveVisualBbox = useCallback(
+    async (b: { x: number; y: number; w: number; h: number }) => {
+      if (!step || step.flags.is_scroll) return
+      try {
+        const res = await patchStep(
+          skillId,
+          step.step_index,
+          {
+            signals: {
+              visual: {
+                bbox: { x: b.x, y: b.y, w: b.w, h: b.h },
+              },
+            },
+          },
+          false,
+        )
+        onWorkflowUpdated(res.workflow)
+        const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
+        if (next) methods.reset(defaultsFromStep(next))
+        toast.success('Visual bbox saved')
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Could not save visual bbox'
+        toast.error(msg)
+        throw e
+      }
+    },
+    [methods, onWorkflowUpdated, skillId, step],
+  )
 
   const persistStepValues = useCallback(
     async (values: FormValues, options?: { silentToast?: boolean }) => {
@@ -412,6 +466,16 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
 
   return (
     <div className="bg-card/30 border-border/60 supports-[backdrop-filter]:bg-card/20 relative z-0 min-h-0 min-w-0 space-y-2 border-t p-2 backdrop-blur-sm md:border-t-0 md:border-l md:overflow-x-hidden md:overflow-y-auto">
+      <ScreenshotViewer
+        screenshot={step.screenshot}
+        label={step.human_readable_description}
+        stepIndex={step.step_index}
+        recordingShotDragActive={recordingShotDragActive}
+        onDroppedRecordingScreenshot={onDroppedRecordingScreenshot}
+        onClearStepVisual={onClearStepVisual}
+        isScrollStep={step.flags.is_scroll}
+        onSaveVisualBbox={!step.flags.is_scroll ? saveVisualBbox : undefined}
+      />
       <FormProvider {...methods}>
         <DirtySync stepIndex={step.step_index} />
         <form onSubmit={onSubmit} className="space-y-2">
@@ -545,7 +609,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
           <Card className="gap-2 py-3">
             <CardHeader className="p-2.5 pb-1">
               <CardTitle className="text-sm">Anchors</CardTitle>
-              <CardDescription className="text-xs">Use format `kind:value` such as `text:Sign in`.</CardDescription>
+              <CardDescription className="text-xs">Use format `relation:element` such as `near:Sign in` or `above:Email`.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2.5 p-2.5 pt-0">
               <div className="flex items-center justify-between gap-2">
@@ -566,7 +630,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                     <Input
                       id={`anchor_${index}`}
                       type="text"
-                      placeholder={index === 0 ? 'text:Sign in' : `Anchor ${index + 1}`}
+                      placeholder={index === 0 ? 'near:Sign in' : `Anchor ${index + 1}`}
                       disabled={!canEdit('anchors')}
                       {...methods.register(`anchors.${index}` as const)}
                     />
@@ -682,9 +746,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
           ) : null}
         </form>
       </FormProvider>
-      <div className="pt-1">
-        <ScreenshotViewer screenshot={step.screenshot} label={step.human_readable_description} />
-      </div>
     </div>
   )
 })

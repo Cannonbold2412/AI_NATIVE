@@ -6,6 +6,7 @@ import re
 import urllib.parse
 from typing import Any
 
+from app.anchors.schema import normalize_anchor_list
 from app.compiler.action_semantics import action_name
 from app.compiler.destructive_semantics import destructive_compiler_step
 from app.compiler.intent_access import get_effective_intent, get_effective_intent_from_skill_step
@@ -56,7 +57,7 @@ def _build_reference_for_audit(step: dict[str, Any]) -> dict[str, Any]:
         "selectors": signals.get("selectors") or {},
         "semantic": signals.get("semantic") or {},
         "context": {k: v for k, v in context.items() if k not in {"page_url", "page_title", "state_after", "timing"}},
-        "anchors": signals.get("anchors") or [],
+        "anchors": normalize_anchor_list(signals.get("anchors") or []),
         "visual": signals.get("visual") or {},
         "state_after": context.get("state_after") or "",
         "page_url": context.get("page_url") or "",
@@ -240,8 +241,8 @@ def step_to_dto(skill_id: str, step: dict[str, Any], step_index: int, policy: di
         final_intent=final_intent,
         target=dict(step.get("target") or {}),
         selectors=dict(signals.get("selectors") or {}),
-        anchors_signals=list(signals.get("anchors") or []),
-        anchors_recovery=list(recovery.get("anchors") or []),
+        anchors_signals=normalize_anchor_list(signals.get("anchors") or []),
+        anchors_recovery=normalize_anchor_list(recovery.get("anchors") or []),
         validation={
             "wait_for": dict(validation.get("wait_for") or {}),
             "success_conditions": dict(validation.get("success_conditions") or {}),
