@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import type { WorkflowResponse } from '../types/workflow'
-import { fetchWorkflow, patchSkillInputs } from '../api/workflowApi'
+import { fetchWorkflow, patchSkillInputs, postWorkflowReplaceLiterals } from '../api/workflowApi'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -23,6 +23,7 @@ import {
   labelFromId,
   missingSpottedIds,
   newEmptyRow,
+  normalizeVariablePlaceholder,
   type VariableFormRow,
   rowsFromServerInputs,
   rowsToServerPayload,
@@ -98,7 +99,7 @@ function VariableRow({
           Use in steps as <code className="bg-muted/80 rounded px-0.5">{'{{' + (row.id || 'id') + '}}'}</code>
         </p>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 sm:col-span-2">
         <Label className="text-xs" htmlFor={`var-type-${row.key}`}>
           Type
         </Label>
@@ -114,17 +115,6 @@ function VariableRow({
           <option value="text">Text</option>
           <option value="select">Choice list</option>
         </select>
-      </div>
-      <div className="space-y-1.5">
-          <Label className="text-xs" htmlFor={`var-default-${row.key}`}>
-          Default value
-        </Label>
-        <Input
-          id={`var-default-${row.key}`}
-          className="h-8 text-sm"
-          value={row.defaultValue}
-          onChange={(e) => onChange({ ...row, defaultValue: e.target.value })}
-        />
       </div>
       {row.varType === 'select' ? (
         <div className="space-y-1.5 sm:col-span-2">
@@ -164,6 +154,10 @@ function ParameterizationForm({ open, workflow, onClose, onSaved, inline = false
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [jsonDraft, setJsonDraft] = useState('')
   const [jsonErr, setJsonErr] = useState<string | null>(null)
+  const [replaceFind, setReplaceFind] = useState('')
+  const [replaceVariable, setReplaceVariable] = useState('')
+  const [replaceBusy, setReplaceBusy] = useState(false)
+  const [replaceErr, setReplaceErr] = useState<string | null>(null)
   const wasOpen = useRef(false)
 
   useEffect(() => {
@@ -187,6 +181,9 @@ function ParameterizationForm({ open, workflow, onClose, onSaved, inline = false
       }
       setErr(null)
       setJsonErr(null)
+      setReplaceFind('')
+      setReplaceVariable('')
+      setReplaceErr(null)
       setAdvancedOpen(false)
     }
     wasOpen.current = open
@@ -226,6 +223,32 @@ function ParameterizationForm({ open, workflow, onClose, onSaved, inline = false
     } else {
       setJsonErr(p.error)
     }
+  }
+
+  const replaceLiteralInWorkflow = () => {
+    setReplaceErr(null)
+    const find = replaceFind.trim()
+    if (!find) {
+      setReplaceErr('Enter the exact text to find (for example conxa-db).')
+      return
+    }
+    const ph = normalizeVariablePlaceholder(replaceVariable)
+    if (!ph.ok) {
+      setReplaceErr(ph.error)
+      return
+    }
+    setReplaceBusy(true)
+    postWorkflowReplaceLiterals(workflow.skill_id, {
+      find,
+      replace_with: ph.value,
+    })
+      .then(({ workflow: next }) => {
+        onSaved(next)
+        setReplaceFind('')
+        setReplaceVariable('')
+      })
+      .catch((e: Error) => setReplaceErr(e.message))
+      .finally(() => setReplaceBusy(false))
   }
 
   const save = () => {
@@ -316,6 +339,62 @@ function ParameterizationForm({ open, workflow, onClose, onSaved, inline = false
               a step field (for example the value to type). This panel will then offer to add that name here.
             </p>
           )}
+
+          <div className={cn('border-border/70 space-y-2.5 rounded-lg border p-3', inline ? 'bg-white/[0.02]' : '')}>
+            <h3 className="text-foreground/95 text-sm font-medium">Replace in whole workflow JSON</h3>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Swap a recorded literal everywhere it appears under this skill document (every step field, selectors,
+              URLs, inputs, etc.) with a placeholder.
+            </p>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs" htmlFor="param-replace-find">
+                  Find literal
+                </Label>
+                <Input
+                  id="param-replace-find"
+                  className="h-8 font-mono text-sm"
+                  value={replaceFind}
+                  onChange={(e) => {
+                    setReplaceFind(e.target.value)
+                    setReplaceErr(null)
+                  }}
+                  spellCheck={false}
+                  placeholder="conxa-db"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs" htmlFor="param-replace-var">
+                  Replace with variable
+                </Label>
+                <Input
+                  id="param-replace-var"
+                  className="h-8 font-mono text-sm"
+                  value={replaceVariable}
+                  onChange={(e) => {
+                    setReplaceVariable(e.target.value)
+                    setReplaceErr(null)
+                  }}
+                  spellCheck={false}
+                  placeholder="db_name or {{db_name}}"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                />
+              </div>
+            </div>
+            {replaceErr ? <p className="text-destructive text-sm">{replaceErr}</p> : null}
+            <Button
+              type="button"
+              size="sm"
+              className="h-8"
+              disabled={replaceBusy}
+              onClick={() => void replaceLiteralInWorkflow()}
+            >
+              {replaceBusy ? 'Replacing…' : 'Replace everywhere'}
+            </Button>
+          </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -426,7 +505,7 @@ export function ParameterizationDrawer({ open, onClose, workflow, onSaved }: Pro
         <SheetHeader className="p-4 pb-2 text-left">
           <SheetTitle id="param-drawer-title">Variables</SheetTitle>
           <SheetDescription>
-            Set names, labels, and defaults for values you use as{' '}
+            Set names and labels for values you use as{' '}
             <code className="bg-muted rounded px-1">{'{{id}}'}</code> in your steps. Names you type in
             steps appear automatically in &quot;Found in your workflow&quot; above.
           </SheetDescription>

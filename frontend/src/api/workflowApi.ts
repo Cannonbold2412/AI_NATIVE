@@ -209,10 +209,15 @@ const applyRecordingVisualResponseSchema = z.object({
 
 const skillPackBuildSchema = z.object({
   name: z.string(),
+  index_json: z.string(),
   skill_md: z.string(),
+  execution_json: z.string(),
+  recovery_json: z.string(),
   skill_json: z.string(),
-  input_json: z.string(),
+  inputs_json: z.string(),
   manifest_json: z.string(),
+  execution_md: z.string(),
+  execution_plan_json: z.string(),
   input_count: z.number(),
   step_count: z.number(),
   used_llm: z.boolean(),
@@ -371,6 +376,31 @@ export function patchSkillInputs(
   }).then((r) => json<Record<string, unknown>>(r))
 }
 
+export function postWorkflowReplaceLiterals(
+  skillId: string,
+  body: { find: string; replace_with: string },
+): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  workflow: WorkflowResponse
+}> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/workflow:replace-literals`
+  return fetch(apiUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(json)
+    .then(
+      (payload) =>
+        parseOrThrow(workflowMutationSchema, payload, endpoint) as {
+          skill_id: string
+          meta: Record<string, unknown>
+          workflow: WorkflowResponse
+        },
+    )
+}
+
 export function renameSkill(skillId: string, title: string): Promise<Record<string, unknown>> {
   return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}`), {
     method: 'PATCH',
@@ -501,10 +531,15 @@ export function fetchMetrics(): Promise<Record<string, unknown>> {
 
 export function postBuildSkillPack(body: { json_text: string }): Promise<{
   name: string
+  index_json: string
   skill_md: string
+  execution_json: string
+  recovery_json: string
   skill_json: string
-  input_json: string
+  inputs_json: string
   manifest_json: string
+  execution_md: string
+  execution_plan_json: string
   input_count: number
   step_count: number
   used_llm: boolean
@@ -521,10 +556,15 @@ export function postBuildSkillPack(body: { json_text: string }): Promise<{
       (payload) =>
         parseOrThrow(skillPackBuildSchema, payload, endpoint) as {
           name: string
+          index_json: string
           skill_md: string
+          execution_json: string
+          recovery_json: string
           skill_json: string
-          input_json: string
+          inputs_json: string
           manifest_json: string
+          execution_md: string
+          execution_plan_json: string
           input_count: number
           step_count: number
           used_llm: boolean

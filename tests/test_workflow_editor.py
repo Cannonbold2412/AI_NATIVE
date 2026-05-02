@@ -98,6 +98,32 @@ class WorkflowEditorTests(unittest.TestCase):
             [{"element": "Submit", "relation": "near"}],
         )
 
+    def test_workflow_click_description_prefers_parameterized_primary_selector(self) -> None:
+        """Sidebar copy uses describe_step(); it must reflect {{var}} in primary_selector, not frozen DOM text."""
+        from app.editor.workflow_service import build_workflow_response
+
+        doc = _minimal_skill_doc()
+        step = doc["skills"][0]["steps"][0]
+        step["target"]["primary_selector"] = "{{db_name}}"
+        step["signals"]["dom"]["inner_text"] = "conxa-db"
+        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="http://localhost:8000")
+        self.assertIn("{{db_name}}", wf.steps[0].human_readable_description)
+        self.assertNotIn("conxa-db", wf.steps[0].human_readable_description)
+
+    def test_workflow_click_description_unwraps_playwright_text_locator(self) -> None:
+        """text="..." wrappers should not appear verbatim in sidebar copy (nested quotes)."""
+        from app.editor.workflow_service import build_workflow_response
+
+        doc = _minimal_skill_doc()
+        step = doc["skills"][0]["steps"][0]
+        step["target"]["primary_selector"] = 'text="{{db_name}}"'
+        step["signals"]["dom"]["inner_text"] = "conxa-db"
+        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="http://localhost:8000")
+        desc = wf.steps[0].human_readable_description
+        self.assertIn("{{db_name}}", desc)
+        self.assertNotIn("text=", desc)
+        self.assertNotIn("conxa-db", desc)
+
     def test_apply_step_patch_assist_llm_false_skips_enrich(self) -> None:
         from app.compiler.patch import apply_step_patch
 
@@ -189,6 +215,52 @@ class WorkflowEditorTests(unittest.TestCase):
         d = delete_step_at(r, 0)
         self.assertEqual(len(d["skills"][0]["steps"]), 1)
         self.assertEqual(d["skills"][0]["steps"][0]["intent"], "click_submit_button")
+
+    def test_replace_string_literals_in_skill_document(self) -> None:
+        from app.editor.workflow_service import replace_string_literals_in_skill_document
+
+        doc = _minimal_skill_doc()
+        doc["skills"][0]["steps"][0]["signals"]["dom"]["inner_text"] = "Host conxa-db ok"
+        doc["skills"][0]["steps"][0]["signals"]["context"]["page_url"] = "https://conxa-db.example.com"
+        doc["inputs"][0]["label"] = "Service conxa-db"
+
+        out = replace_string_literals_in_skill_document(doc, "conxa-db", "{{db_name}}")
+        self.assertEqual(out["skills"][0]["steps"][0]["signals"]["dom"]["inner_text"], "Host {{db_name}} ok")
+        self.assertEqual(
+            out["skills"][0]["steps"][0]["signals"]["context"]["page_url"],
+            "https://{{db_name}}.example.com",
+        )
+        self.assertEqual(out["inputs"][0]["label"], "Service {{db_name}}")
+        self.assertGreater(int(out["meta"]["version"]), int(doc["meta"]["version"]))  # type: ignore[arg-type]
+
+    def test_workflow_replace_literals_api(self) -> None:
+        from app.main import app
+        from app.storage import json_store
+
+        skill_id = "skill_replace_literals_test"
+        doc = _minimal_skill_doc(skill_id)
+        doc["skills"][0]["steps"][0]["signals"]["dom"]["inner_text"] = "Use conxa-db here"
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            p.mkdir(parents=True, exist_ok=True)
+            with patch.object(json_store, "skills_dir", return_value=p):
+                (p / f"{skill_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+                client = TestClient(app)
+                pr = client.post(
+                    f"/skills/{skill_id}/workflow:replace-literals",
+                    json={"find": "conxa-db", "replace_with": "{{db_name}}"},
+                )
+                self.assertEqual(pr.status_code, 200)
+                payload = pr.json()
+                self.assertEqual(payload["skill_id"], skill_id)
+                dumped = json.dumps(payload["workflow"])
+                self.assertNotIn("conxa-db", dumped)
+                self.assertIn("{{db_name}}", dumped)
+
+                r2 = client.get(f"/skills/{skill_id}/workflow")
+                self.assertEqual(r2.status_code, 200)
+                self.assertIn("{{db_name}}", json.dumps(r2.json()))
+                self.assertNotIn("conxa-db", json.dumps(r2.json()))
 
     def test_clear_step_visual_strips_images_and_anchors(self) -> None:
         from app.editor.recording_visual import clear_step_visual_screenshots_or_raise

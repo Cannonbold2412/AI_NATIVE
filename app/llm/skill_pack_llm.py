@@ -8,6 +8,7 @@ from urllib import error, request
 from urllib.parse import urlparse, urlunparse
 
 from app.config import settings
+from app.llm.pack_llm_keys import next_pack_api_key
 
 _SYSTEM_PROMPT = (
     "You are an expert AI agent designer. "
@@ -15,14 +16,6 @@ _SYSTEM_PROMPT = (
     "Write like a human explaining the task clearly to another capable agent. "
     "Return markdown only with no code fences."
 )
-
-
-def _configured_keys() -> list[str]:
-    csv_keys = [item.strip() for item in str(settings.pack_llm_api_keys or "").split(",") if item.strip()]
-    if csv_keys:
-        return csv_keys
-    single = str(settings.pack_llm_api_key or "").strip()
-    return [single] if single else []
 
 
 def _chat_completions_url(endpoint: str) -> str:
@@ -118,23 +111,25 @@ def generate_skill_markdown_with_llm(summary: dict[str, Any]) -> str | None:
         f"{json.dumps(summary, ensure_ascii=False, indent=2)}"
     )
 
-    body = {
+    body: dict[str, Any] = {
         "model": model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.15,
-        "max_tokens": 4000,
+        "temperature": settings.pack_llm_markdown_temperature,
+        "max_tokens": settings.pack_llm_markdown_max_tokens,
     }
+    if settings.pack_llm_top_p is not None:
+        body["top_p"] = settings.pack_llm_top_p
     headers = {"Content-Type": "application/json"}
-    keys = _configured_keys()
-    if keys:
-        headers["Authorization"] = f"Bearer {keys[0]}"
+    pack_key, _, _ = next_pack_api_key()
+    if pack_key:
+        headers["Authorization"] = f"Bearer {pack_key}"
 
     req = request.Request(
         _chat_completions_url(endpoint),
-        data=json.dumps(body).encode("utf-8"),
+        data=json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         headers=headers,
         method="POST",
     )

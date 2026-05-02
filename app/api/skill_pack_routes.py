@@ -23,9 +23,12 @@ class SkillPackExportBody(BaseModel):
     name: str = Field(default="generated_skill", min_length=1)
     skill_md: str = Field(..., min_length=1)
     skill_json: str | None = None
-    input_json: str | None = None
     inputs_json: str | None = None
     manifest_json: str = Field(..., min_length=2)
+    execution_json: str | None = None
+    recovery_json: str | None = None
+    execution_md: str | None = None
+    execution_plan_json: str | None = None
 
 
 @router.get("/packages")
@@ -53,11 +56,15 @@ def post_build_skill_pack(body: SkillPackBuildBody) -> dict[str, Any]:
 def post_export_skill_pack(body: SkillPackExportBody) -> StreamingResponse:
     try:
         filename, payload = build_skill_package_zip(
-            body.name,
-            body.skill_md,
-            body.skill_json or "{}",
-            body.input_json or body.inputs_json or "",
-            body.manifest_json,
+            package_name=body.name,
+            skill_md=body.skill_md,
+            skill_json=body.skill_json or "{}",
+            inputs_json=body.inputs_json or "",
+            manifest_json=body.manifest_json,
+            execution_md=body.execution_md or "",
+            execution_plan_json=body.execution_plan_json or "",
+            execution_json=body.execution_json or "",
+            recovery_json=body.recovery_json or "",
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -73,11 +80,15 @@ def get_download_skill_pack(package_name: str) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="Skill package not found.")
     try:
         filename, payload = build_skill_package_zip(
-            package_name,
-            files.get("skill.md", ""),
-            files.get("skill.json", ""),
-            files.get("inputs.json", ""),
-            files.get("manifest.json", ""),
+            package_name=package_name,
+            skill_md=files.get("skill.md", ""),
+            skill_json=files.get("skill.json", ""),
+            inputs_json=files.get("inputs.json", ""),
+            manifest_json=files.get("manifest.json", ""),
+            execution_md=files.get("execution.md", ""),
+            execution_plan_json=files.get("execution_plan.json", ""),
+            execution_json=files.get("execution.json", ""),
+            recovery_json=files.get("recovery.json", ""),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

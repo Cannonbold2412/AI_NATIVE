@@ -345,3 +345,27 @@ def merge_skill_inputs(document: dict[str, Any], inputs: list[dict[str, Any]], t
     meta["version"] = int(meta.get("version", 1)) + 1
     doc["meta"] = meta
     return doc
+
+
+def _deep_replace_string_values(value: Any, find: str, replace: str) -> Any:
+    """Return a structure copy with every string leaf updated via str.replace(find, replace)."""
+    if isinstance(value, str):
+        return value.replace(find, replace)
+    if isinstance(value, list):
+        return [_deep_replace_string_values(v, find, replace) for v in value]
+    if isinstance(value, dict):
+        return {k: _deep_replace_string_values(v, find, replace) for k, v in value.items()}
+    return value
+
+
+def replace_string_literals_in_skill_document(document: dict[str, Any], find: str, replace: str) -> dict[str, Any]:
+    """Replace a literal substring everywhere in the stored skill JSON (steps, inputs, meta, etc.)."""
+    if not isinstance(find, str) or not find:
+        raise ValueError("find_must_be_nonempty")
+    if not isinstance(replace, str):
+        raise ValueError("replace_with_must_be_string")
+    new_doc = _deep_replace_string_values(dict(document), find, replace)
+    meta = dict(new_doc.get("meta") or {})
+    meta["version"] = int(meta.get("version", 1)) + 1
+    new_doc["meta"] = meta
+    return new_doc

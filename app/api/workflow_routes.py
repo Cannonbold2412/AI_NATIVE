@@ -18,6 +18,7 @@ from app.editor.workflow_service import (
     delete_step_at,
     merge_skill_inputs,
     reorder_steps,
+    replace_string_literals_in_skill_document,
     validate_skill_document,
 )
 from app.editor.recording_visual import (
@@ -53,6 +54,11 @@ class ReorderBody(BaseModel):
 class SkillPatchBody(BaseModel):
     inputs: list[dict[str, Any]] | None = None
     title: str | None = None
+
+
+class WorkflowLiteralReplaceBody(BaseModel):
+    find: str = Field(..., min_length=1)
+    replace_with: str = ""
 
 
 class CompileUpdatedBody(BaseModel):
@@ -209,6 +215,25 @@ def patch_skill_package(skill_id: str, body: SkillPatchBody) -> dict[str, Any]:
     new_doc = merge_skill_inputs(doc, inputs, body.title.strip() if body.title is not None else None)
     write_skill(skill_id, new_doc)
     return {"skill_id": skill_id, "meta": new_doc.get("meta"), "inputs": new_doc.get("inputs")}
+
+
+@router.post("/{skill_id}/workflow:replace-literals")
+def post_workflow_replace_literals(
+    skill_id: str,
+    body: WorkflowLiteralReplaceBody,
+    request: Request,
+) -> dict[str, Any]:
+    """Replace a literal substring in every string field of the skill document (full JSON)."""
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    try:
+        new_doc = replace_string_literals_in_skill_document(doc, body.find, body.replace_with)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_skill(skill_id, new_doc)
+    wf = build_workflow_response(skill_id, new_doc, asset_base_url=_asset_base_url(request))
+    return {"skill_id": skill_id, "meta": new_doc.get("meta"), "workflow": wf.model_dump(mode="json")}
 
 
 @router.post("/{skill_id}/steps:reorder")

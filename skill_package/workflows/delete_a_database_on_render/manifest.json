@@ -1,0 +1,27 @@
+{
+  "name": "delete_a_database_on_render",
+  "description": "Delete a database on Render",
+  "version": "1.0.0",
+  "entry": {
+    "execution": "./execution.json",
+    "recovery": "./recovery.json",
+    "inputs": "./inputs.json"
+  },
+  "execution_mode": "deterministic",
+  "llm_required": false,
+  "inputs": [
+    {
+      "name": "user_email",
+      "type": "string"
+    },
+    {
+      "name": "user_password",
+      "type": "string",
+      "sensitive": true
+    },
+    {
+      "name": "db_name",
+      "type": "string"
+    }
+  ]
+}

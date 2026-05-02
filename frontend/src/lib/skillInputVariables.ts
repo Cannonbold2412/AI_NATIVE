@@ -56,8 +56,26 @@ export type VariableFormRow = {
   id: string
   label: string
   varType: InputVariableType
-  defaultValue: string
   optionsText: string
+}
+
+/** Accepts `db_name` or full `{{db_name}}` for bulk replace / placeholders. */
+export function normalizeVariablePlaceholder(raw: string): { ok: true; value: string } | { ok: false; error: string } {
+  const t = raw.trim()
+  if (!t) {
+    return { ok: false, error: 'Enter a variable id (e.g. db_name) or paste {{db_name}}.' }
+  }
+  const fullMatch = /^\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}$/.exec(t)
+  if (fullMatch?.[1]) {
+    return { ok: true, value: `{{${fullMatch[1]}}}` }
+  }
+  if (!ID_PATTERN.test(t)) {
+    return {
+      ok: false,
+      error: 'Invalid id. Use letters, numbers, underscore; start with a letter (same as in {{id}}).',
+    }
+  }
+  return { ok: true, value: `{{${t}}}` }
 }
 
 export function newEmptyRow(): VariableFormRow {
@@ -66,7 +84,6 @@ export function newEmptyRow(): VariableFormRow {
     id: '',
     label: '',
     varType: 'text',
-    defaultValue: '',
     optionsText: '',
   }
 }
@@ -79,7 +96,6 @@ export function rowsFromServerInputs(inputs: Record<string, unknown>[]): Variabl
       id,
       label: String(raw.label ?? (id ? labelFromId(id) : '')),
       varType: raw.type === 'select' ? 'select' : 'text',
-      defaultValue: raw.default == null ? '' : String(raw.default),
       optionsText: Array.isArray(raw.options) ? (raw.options as unknown[]).map((o) => String(o)).join(', ') : '',
     }
   })
@@ -107,11 +123,7 @@ export function rowsToServerPayload(
       id,
       label: row.label.trim() || labelFromId(id),
       type: row.varType,
-    }
-    if (row.defaultValue.trim()) {
-      rec.default = row.defaultValue
-    } else {
-      rec.default = null
+      default: null,
     }
     if (row.varType === 'select') {
       const options = row.optionsText
@@ -142,7 +154,6 @@ export function addSpottedToRows(
     id,
     label: labelFromId(id),
     varType: 'text' as const,
-    defaultValue: '',
     optionsText: '',
   }))
   return [...rows, ...additions]

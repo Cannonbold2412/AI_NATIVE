@@ -39,9 +39,18 @@ class Settings(BaseSettings):
     pack_llm_enabled: bool = True
     pack_llm_endpoint: str = ""
     pack_llm_api_key: str = ""
+    # Comma-separated keys; successive pack LLM calls rotate (thread-safe), same pattern as SKILL_LLM_API_KEYS in app/llm/client.py.
     pack_llm_api_keys: str = ""
     pack_llm_model: str = ""
-    pack_llm_timeout_ms: int = 20000
+    # Skill structuring often needs several minutes; low values cause client TimeoutError before the
+    # gateway can respond (debug logs: 120s capped runs vs ~300s gateway behavior on integrate.api.nvidia.com).
+    pack_llm_timeout_ms: int = 600000
+    # Chat-completions sampling for Skill Pack Builder (structuring vs skill.md prose).
+    pack_llm_structure_temperature: float = 0.0
+    pack_llm_structure_max_tokens: int | None = None
+    pack_llm_markdown_temperature: float = 0.15
+    pack_llm_markdown_max_tokens: int = 8000
+    pack_llm_top_p: float | None = None
 
     @field_validator("llm_timeout_ms", mode="before")
     @classmethod
@@ -67,8 +76,61 @@ class Settings(BaseSettings):
         try:
             timeout = int(value)
         except (TypeError, ValueError):
-            timeout = 20000
-        return max(2000, timeout)
+            timeout = 600000
+        return max(600000, timeout)
+
+    @field_validator("pack_llm_structure_temperature", mode="before")
+    @classmethod
+    def _clamp_pack_structure_temperature(cls, value: object) -> float:
+        try:
+            t = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(2.0, t))
+
+    @field_validator("pack_llm_markdown_temperature", mode="before")
+    @classmethod
+    def _clamp_pack_markdown_temperature(cls, value: object) -> float:
+        try:
+            t = float(value)
+        except (TypeError, ValueError):
+            return 0.15
+        return max(0.0, min(2.0, t))
+
+    @field_validator("pack_llm_top_p", mode="before")
+    @classmethod
+    def _normalize_pack_llm_top_p(cls, value: object) -> float | None:
+        if value is None or value == "":
+            return None
+        try:
+            t = float(value)
+        except (TypeError, ValueError):
+            return None
+        if t <= 0.0 or t > 1.0:
+            return None
+        return t
+
+    @field_validator("pack_llm_structure_max_tokens", mode="before")
+    @classmethod
+    def _normalize_pack_structure_max_tokens(cls, value: object) -> int | None:
+        if value is None or value == "":
+            return None
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            return None
+        if n < 1:
+            return None
+        return min(n, 200_000)
+
+    @field_validator("pack_llm_markdown_max_tokens", mode="before")
+    @classmethod
+    def _normalize_pack_markdown_max_tokens(cls, value: object) -> int:
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            return 4000
+        return max(1, min(n, 200_000))
 
 
 settings = Settings()

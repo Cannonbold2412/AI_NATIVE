@@ -1,49 +1,57 @@
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { errorMessage, fetchSkillList, fetchWorkflow } from '@/api/workflowApi'
 import { AppShell } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import { buildSkillPackage, downloadSkillPackZip, downloadTextAsset, parseInputs, type SkillPackBuildResult } from '@/services/skillPackBuilder'
-import { CheckCircle2, Copy, Download, FileJson, FileText, LoaderCircle, Package, UploadCloud } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import {
+  buildSkillPackage,
+  downloadSkillPackZip,
+  estimateSkillPackBuildSeconds,
+  parseInputs,
+  type SkillPackBuildResult,
+} from '@/services/skillPackBuilder'
+import { Boxes, CheckCircle2, Download, LoaderCircle, Package } from 'lucide-react'
 
-const TAB_OPTIONS = [
-  { key: 'skill.md', label: 'skill.md', icon: FileText },
-  { key: 'skill.json', label: 'skill.json', icon: FileJson },
-  { key: 'inputs.json', label: 'inputs.json', icon: FileJson },
-  { key: 'manifest.json', label: 'manifest.json', icon: FileJson },
-] as const
+/** Radix Select needs a sentinel item for the empty selection label. */
+const NO_SKILL_SENTINEL = '__no_skill_selected__'
 
-type OutputTabKey = (typeof TAB_OPTIONS)[number]['key']
+const GENERATION_PROGRESS_INTERVAL_MS = 250
 
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(new Error(`Could not read ${file.name}`))
-    reader.readAsText(file)
-  })
-}
-
-function tabContent(result: SkillPackBuildResult, tab: OutputTabKey): string {
-  if (tab === 'skill.md') return result.skillMd
-  if (tab === 'skill.json') return result.skillJson
-  if (tab === 'inputs.json') return result.inputJson
-  return result.manifestJson
+function formatDurationLabel(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  if (remainder === 0) return `${minutes}m`
+  return `${minutes}m ${remainder}s`
 }
 
 export function SkillPackBuilderPage() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [jsonText, setJsonText] = useState('')
-  const [selectedFile, setSelectedFile] = useState('')
-  const [activeTab, setActiveTab] = useState<OutputTabKey>('skill.md')
-  const [dragActive, setDragActive] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [selectedSkillId, setSelectedSkillId] = useState('')
+  const [workflowLoadError, setWorkflowLoadError] = useState<string | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SkillPackBuildResult | null>(null)
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null)
+  const [generationNow, setGenerationNow] = useState<number | null>(null)
+
+  const skillsQ = useQuery({
+    queryKey: ['skillList'],
+    queryFn: fetchSkillList,
+    staleTime: 60_000,
+  })
+
+  const sortedSkills = useMemo(() => {
+    const skills = [...(skillsQ.data?.skills ?? [])]
+    skills.sort((a, b) => b.modified_at - a.modified_at)
+    return skills
+  }, [skillsQ.data?.skills])
 
   const detectedInputs = useMemo(() => {
     if (!jsonText.trim()) return []
@@ -54,75 +62,93 @@ export function SkillPackBuilderPage() {
     }
   }, [jsonText])
 
-  async function loadFile(file: File) {
-    const text = await readFileAsText(file)
-    setJsonText(text)
-    setSelectedFile(file.name)
-    setError(null)
-  }
-
-  async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const estimatedGenerationSeconds = useMemo(() => {
+    if (!jsonText.trim()) return null
     try {
-      await loadFile(file)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not load file.'
-      setError(message)
-      toast.error(message)
-    } finally {
-      event.target.value = ''
+      return estimateSkillPackBuildSeconds(jsonText)
+    } catch {
+      return null
     }
-  }
+  }, [jsonText])
 
-  function onDragOver(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    setDragActive(true)
-  }
+  const generationElapsedSeconds = useMemo(() => {
+    if (!isGenerating || generationStartedAt == null || generationNow == null) return 0
+    return Math.max(0, (generationNow - generationStartedAt) / 1000)
+  }, [generationNow, generationStartedAt, isGenerating])
 
-  function onDragLeave(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    setDragActive(false)
-  }
+  const generationProgressValue = useMemo(() => {
+    const estimate = estimatedGenerationSeconds ?? 20
+    if (!isGenerating) return 0
+    if (estimate <= 0) return 12
+    const ratio = generationElapsedSeconds / estimate
+    if (ratio >= 1) return 96
+    return Math.max(8, Math.min(96, Math.round((ratio ** 0.82) * 92)))
+  }, [estimatedGenerationSeconds, generationElapsedSeconds, isGenerating])
 
-  async function onDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    setDragActive(false)
-    const file = event.dataTransfer.files?.[0]
-    if (!file) return
+  const generationStatusLabel = useMemo(() => {
+    if (!isGenerating) return null
+    if (estimatedGenerationSeconds == null) return 'Preparing package build…'
+    const remaining = Math.max(0, Math.ceil(estimatedGenerationSeconds - generationElapsedSeconds))
+    if (remaining === 0) return 'Finalizing package files…'
+    return `About ${formatDurationLabel(remaining)} remaining`
+  }, [estimatedGenerationSeconds, generationElapsedSeconds, isGenerating])
+
+  const generationCaption = useMemo(() => {
+    if (!isGenerating) return null
+    const elapsed = formatDurationLabel(Math.max(1, Math.floor(generationElapsedSeconds)))
+    if (estimatedGenerationSeconds == null) return `Elapsed ${elapsed}`
+    return `Elapsed ${elapsed} of about ${formatDurationLabel(estimatedGenerationSeconds)}`
+  }, [estimatedGenerationSeconds, generationElapsedSeconds, isGenerating])
+
+  useEffect(() => {
+    if (!isGenerating || generationStartedAt == null) {
+      setGenerationNow(null)
+      return
+    }
+    setGenerationNow(Date.now())
+    const timer = window.setInterval(() => setGenerationNow(Date.now()), GENERATION_PROGRESS_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [generationStartedAt, isGenerating])
+
+  const skillSelectValue = useMemo(() => {
+    if (!selectedSkillId) return NO_SKILL_SENTINEL
+    if (!sortedSkills.some((s) => s.skill_id === selectedSkillId)) return NO_SKILL_SENTINEL
+    return selectedSkillId
+  }, [selectedSkillId, sortedSkills])
+
+  async function loadWorkflowForSkill(skillId: string) {
+    setSelectedSkillId(skillId)
+    setWorkflowLoadError(null)
+    setError(null)
     try {
-      await loadFile(file)
+      const workflow = await fetchWorkflow(skillId)
+      setJsonText(JSON.stringify(workflow, null, 2))
+      const meta = sortedSkills.find((s) => s.skill_id === skillId)
+      toast.success(meta ? `"${meta.title}" workflow loaded.` : 'Workflow loaded.')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not load file.'
-      setError(message)
+      const message = errorMessage(err, 'Could not load workflow for this skill.')
+      setWorkflowLoadError(message)
       toast.error(message)
     }
   }
 
   async function handleGenerate() {
-    setIsLoading(true)
+    setIsGenerating(true)
+    setGenerationStartedAt(Date.now())
+    setGenerationNow(Date.now())
     setError(null)
     try {
       const next = await buildSkillPackage(jsonText)
       setResult(next)
-      setActiveTab('skill.md')
       toast.success(next.usedLlm ? 'Skill Package generated and saved.' : 'Skill Package generated, saved, and completed with deterministic fallback.')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not generate Skill Package.'
       setError(message)
       toast.error(message)
     } finally {
-      setIsLoading(false)
-    }
-  }
-
-  async function handleCopy(tab: OutputTabKey) {
-    if (!result) return
-    try {
-      await navigator.clipboard.writeText(tabContent(result, tab))
-      toast.success(`${tab} copied`)
-    } catch {
-      toast.error(`Could not copy ${tab}`)
+      setIsGenerating(false)
+      setGenerationStartedAt(null)
+      setGenerationNow(null)
     }
   }
 
@@ -140,7 +166,7 @@ export function SkillPackBuilderPage() {
   return (
     <AppShell
       title="Skill Pack Builder"
-      description="Upload or paste a compiled workflow JSON, then generate and save a package folder with skill.md, skill.json, inputs.json, and manifest.json."
+      description="Load a saved skill’s workflow JSON or paste a payload, then generate skill_package/workflows/<name> plus the shared engine and README."
       mainClassName="overflow-y-auto"
       actions={
         result ? (
@@ -151,48 +177,75 @@ export function SkillPackBuilderPage() {
         ) : null
       }
     >
-      <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] sm:px-6">
-        <div className="space-y-6">
+      <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
           <Card className="border-white/8 bg-white/[0.035] shadow-none">
             <CardHeader className="border-b border-white/8">
               <CardTitle className="text-white">Source JSON</CardTitle>
               <CardDescription className="text-zinc-500">
-                Upload a `skill.json` file or paste the workflow payload directly. Each generation is saved as its own package folder.
+                Choose one of your saved skills to load its workflow, or paste JSON below. Each generation is saved under `skill_package/workflows`.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={(event) => void onDrop(event)}
-                className={cn(
-                  'rounded-xl border border-dashed px-4 py-8 text-center transition-colors',
-                  dragActive
-                    ? 'border-sky-400/60 bg-sky-500/10 text-sky-100'
-                    : 'border-white/10 bg-black/20 text-zinc-400 hover:border-white/20 hover:text-zinc-200',
-                )}
-              >
-                <UploadCloud className="mx-auto size-8" />
-                <p className="mt-3 text-sm font-medium">{selectedFile || 'Drag and drop a .json file here'}</p>
-                <p className="mt-1 text-xs text-zinc-500">or click to choose a local file</p>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
+                    <Boxes className="size-5 text-zinc-400" />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-500">Saved skill</p>
+                    {skillsQ.isLoading ? (
+                      <Skeleton className="h-9 w-full rounded-lg bg-white/10" />
+                    ) : skillsQ.isError ? (
+                      <p className="text-sm text-red-300">{errorMessage(skillsQ.error, 'Could not load skills.')}</p>
+                    ) : sortedSkills.length === 0 ? (
+                      <p className="text-sm text-zinc-500">No saved skills yet. Create one in Human Edit first, then return here.</p>
+                    ) : (
+                      <Select
+                        value={skillSelectValue}
+                        onValueChange={(value) => {
+                          setWorkflowLoadError(null)
+                          if (value === NO_SKILL_SENTINEL) {
+                            setSelectedSkillId('')
+                            return
+                          }
+                          void loadWorkflowForSkill(value)
+                        }}
+                      >
+                        <SelectTrigger size="sm" className="w-full border-white/15 bg-black/40 text-zinc-100">
+                          <SelectValue placeholder="Select a skill…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_SKILL_SENTINEL} className="text-zinc-500">
+                            None (paste JSON only)
+                          </SelectItem>
+                          {sortedSkills.map((skill) => (
+                            <SelectItem key={skill.skill_id} value={skill.skill_id}>
+                              <span className="truncate">{skill.title}</span>
+                              <span className="ml-2 shrink-0 text-xs text-zinc-500">{skill.step_count} steps</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {workflowLoadError ? (
+                      <p className="text-xs text-red-400">{workflowLoadError}</p>
+                    ) : selectedSkillId && sortedSkills.some((s) => s.skill_id === selectedSkillId) ? (
+                      <p className="text-xs text-zinc-500">
+                        Showing workflow for{' '}
+                        <span className="text-zinc-300">{sortedSkills.find((s) => s.skill_id === selectedSkillId)?.title}</span>.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json,application/json"
-                className="hidden"
-                onChange={(event) => void onFileChange(event)}
-              />
               <Textarea
                 value={jsonText}
                 onChange={(event) => {
                   setJsonText(event.target.value)
                   setError(null)
+                  setWorkflowLoadError(null)
                 }}
-                placeholder='Paste workflow JSON here, for example: {"skills":[{"steps":[...]}]}'
+                placeholder='Paste workflow JSON here after choosing a skill, or edit the loaded payload directly.'
                 className="min-h-[22rem] resize-y border-white/10 bg-black/20 font-mono text-xs leading-6 text-zinc-100 placeholder:text-zinc-500"
               />
               <div className="flex items-center justify-between gap-3">
@@ -200,17 +253,42 @@ export function SkillPackBuilderPage() {
                   <Badge variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-300">
                     {detectedInputs.length} inputs detected
                   </Badge>
+                  {estimatedGenerationSeconds != null ? (
+                    <Badge variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-300">
+                      ~{formatDurationLabel(estimatedGenerationSeconds)} build
+                    </Badge>
+                  ) : null}
                   {result ? (
                     <Badge variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-300">
                       {result.stepCount} steps
                     </Badge>
                   ) : null}
                 </div>
-                <Button type="button" onClick={() => void handleGenerate()} disabled={isLoading}>
-                  {isLoading ? <LoaderCircle className="size-3.5 animate-spin" /> : <Package className="size-3.5" />}
+                <Button type="button" onClick={() => void handleGenerate()} disabled={isGenerating}>
+                  {isGenerating ? <LoaderCircle className="size-3.5 animate-spin" /> : <Package className="size-3.5" />}
                   Generate Skill Package
                 </Button>
               </div>
+              {isGenerating ? (
+                <div className="rounded-xl border border-sky-400/20 bg-sky-500/[0.07] p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-sky-100">Generating skill package</p>
+                      <p className="text-xs text-sky-100/75">{generationStatusLabel}</p>
+                    </div>
+                    <Badge variant="outline" className="border-sky-300/20 bg-sky-300/10 text-sky-100">
+                      {generationProgressValue}%
+                    </Badge>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-linear-to-r from-sky-400 via-cyan-300 to-emerald-300 transition-[width] duration-300 ease-out"
+                      style={{ width: `${generationProgressValue}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-sky-100/60">{generationCaption}</p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -225,7 +303,7 @@ export function SkillPackBuilderPage() {
               <CardContent className="space-y-2 p-4 text-sm text-emerald-100">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="size-4" />
-                  Skill Package ready and saved to the packages library.
+                  Skill Package ready at skill_package/workflows/{result.name}.
                 </div>
                 {result.warnings.map((warning) => (
                   <p key={warning} className="text-xs text-emerald-200/85">
@@ -235,75 +313,6 @@ export function SkillPackBuilderPage() {
               </CardContent>
             </Card>
           ) : null}
-        </div>
-
-        <Card className="border-white/8 bg-white/[0.035] shadow-none">
-          <CardHeader className="border-b border-white/8">
-            <CardTitle className="text-white">Package Output</CardTitle>
-            <CardDescription className="text-zinc-500">
-              Review the saved package artifacts, copy them, or download each file separately.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {result ? (
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as OutputTabKey)}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <TabsList variant="line" className="bg-transparent p-0">
-                    {TAB_OPTIONS.map((tab) => {
-                      const Icon = tab.icon
-                      return (
-                        <TabsTrigger
-                          key={tab.key}
-                          value={tab.key}
-                          className="rounded-lg border border-white/10 bg-white/[0.03] px-3 text-zinc-300 data-active:bg-white/[0.08] data-active:text-white"
-                        >
-                          <Icon className="size-3.5" />
-                          {tab.label}
-                        </TabsTrigger>
-                      )
-                    })}
-                  </TabsList>
-                  <div className="flex items-center gap-2">
-                    <Button type="button" size="sm" variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-200" onClick={() => void handleCopy(activeTab)}>
-                      <Copy className="size-3.5" />
-                      Copy
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-white/10 bg-white/[0.04] text-zinc-200"
-                      onClick={() =>
-                        downloadTextAsset(
-                          activeTab,
-                          tabContent(result, activeTab),
-                          activeTab.endsWith('.json') ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8',
-                        )
-                      }
-                    >
-                      <Download className="size-3.5" />
-                      Download
-                    </Button>
-                  </div>
-                </div>
-
-                {TAB_OPTIONS.map((tab) => (
-                  <TabsContent key={tab.key} value={tab.key} className="mt-4">
-                    <Textarea
-                      readOnly
-                      value={tabContent(result, tab.key)}
-                      className="min-h-[42rem] resize-none border-white/10 bg-black/25 font-mono text-xs leading-6 text-zinc-100"
-                    />
-                  </TabsContent>
-                ))}
-              </Tabs>
-            ) : (
-              <div className="flex min-h-[34rem] items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/15 px-6 text-center text-sm text-zinc-500">
-                Generate a package to view `skill.md`, `skill.json`, `inputs.json`, and `manifest.json`.
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </AppShell>
   )

@@ -1,0 +1,9 @@
+{
+  "workflows": [
+    {
+      "name": "delete_a_database_on_render",
+      "description": "Delete a database on Render",
+      "manifest": "/skills/delete_a_database_on_render/manifest.json"
+    }
+  ]
+}

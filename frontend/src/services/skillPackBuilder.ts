@@ -12,15 +12,28 @@ export type SkillPackInput = {
 
 export type SkillPackBuildResult = {
   name: string
+  indexJson: string
   skillMd: string
+  executionJson: string
+  recoveryJson: string
   skillJson: string
-  inputJson: string
+  inputsJson: string
   manifestJson: string
+  executionMd: string
+  executionPlanJson: string
   inputCount: number
   stepCount: number
   usedLlm: boolean
   warnings: string[]
 }
+
+const SKILL_PACK_BUILD_SECONDS = {
+  min: 12,
+  max: 300,
+  base: 10,
+  perStep: 1.8,
+  perInput: 0.6,
+} as const
 
 function normalizeName(raw: string): string {
   const withSnakeCase = raw.replace(/([a-z0-9])([A-Z])/g, '$1_$2')
@@ -94,6 +107,14 @@ function extractSteps(payload: unknown): Record<string, unknown>[] {
   return out
 }
 
+export function estimateSkillPackBuildSeconds(jsonText: string): number {
+  const payload = parseJsonSource(jsonText)
+  const stepCount = extractSteps(payload).length
+  const inputCount = extractInputs(JSON.stringify(payload)).length
+  const rawEstimate = SKILL_PACK_BUILD_SECONDS.base + stepCount * SKILL_PACK_BUILD_SECONDS.perStep + inputCount * SKILL_PACK_BUILD_SECONDS.perInput
+  return Math.max(SKILL_PACK_BUILD_SECONDS.min, Math.min(SKILL_PACK_BUILD_SECONDS.max, Math.round(rawEstimate)))
+}
+
 export function extractInputs(jsonText: string): SkillPackInput[] {
   const payload = parseJsonSource(jsonText)
   const seen = new Set<string>()
@@ -128,12 +149,28 @@ export const parseInputs = extractInputs
 
 export function buildManifest(inputs: SkillPackInput[], packageName = 'generated_skill'): {
   name: string
+  description: string
   version: string
+  entry: {
+    execution: string
+    recovery: string
+    inputs: string
+  }
+  execution_mode: 'deterministic'
+  llm_required: false
   inputs: Array<{ name: string; type: 'string'; sensitive?: boolean }>
 } {
   return {
     name: packageName,
+    description: `Run the ${packageName.replace(/_/g, ' ')} workflow.`,
     version: '1.0.0',
+    entry: {
+      execution: './execution.json',
+      recovery: './recovery.json',
+      inputs: './inputs.json',
+    },
+    execution_mode: 'deterministic',
+    llm_required: false,
     inputs: inputs.map((input) => ({
       name: input.name,
       type: input.type,
@@ -166,10 +203,15 @@ export async function buildSkillPackage(jsonText: string): Promise<SkillPackBuil
   const result = await postBuildSkillPack({ json_text: JSON.stringify(payload) })
   return {
     name: result.name,
+    indexJson: result.index_json,
     skillMd: result.skill_md,
+    executionJson: result.execution_json,
+    recoveryJson: result.recovery_json,
     skillJson: result.skill_json,
-    inputJson: result.input_json,
+    inputsJson: result.inputs_json,
     manifestJson: result.manifest_json,
+    executionMd: result.execution_md,
+    executionPlanJson: result.execution_plan_json,
     inputCount: result.input_count,
     stepCount: result.step_count,
     usedLlm: result.used_llm,
@@ -196,9 +238,13 @@ export async function downloadSkillPackZip(result: SkillPackBuildResult): Promis
     body: JSON.stringify({
       name: result.name,
       skill_md: result.skillMd,
+      execution_json: result.executionJson,
+      recovery_json: result.recoveryJson,
       skill_json: result.skillJson,
-      input_json: result.inputJson,
+      inputs_json: result.inputsJson,
       manifest_json: result.manifestJson,
+      execution_md: result.executionMd,
+      execution_plan_json: result.executionPlanJson,
     }),
   })
   if (!response.ok) {
@@ -209,7 +255,7 @@ export async function downloadSkillPackZip(result: SkillPackBuildResult): Promis
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `${result.name}.zip`
+  anchor.download = `skill_package_${result.name}.zip`
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()

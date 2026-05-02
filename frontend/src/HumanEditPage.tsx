@@ -744,7 +744,7 @@ export function HumanEditPage() {
                 </span>
                 <span
                   className={cn('inline-flex shrink-0', showVariablesPane ? 'text-zinc-700' : 'text-zinc-400')}
-                  title="Configure dynamic input variables and defaults."
+                  title="Configure input variables and replace literals with {{id}} across the workflow."
                 >
                   <Info className="size-3.5" />
                 </span>
