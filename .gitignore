@@ -10,4 +10,5 @@ frontend/dist/
 frontend/vite.*.log
 frontend/.env.example
 AI_NATIVE/
-skill_package/runtime/
+skill_package/
+tmp/
