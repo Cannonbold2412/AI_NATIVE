@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 .env
+frontend/.env.local
 obsidian_vault/
 graphify-out/
 frontend/node_modules/
@@ -10,5 +11,4 @@ frontend/dist/
 frontend/vite.*.log
 frontend/.env.example
 AI_NATIVE/
-skill_package/
 tmp/

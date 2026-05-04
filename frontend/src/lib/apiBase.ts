@@ -1,20 +1,19 @@
-/**
- * In dev with empty base, relative paths use the Vite proxy. In production, set
- * VITE_API_BASE_URL to the API origin (no trailing slash), e.g. https://api.example.com
- */
+const API_VERSION_PREFIX = '/api/v1'
+
 export function getApiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL
-  if (raw === undefined || raw === null || String(raw).trim() === '') {
-    return ''
-  }
-  return String(raw).replace(/\/$/, '')
+  return ''
 }
 
 export function apiUrl(path: string): string {
   const p = path.startsWith('/') ? path : `/${path}`
+  const versionedPath = p.startsWith('/api/') ? p : `${API_VERSION_PREFIX}${p}`
   const base = getApiBase()
   if (!base) {
-    return p
+    return versionedPath
   }
-  return `${base}${p}`
+  return `${base}${versionedPath}`
+}
+
+export function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  return fetch(apiUrl(input), init)
 }

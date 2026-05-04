@@ -1,5 +1,8 @@
+'use client'
+
 import { type ChangeEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useRecordingSession } from './hooks/useRecordingSession'
 import { AppShell } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/badge'
@@ -51,7 +54,7 @@ const workflowNotes = [
 ]
 
 export function HomePage() {
-  const navigate = useNavigate()
+  const router = useRouter()
   const {
     startUrl,
     setStartUrl,
@@ -65,7 +68,7 @@ export function HomePage() {
     sessionId,
     startFlow,
   } = useRecordingSession({
-    onCompileSuccess: (id) => navigate(`/edit/${id}`),
+    onCompileSuccess: (id) => router.push(`/edit/${id}`),
   })
 
   const metricEntries = Object.entries(metrics ?? {})
@@ -73,7 +76,7 @@ export function HomePage() {
 
   return (
     <AppShell
-      title="Home"
+      title="New recording"
       description="Record a browser workflow, compile it into a package, and move into review without leaving the workspace."
       mainClassName="overflow-y-auto"
       actions={
@@ -84,7 +87,7 @@ export function HomePage() {
             asChild
             className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
           >
-            <Link to="/edit">
+            <Link href="/edit">
               <Pencil className="size-3.5" />
               Edit Skill
             </Link>
@@ -161,7 +164,7 @@ export function HomePage() {
                   asChild
                   className="h-10 border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
                 >
-                  <Link to="/skills">
+                  <Link href="/skills">
                     Open library
                     <ArrowRight className="size-4" />
                   </Link>

@@ -51,6 +51,53 @@ class Settings(BaseSettings):
     pack_llm_markdown_temperature: float = 0.15
     pack_llm_markdown_max_tokens: int = 8000
     pack_llm_top_p: float | None = None
+    # Directory name at project root for generated bundles (default skill_package). Overrides .skill_bundle_root after UI rename.
+    package_bundle_root: str = "skill_package"
+    environment: str = "local"
+
+    # Public API / browser boundary.
+    cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_preview_origin_regex: str = r"https://.*\.vercel\.app"
+    max_json_body_bytes: int = 1_000_000
+
+    # Clerk authentication. Local development leaves this disabled; production
+    # deployments should set SKILL_AUTH_REQUIRED=true and the Clerk values below.
+    auth_required: bool = False
+    clerk_issuer: str = ""
+    clerk_jwks_url: str = ""
+    clerk_authorized_parties: str = ""
+    clerk_audience: str = ""
+
+    # Production backing services. The local MVP still has file-backed fallbacks.
+    database_url: str = ""
+    redis_url: str = ""
+    blob_read_write_token: str = ""
+    worker_queue_name: str = "ai-native-jobs"
+    worker_dead_letter_queue_name: str = "ai-native-jobs-dlq"
+
+    # Billing and app redirects.
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_id: str = ""
+    app_url: str = "http://localhost:5173"
+
+    @field_validator("package_bundle_root", mode="before")
+    @classmethod
+    def _strip_package_bundle_root(cls, value: object) -> str:
+        return str(value or "").strip() or "skill_package"
+
+    @field_validator("cors_allowed_origins", mode="before")
+    @classmethod
+    def _strip_cors_allowed_origins(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [item.strip() for item in self.cors_allowed_origins.split(",") if item.strip()]
+
+    @property
+    def clerk_authorized_party_values(self) -> list[str]:
+        return [item.strip() for item in self.clerk_authorized_parties.split(",") if item.strip()]
 
     @field_validator("llm_timeout_ms", mode="before")
     @classmethod

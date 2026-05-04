@@ -1,4 +1,6 @@
-import { useMemo, useState, type ComponentType, type ReactNode } from 'react'
+'use client'
+
+import { Fragment, useMemo, useState, type ComponentType, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiUrl } from '@/lib/apiBase'
@@ -7,6 +9,7 @@ import {
   errorMessage,
   fetchSkillPackageFiles,
   fetchSkillPackageList,
+  renameStoredSkillPackage,
   type SkillPackageSummary,
 } from '@/api/workflowApi'
 import { AppShell } from '@/components/layout/AppLayout'
@@ -23,6 +26,14 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,19 +44,18 @@ import {
   FileCode2,
   FileJson,
   FileText,
-  Folder,
   FolderKanban,
   FolderOpen,
   ImageIcon,
   Package,
+  Pencil,
   RefreshCw,
   Search,
   Trash2,
 } from 'lucide-react'
 
-const ROOT_FILE_ORDER = ['README.md', 'index.json']
+const ROOT_FILE_ORDER = ['package.json', 'index.js', 'skill.json', 'README.md', 'index.json']
 const WORKFLOW_FILE_ORDER = ['skill.md', 'execution.json', 'recovery.json', 'inputs.json', 'manifest.json']
-const WORKFLOW_KEYS = new Set(WORKFLOW_FILE_ORDER)
 const ENGINE_FILES = [
   'execution.ts',
   'recovery.ts',
@@ -55,37 +65,96 @@ const ENGINE_FILES = [
 const ENGINE_KEYS = ENGINE_FILES.map((f) => `engine/${f}`)
 const ROW_TRANSITION = 'transition-colors duration-200 motion-reduce:transition-none'
 
+const AGENT_PLUGIN_PREFIXES = ['.opencode/', '.claude/', '.codex/'] as const
+
 function orderedSkillPackageKeys(keys: string[]): string[] {
-  const prio = [...ROOT_FILE_ORDER, ...ENGINE_KEYS, ...WORKFLOW_FILE_ORDER]
   const set = new Set(keys)
-  const head = prio.filter((k) => set.has(k))
-  const tail = [...keys].filter((k) => !head.includes(k)).sort((a, b) => a.localeCompare(b))
-  return [...head, ...tail]
+  const head: string[] = []
+  for (const k of ROOT_FILE_ORDER) if (set.has(k)) head.push(k)
+  for (const k of ENGINE_KEYS) if (set.has(k)) head.push(k)
+
+  const agentMid = [...keys]
+    .filter((k) => AGENT_PLUGIN_PREFIXES.some((p) => k.startsWith(p)))
+    .sort((a, b) => a.localeCompare(b))
+
+  const workflowSlugs = [
+    ...new Set(
+      keys
+        .map((k) => {
+          const m = /^workflows\/([^/]+)\//.exec(k)
+          return m ? m[1] : ''
+        })
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b))
+
+  const mid: string[] = []
+  for (const wf of workflowSlugs) {
+    const prefix = `workflows/${wf}/`
+    for (const wfFile of WORKFLOW_FILE_ORDER) {
+      const kk = `${prefix}${wfFile}`
+      if (set.has(kk)) mid.push(kk)
+    }
+    const visuals = [...keys].filter((k) => k.startsWith(`${prefix}visuals/`)).sort((a, b) => a.localeCompare(b))
+    mid.push(...visuals)
+  }
+
+  const used = new Set([...head, ...agentMid, ...mid])
+  const tail = [...keys].filter((k) => !used.has(k)).sort((a, b) => a.localeCompare(b))
+  return [...head, ...agentMid, ...mid, ...tail]
+}
+
+type PathTrieNode = {
+  segment: string
+  /** Full relative path inside the package when this node is an on-disk leaf file key. */
+  fileKey: string | null
+  children: PathTrieNode[]
+}
+
+function getOrCreateTrieChild(parent: PathTrieNode, segment: string): PathTrieNode {
+  let child = parent.children.find((c) => c.segment === segment)
+  if (!child) {
+    child = { segment, fileKey: null, children: [] }
+    parent.children.push(child)
+  }
+  return child
+}
+
+/** Trie over relative paths — sibling order matches `orderedPaths` insertion order for stable UI. */
+function buildPathTrie(orderedPaths: readonly string[]): PathTrieNode {
+  const root: PathTrieNode = { segment: '', fileKey: null, children: [] }
+  for (const key of orderedPaths) {
+    const parts = key.split('/').filter((p) => p.length > 0)
+    if (parts.length === 0) continue
+    let cur = root
+    for (let i = 0; i < parts.length; i++) {
+      const segment = parts[i]!
+      const child = getOrCreateTrieChild(cur, segment)
+      cur = child
+      if (i === parts.length - 1) {
+        cur.fileKey = key
+      }
+    }
+  }
+  return root
 }
 
 function defaultSkillPackageActiveKey(keys: string[]): string | null {
   if (keys.length === 0) return null
   const ordered = orderedSkillPackageKeys(keys)
-  for (const wf of WORKFLOW_FILE_ORDER) {
-    if (ordered.includes(wf)) return wf
-  }
-  return ordered[0]
+  const wfSkill =
+    ordered.find((k) => k.endsWith('/skill.md')) ?? (ordered.includes('skill.md') ? 'skill.md' : null)
+  return wfSkill ?? ordered[0] ?? null
 }
 
-function previewPathForKey(packageName: string, key: string | null): string {
+function previewPathForKey(bundleRoot: string, bundleName: string, key: string | null): string {
+  const base = `root/${bundleRoot}/${bundleName}`
   if (!key) return 'Select a file to preview'
-  if (key === 'README.md') return 'skill_package/README.md'
-  if (key === 'index.json') return 'skill_package/index.json'
-  if (key.startsWith('engine/')) return `skill_package/${key}`
-  if (key.startsWith('visuals/')) return `skill_package/workflows/${packageName}/${key}`
-  return `skill_package/workflows/${packageName}/${key}`
+  return `${base}/${key}`
 }
 
 function isImageVisualKey(key: string): boolean {
-  return (
-    key.startsWith('visuals/') &&
-    /\.(png|jpe?g|gif|webp)$/i.test(key.slice(key.lastIndexOf('/') + 1))
-  )
+  return /\/visuals\/[^/]+\.(png|jpe?g|gif|webp)$/i.test(key)
 }
 
 function imageMimeFromKey(key: string): string {
@@ -120,24 +189,26 @@ function formatBytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function iconForFile(filename: string): ComponentType<{ className?: string }> {
-  if (filename.startsWith('visuals/')) return ImageIcon
-  if (filename.endsWith('.ts')) return FileCode2
-  if (filename.endsWith('.md')) return FileText
+function leafFileName(filename: string): string {
+  return filename.includes('/') ? filename.slice(filename.lastIndexOf('/') + 1) : filename
+}
+
+function iconForFile(key: string): ComponentType<{ className?: string }> {
+  if (key.includes('/visuals/')) return ImageIcon
+  if (key.endsWith('.ts')) return FileCode2
+  if (key.endsWith('.js')) return FileCode2
+  if (key.endsWith('.md')) return FileText
   return FileJson
 }
 
 function labelForFile(filename: string) {
-  if (filename.startsWith('visuals/')) return 'Visual'
-  if (filename.endsWith('.ts')) return 'TypeScript'
-  if (filename.endsWith('.md')) return 'Markdown'
-  if (filename.endsWith('.json')) return 'JSON'
+  const leaf = leafFileName(filename)
+  if (filename.includes('/visuals/')) return 'Visual'
+  if (leaf.endsWith('.ts')) return 'TypeScript'
+  if (leaf.endsWith('.js')) return 'JavaScript'
+  if (leaf.endsWith('.md')) return 'Markdown'
+  if (leaf.endsWith('.json')) return 'JSON'
   return 'File'
-}
-
-function isWorkflowScopedKey(key: string): boolean {
-  if (key.startsWith('visuals/')) return true
-  return WORKFLOW_KEYS.has(key)
 }
 
 function TreeItem({
@@ -145,25 +216,20 @@ function TreeItem({
   depth,
   icon: Icon,
   label,
-  muted = false,
   onClick,
-  suffix,
 }: {
   active?: boolean
   depth: number
   icon: ComponentType<{ className?: string }>
   label: string
-  muted?: boolean
   onClick?: () => void
-  suffix?: string
 }) {
   const className = cn(
-    'flex w-full items-center gap-2 rounded-xl py-2 pr-2 text-left text-xs',
+    'flex w-full items-center gap-2 rounded-xl py-2 pr-2 text-left text-xs font-mono text-white',
     ROW_TRANSITION,
     active && 'bg-emerald-500/12 text-emerald-50',
-    !active && !muted && 'text-zinc-200',
-    muted && 'text-zinc-500',
-    onClick && 'cursor-pointer hover:bg-white/[0.05] hover:text-white',
+    !active && 'text-white',
+    onClick && 'cursor-pointer hover:bg-white/[0.05]',
     !onClick && 'cursor-default',
   )
   const content = (
@@ -171,13 +237,10 @@ function TreeItem({
       <Icon
         className={cn(
           'size-3.5 shrink-0',
-          active ? 'text-emerald-300' : muted ? 'text-zinc-600' : 'text-zinc-400',
+          active ? 'text-emerald-300' : 'text-white/85',
         )}
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {suffix ? (
-        <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-zinc-600">{suffix}</span>
-      ) : null}
     </>
   )
   const style = { paddingLeft: `${0.8 + depth * 1.05}rem` }
@@ -197,6 +260,82 @@ function TreeItem({
   )
 }
 
+function StructureTrieRows({
+  nodes,
+  depth,
+  pathPrefix,
+  activeFile,
+  onPick,
+}: {
+  nodes: PathTrieNode[]
+  depth: number
+  pathPrefix: string
+  activeFile: string | null
+  onPick: (key: string) => void
+}): ReactNode {
+  return (
+    <>
+      {nodes.map((child) => {
+        const childPath = pathPrefix ? `${pathPrefix}/${child.segment}` : child.segment
+        const hasKids = child.children.length > 0
+        const fileKey = child.fileKey
+
+        if (hasKids && fileKey) {
+          return (
+            <Fragment key={childPath}>
+              <TreeItem
+                depth={depth}
+                icon={iconForFile(fileKey)}
+                label={child.segment}
+                active={activeFile === fileKey}
+                onClick={() => onPick(fileKey)}
+              />
+              <TreeItem depth={depth} icon={FolderOpen} label={`${child.segment}/`} />
+              <StructureTrieRows
+                nodes={child.children}
+                depth={depth + 1}
+                pathPrefix={childPath}
+                activeFile={activeFile}
+                onPick={onPick}
+              />
+            </Fragment>
+          )
+        }
+
+        if (hasKids) {
+          return (
+            <Fragment key={`dir:${childPath}`}>
+              <TreeItem depth={depth} icon={FolderOpen} label={`${child.segment}/`} />
+              <StructureTrieRows
+                nodes={child.children}
+                depth={depth + 1}
+                pathPrefix={childPath}
+                activeFile={activeFile}
+                onPick={onPick}
+              />
+            </Fragment>
+          )
+        }
+
+        if (fileKey) {
+          return (
+            <TreeItem
+              key={fileKey}
+              depth={depth}
+              icon={iconForFile(fileKey)}
+              label={child.segment}
+              active={activeFile === fileKey}
+              onClick={() => onPick(fileKey)}
+            />
+          )
+        }
+
+        return null
+      })}
+    </>
+  )
+}
+
 function PanelChrome({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
@@ -210,25 +349,50 @@ function PanelChrome({ children, className }: { children: ReactNode; className?:
   )
 }
 
-async function downloadPackageFolder(packageName: string) {
-  const response = await fetch(apiUrl(`/skill-pack/${encodeURIComponent(packageName)}/download`))
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null
+  const utf8 = /filename\*=UTF-8''([^;\s]+)/i.exec(header)
+  if (utf8?.[1]) {
+    try {
+      return decodeURIComponent(utf8[1].trim())
+    } catch {
+      /* ignore */
+    }
+  }
+  const quoted = /filename="([^"]+)"/i.exec(header)
+  if (quoted?.[1]) return quoted[1]
+  const plain = /filename=([^;\s]+)/i.exec(header)
+  if (plain?.[1]) return plain[1].replace(/^"+|"+$/g, '')
+  return null
+}
+
+async function downloadPackageFolder(packageName: string): Promise<string> {
+  const response = await fetch(apiUrl(`/skill-pack/bundles/${encodeURIComponent(packageName)}/download`))
   if (!response.ok) {
     const raw = (await response.text()).trim()
     throw new Error(raw || 'Could not download package folder.')
   }
+  const fallback = `${packageName}.zip`
+  const filename =
+    filenameFromContentDisposition(response.headers.get('Content-Disposition')) ?? fallback
   const blob = await response.blob()
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `skill_package_${packageName}.zip`
+  anchor.download = filename
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+  return filename
 }
 
 export function SkillPackagesPage() {
   const qc = useQueryClient()
+
+  const [pendingRename, setPendingRename] = useState<SkillPackageSummary | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [isRenaming, setIsRenaming] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<SkillPackageSummary | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [downloadingName, setDownloadingName] = useState<string | null>(null)
@@ -243,11 +407,19 @@ export function SkillPackagesPage() {
   })
 
   const packages = useMemo(() => q.data?.packages ?? [], [q.data?.packages])
+  const bundleRoot = q.data?.bundle_root ?? 'output/skill_package'
+  const bundleRootDisplay = `root/${bundleRoot}`
   const searchNeedle = searchValue.trim().toLowerCase()
   const filteredPackages = useMemo(() => {
     if (!searchNeedle) return packages
     return packages.filter((pkg) => {
-      const haystack = [pkg.package_name, ...pkg.files].join(' ').toLowerCase()
+      const haystack = [
+        pkg.package_name,
+        ...pkg.workflows.flatMap((w) => [w.workflow_slug, w.display_label ?? '']),
+        ...pkg.files,
+      ]
+        .join(' ')
+        .toLowerCase()
       return haystack.includes(searchNeedle)
     })
   }, [packages, searchNeedle])
@@ -274,6 +446,7 @@ export function SkillPackagesPage() {
     if (selectedPackage) return orderedSkillPackageKeys(selectedPackage.files)
     return []
   }, [filesQ.data, selectedPackage])
+  const packagePathTrie = useMemo(() => buildPathTrie(visibleFiles), [visibleFiles])
   const resolvedActiveFile = useMemo(() => {
     if (visibleFiles.length === 0) return null
     if (activeFile && visibleFiles.includes(activeFile)) return activeFile
@@ -292,8 +465,8 @@ export function SkillPackagesPage() {
   async function handleDownload(packageName: string) {
     setDownloadingName(packageName)
     try {
-      await downloadPackageFolder(packageName)
-      toast.success(`skill_package_${packageName}.zip downloaded`)
+      const savedAs = await downloadPackageFolder(packageName)
+      toast.success(`${savedAs} downloaded`)
     } catch (err) {
       toast.error(errorMessage(err, 'Could not download package folder.'))
     } finally {
@@ -308,6 +481,31 @@ export function SkillPackagesPage() {
       toast.success(`${resolvedActiveFile} copied`)
     } catch {
       toast.error(`Could not copy ${resolvedActiveFile}`)
+    }
+  }
+
+  async function confirmRename() {
+    if (!pendingRename || isRenaming) return
+    const trimmed = renameValue.trim()
+    if (!trimmed) {
+      toast.error('Enter a package name.')
+      return
+    }
+    const previous = pendingRename.package_name
+    setIsRenaming(true)
+    try {
+      const { package_name: nextSlug } = await renameStoredSkillPackage(previous, trimmed)
+      toast.success(`Renamed to ${nextSlug}`)
+      setPendingRename(null)
+      setRenameValue('')
+      setSelectedPackageName(nextSlug)
+      await qc.invalidateQueries({ queryKey: ['skillPackages'] })
+      await qc.invalidateQueries({ queryKey: ['skillPackageFiles', previous] })
+      await qc.invalidateQueries({ queryKey: ['skillPackageFiles', nextSlug] })
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not rename package.'))
+    } finally {
+      setIsRenaming(false)
     }
   }
 
@@ -336,21 +534,26 @@ export function SkillPackagesPage() {
       description="Review generated workflow bundles, inspect the file set, and export ZIP archives from one production-ready workspace."
       mainClassName="min-w-0 overflow-x-hidden overflow-y-auto"
       actions={
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn(
-            'cursor-pointer border-white/10 bg-white/[0.04] text-zinc-200',
-            ROW_TRANSITION,
-            'hover:bg-white/[0.08]',
-          )}
-          onClick={() => void q.refetch()}
-          disabled={q.isFetching}
-        >
-          <RefreshCw className={cn('size-3.5', q.isFetching && 'animate-spin motion-reduce:animate-none')} />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-300">
+            {bundleRootDisplay}/
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(
+              'cursor-pointer border-white/10 bg-white/[0.04] text-zinc-200',
+              ROW_TRANSITION,
+              'hover:bg-white/[0.08]',
+            )}
+            onClick={() => void q.refetch()}
+            disabled={q.isFetching}
+          >
+            <RefreshCw className={cn('size-3.5', q.isFetching && 'animate-spin motion-reduce:animate-none')} />
+            Refresh
+          </Button>
+        </div>
       }
     >
       <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4">
@@ -440,11 +643,12 @@ export function SkillPackagesPage() {
                     </p>
                   </div>
                 ) : (
-                  <nav className="box-border w-full min-w-0 max-w-full p-2" aria-label="Saved skill packages">
+                  <nav className="box-border w-full min-w-0 max-w-full px-2 pb-2 pt-2" aria-label="Skill package bundles">
                     <ul className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
                       {filteredPackages.map((pkg) => {
                         const selected = pkg.package_name === resolvedSelectedPackageName
                         const busy = downloadingName === pkg.package_name
+                        const wfCount = pkg.workflows.length
                         return (
                           <li key={pkg.package_name} className="w-full min-w-0 max-w-full">
                             <div
@@ -480,11 +684,12 @@ export function SkillPackagesPage() {
                                       aria-hidden
                                     />
                                   </div>
-                                  <span className="min-w-0 flex-1 overflow-hidden">
+                                    <span className="min-w-0 flex-1 overflow-hidden">
                                     <span className="block break-words text-sm font-medium leading-snug text-white [overflow-wrap:anywhere]">
                                       {pkg.package_name}
                                     </span>
                                     <span className="mt-0.5 block text-[11px] text-zinc-500">
+                                      {wfCount} workflow folder{wfCount === 1 ? '' : 's'} ·{' '}
                                       {formatModifiedAt(pkg.modified_at)}
                                     </span>
                                     <span className="mt-1.5 flex flex-wrap gap-1.5">
@@ -499,6 +704,20 @@ export function SkillPackagesPage() {
                                 </button>
 
                                 <div className="flex shrink-0 flex-col justify-center gap-0.5 pt-0.5">
+                                  <Button
+                                    type="button"
+                                    size="icon-sm"
+                                    variant="ghost"
+                                    aria-label={`Rename ${pkg.package_name}`}
+                                    className="cursor-pointer text-zinc-400 hover:bg-white/[0.08] hover:text-white"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setPendingRename(pkg)
+                                      setRenameValue(pkg.package_name)
+                                    }}
+                                  >
+                                    <Pencil className="size-3.5" />
+                                  </Button>
                                   <Button
                                     type="button"
                                     size="icon-sm"
@@ -542,9 +761,22 @@ export function SkillPackagesPage() {
               <div className="shrink-0 border-b border-white/10 px-3 py-2.5 sm:px-4">
                 <div className="flex flex-wrap items-start justify-between gap-2 gap-y-2">
                   <div className="min-w-0 flex flex-wrap items-center gap-2">
-                    <p className="max-w-full break-words text-base font-semibold leading-snug tracking-tight text-white [overflow-wrap:anywhere]">
-                      {resolvedSelectedPackageName ?? 'Inspector'}
-                    </p>
+                    <div className="min-w-0 max-w-full">
+                      <p className="max-w-full break-words text-base font-semibold leading-snug tracking-tight text-white [overflow-wrap:anywhere]">
+                        {selectedPackage ? selectedPackage.package_name : resolvedSelectedPackageName ?? 'Inspector'}
+                      </p>
+                      {selectedPackage ? (
+                        <>
+                          <p className="mt-0.5 font-mono text-[11px] leading-snug text-zinc-400 [overflow-wrap:anywhere]">
+                            {bundleRoot}/{selectedPackage.package_name}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
+                            {selectedPackage.workflows.length} workflow folder
+                            {selectedPackage.workflows.length === 1 ? '' : 's'}
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
                     {resolvedActiveFile ? (
                       <Badge variant="outline" className="border-white/10 bg-white/[0.05] text-xs text-zinc-300">
                         {labelForFile(resolvedActiveFile)}
@@ -616,111 +848,34 @@ export function SkillPackagesPage() {
                     >
                       <div className="flex min-h-[8rem] max-h-[min(38vh,15rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2 2xl:max-h-none 2xl:min-h-0">
                         <div className="mb-2 flex shrink-0 items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-white">Structure</p>
-                            <p className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">Engine + workflow files.</p>
+                          <div className="min-w-0 font-mono text-white">
+                            <p className="text-xs font-medium">Structure</p>
+                            <p className="mt-0.5 text-[10px] leading-relaxed text-white/70">
+                              {visibleFiles.length} file{visibleFiles.length === 1 ? '' : 's'} under{' '}
+                              <span className="text-white">{selectedPackage.package_name}/</span>
+                            </p>
                           </div>
-                          <Badge variant="outline" className="shrink-0 border-white/10 bg-white/[0.04] px-1.5 py-0 text-[10px] text-zinc-300">
-                            skill_package/
-                          </Badge>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <Badge
+                              variant="outline"
+                              className="border-white/10 bg-white/[0.04] px-1.5 py-0 text-[10px] text-white/80"
+                              title="Named packages live under output/skill_package/<name>/."
+                            >
+                              {bundleRootDisplay}/
+                            </Badge>
+                          </div>
                         </div>
 
                         <ScrollArea className="min-h-0 flex-1">
-                          <div className="space-y-0.5 rounded-lg border border-white/[0.06] bg-[#06080d] p-1.5 font-mono pb-3">
-                          <TreeItem depth={0} icon={FolderOpen} label="skill_package/" />
-                          {visibleFiles.includes('README.md') ? (
-                            <TreeItem
+                          <div className="space-y-0.5 rounded-lg border border-white/[0.06] bg-[#06080d] p-1.5 pb-3">
+                            <TreeItem depth={0} icon={FolderOpen} label={`${selectedPackage.package_name}/`} />
+                            <StructureTrieRows
+                              nodes={packagePathTrie.children}
                               depth={1}
-                              icon={FileText}
-                              label="README.md"
-                              active={resolvedActiveFile === 'README.md'}
-                              onClick={() => setActiveFile('README.md')}
-                              suffix="root"
+                              pathPrefix=""
+                              activeFile={resolvedActiveFile}
+                              onPick={setActiveFile}
                             />
-                          ) : null}
-                          {visibleFiles.includes('index.json') ? (
-                            <TreeItem
-                              depth={1}
-                              icon={FileJson}
-                              label="index.json"
-                              active={resolvedActiveFile === 'index.json'}
-                              onClick={() => setActiveFile('index.json')}
-                              suffix="root"
-                            />
-                          ) : null}
-                          <TreeItem depth={1} icon={FolderOpen} label="engine/" />
-                          {ENGINE_KEYS.filter((engineKey) => visibleFiles.includes(engineKey)).map((engineKey) => {
-                            const base = engineKey.slice('engine/'.length)
-                            return (
-                              <TreeItem
-                                key={engineKey}
-                                depth={2}
-                                icon={FileCode2}
-                                label={base}
-                                active={resolvedActiveFile === engineKey}
-                                onClick={() => setActiveFile(engineKey)}
-                                suffix="engine"
-                              />
-                            )
-                          })}
-                          <TreeItem depth={1} icon={FolderOpen} label="workflows/" />
-                          {filteredPackages.map((pkg) => {
-                            const isSelected = pkg.package_name === resolvedSelectedPackageName
-                            if (!isSelected) {
-                              return (
-                                <TreeItem
-                                  key={pkg.package_name}
-                                  depth={2}
-                                  icon={Folder}
-                                  label={`${pkg.package_name}/`}
-                                  onClick={() => setSelectedPackageName(pkg.package_name)}
-                                  suffix="workflow"
-                                />
-                              )
-                            }
-                            const workflowKeys = orderedSkillPackageKeys(visibleFiles.filter(isWorkflowScopedKey))
-                            const defs = workflowKeys.filter((k) => !k.startsWith('visuals/'))
-                            const visualKeys = workflowKeys.filter((k) => k.startsWith('visuals/'))
-                            return (
-                              <div key={pkg.package_name}>
-                                <TreeItem depth={2} icon={FolderOpen} label={`${pkg.package_name}/`} />
-                                {defs.map((filename) => {
-                                  const Icon = iconForFile(filename)
-                                  return (
-                                    <TreeItem
-                                      key={filename}
-                                      active={resolvedActiveFile === filename}
-                                      depth={3}
-                                      icon={Icon}
-                                      label={filename}
-                                      onClick={() => setActiveFile(filename)}
-                                      suffix="open"
-                                    />
-                                  )
-                                })}
-                                {visualKeys.length > 0 ? (
-                                  <>
-                                    <TreeItem depth={3} icon={Folder} label="visuals/" />
-                                    {visualKeys.map((key) => {
-                                      const name = key.slice('visuals/'.length)
-                                      const Icon = iconForFile(key)
-                                      return (
-                                        <TreeItem
-                                          key={key}
-                                          depth={4}
-                                          active={resolvedActiveFile === key}
-                                          icon={Icon}
-                                          label={name}
-                                          onClick={() => setActiveFile(key)}
-                                          suffix="visual"
-                                        />
-                                      )
-                                    })}
-                                  </>
-                                ) : null}
-                              </div>
-                            )
-                          })}
                           </div>
                         </ScrollArea>
                       </div>
@@ -732,7 +887,7 @@ export function SkillPackagesPage() {
                               <p className="truncate text-sm font-medium text-white">{resolvedActiveFile ?? 'File preview'}</p>
                               <p className="mt-1 text-xs text-zinc-500">
                                 {resolvedSelectedPackageName
-                                  ? previewPathForKey(resolvedSelectedPackageName, resolvedActiveFile)
+                                  ? previewPathForKey(bundleRoot, resolvedSelectedPackageName, resolvedActiveFile)
                                   : 'Select a file to preview'}
                               </p>
                             </div>
@@ -796,6 +951,68 @@ export function SkillPackagesPage() {
           </section>
         ) : null}
       </div>
+
+      <Dialog
+        open={pendingRename !== null}
+        onOpenChange={(open) => {
+          if (!open && !isRenaming) {
+            setPendingRename(null)
+            setRenameValue('')
+          }
+        }}
+      >
+        <DialogContent className="border-white/10 bg-[#111418] text-zinc-100">
+          <DialogHeader>
+            <DialogTitle>Rename package</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {pendingRename
+                ? `Renames ${bundleRoot}/${pendingRename.package_name} — slug is derived from the new name (e.g. spaces → underscores).`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void confirmRename()
+            }}
+          >
+            <div className="space-y-2">
+              <label className="text-xs uppercase tracking-[0.16em] text-zinc-500" htmlFor="rename-skill-package-slug">
+                Package name
+              </label>
+              <Input
+                id="rename-skill-package-slug"
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                disabled={isRenaming}
+                autoFocus
+                placeholder={pendingRename?.package_name ?? ''}
+                className="border-white/10 bg-black/20 text-zinc-100"
+              />
+            </div>
+            <DialogFooter className="border-white/8 bg-white/[0.03]">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/10 bg-transparent text-zinc-200 hover:bg-white/[0.08]"
+                onClick={() => {
+                  if (!isRenaming) {
+                    setPendingRename(null)
+                    setRenameValue('')
+                  }
+                }}
+                disabled={isRenaming}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isRenaming}>
+                {isRenaming ? 'Saving...' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={pendingDelete !== null}

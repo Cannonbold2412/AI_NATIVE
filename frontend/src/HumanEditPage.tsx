@@ -1,5 +1,8 @@
+'use client'
+
 import { type ChangeEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/layout/AppLayout'
@@ -54,9 +57,10 @@ export function HumanEditPage() {
   const EDITOR_SIDEBAR_WIDTH_KEY = 'ai-native-editor-sidebar-width'
   const EDITOR_SIDEBAR_MIN = 280
   const EDITOR_SIDEBAR_MAX = 560
-  const { skillId: skillIdParam } = useParams<{ skillId?: string }>()
+  const params = useParams<{ skillId?: string | string[] }>()
+  const skillIdParam = Array.isArray(params?.skillId) ? params.skillId[0] : params?.skillId
   const skillId = skillIdParam?.trim() || null
-  const navigate = useNavigate()
+  const router = useRouter()
   const qc = useQueryClient()
   const [flowStatus, setFlowStatus] = useState('Load a saved skill to edit, or go home to record a new one.')
   const [resumePick, setResumePick] = useState('')
@@ -228,7 +232,7 @@ export function HumanEditPage() {
     setFlowStatus('Finished editing; your skill stays the same id and title on disk.')
     void qc.invalidateQueries({ queryKey: ['skillList'] })
     toast.success(`${skillId} saved in place — same skill id as when you compiled from the recording.`)
-    navigate('/edit')
+    router.push('/edit')
   }
 
   const toggleToolsPane = (pane: 'validation' | 'suggestions' | 'variables' | 'screenshots') => {
@@ -285,11 +289,11 @@ export function HumanEditPage() {
       setSelectedStepIndex(0)
       setValidationReport(null)
       setFlowStatus(`Opened skill ${sid} for editing.`)
-      navigate(`/edit/${sid}`)
+      router.push(`/edit/${sid}`)
       void qc.invalidateQueries({ queryKey: ['workflow', sid] })
       void qc.invalidateQueries({ queryKey: ['skillList'] })
     },
-    [navigate, qc, setSelectedStepIndex, setValidationReport],
+    [qc, router, setSelectedStepIndex, setValidationReport],
   )
 
   const refreshMetrics = useCallback(() => {
@@ -312,7 +316,7 @@ export function HumanEditPage() {
         actions={
           <>
             <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
-              <Link to="/">
+              <Link href="/">
                 <Home className="size-3.5" />
                 Home
               </Link>
@@ -508,7 +512,7 @@ export function HumanEditPage() {
             </CardHeader>
             <CardContent>
               <Button variant="default" asChild className="bg-white text-black hover:bg-zinc-200">
-                <Link to="/edit">Back to choose skill</Link>
+                <Link href="/edit">Back to choose skill</Link>
               </Button>
             </CardContent>
           </Card>
@@ -569,7 +573,7 @@ export function HumanEditPage() {
       actions={
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]" asChild>
-            <Link to="/" title="Start a new recording (home)">
+            <Link href="/" title="Start a new recording (home)">
               <Home className="size-3.5" />
               <span className="hidden sm:inline">New recording</span>
             </Link>

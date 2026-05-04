@@ -1,5 +1,8 @@
+'use client'
+
 import { useMemo } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Download, FileJson, Pencil } from 'lucide-react'
 import { fetchSkillDocument } from './api/workflowApi'
@@ -21,7 +24,8 @@ function triggerJsonDownload(skillId: string, payload: Record<string, unknown>) 
 }
 
 export function SkillJsonPage() {
-  const { skillId: rawSkillId } = useParams<{ skillId: string }>()
+  const params = useParams<{ skillId: string | string[] }>()
+  const rawSkillId = Array.isArray(params?.skillId) ? params.skillId[0] : params?.skillId
   const skillId = rawSkillId?.trim() ?? ''
 
   const q = useQuery({
@@ -52,11 +56,11 @@ export function SkillJsonPage() {
       actions={
         <>
           <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
-            <Link to="/skills">Back to library</Link>
+            <Link href="/skills">Back to library</Link>
           </Button>
           {skillId ? (
             <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
-              <Link to={`/edit/${skillId}`}>
+              <Link href={`/edit/${skillId}`}>
                 <Pencil className="size-3.5" />
                 Edit
               </Link>

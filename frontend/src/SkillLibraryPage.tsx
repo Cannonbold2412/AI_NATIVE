@@ -1,5 +1,7 @@
+'use client'
+
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { deleteSkillPackage, fetchSkillList, renameSkill, type SkillSummary } from './api/workflowApi'
@@ -277,13 +279,13 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
                         <Trash2 className="size-3.5" />
                       </Button>
                       <Button asChild size="sm" variant="secondary">
-                        <Link to={`/edit/${skill.skill_id}`}>
+                        <Link href={`/edit/${skill.skill_id}`}>
                           <Pencil className="size-3.5" />
                           Edit
                         </Link>
                       </Button>
                       <Button asChild size="sm">
-                        <Link to={`/skills/${skill.skill_id}/json`}>
+                        <Link href={`/skills/${skill.skill_id}/json`}>
                           <FileJson className="size-3.5" />
                           Open
                         </Link>
@@ -323,13 +325,13 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button asChild size="sm">
-                        <Link to={`/skills/${skill.skill_id}/json`}>
+                        <Link href={`/skills/${skill.skill_id}/json`}>
                           <FileJson className="size-3.5" />
                           Open
                         </Link>
                       </Button>
                       <Button asChild size="sm" variant="secondary">
-                        <Link to={`/edit/${skill.skill_id}`}>
+                        <Link href={`/edit/${skill.skill_id}`}>
                           <Pencil className="size-3.5" />
                           Edit
                         </Link>
@@ -389,13 +391,13 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
                     </div>
                     <div className="flex justify-end gap-1.5">
                       <Button asChild size="sm">
-                        <Link to={`/skills/${skill.skill_id}/json`}>
+                        <Link href={`/skills/${skill.skill_id}/json`}>
                           <FileJson className="size-3.5" />
                           Open
                         </Link>
                       </Button>
                       <Button asChild size="sm" variant="secondary">
-                        <Link to={`/edit/${skill.skill_id}`}>
+                        <Link href={`/edit/${skill.skill_id}`}>
                           <Pencil className="size-3.5" />
                           Edit
                         </Link>

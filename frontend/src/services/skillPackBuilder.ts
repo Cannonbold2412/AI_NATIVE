@@ -1,5 +1,11 @@
 import { apiUrl } from '@/lib/apiBase'
-import { postBuildSkillPack } from '@/api/workflowApi'
+import {
+  postAppendSkillPack,
+  postAppendSkillPackStream,
+  postBuildSkillPack,
+  postBuildSkillPackStream,
+  type SkillPackBuildLogEntry,
+} from '@/api/workflowApi'
 
 const VARIABLE_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g
 
@@ -12,27 +18,28 @@ export type SkillPackInput = {
 
 export type SkillPackBuildResult = {
   name: string
+  bundleSlug: string
   indexJson: string
   skillMd: string
   executionJson: string
   recoveryJson: string
-  skillJson: string
   inputsJson: string
   manifestJson: string
-  executionMd: string
-  executionPlanJson: string
   inputCount: number
   stepCount: number
   usedLlm: boolean
   warnings: string[]
+  buildLog: SkillPackBuildLogEntry[]
 }
 
+export type { SkillPackBuildLogEntry }
+
 const SKILL_PACK_BUILD_SECONDS = {
-  min: 12,
+  min: 15,
   max: 300,
-  base: 10,
-  perStep: 1.8,
-  perInput: 0.6,
+  base: 15,
+  perStep: 2.5,
+  perInput: 0.5,
 } as const
 
 function normalizeName(raw: string): string {
@@ -157,6 +164,8 @@ export function buildManifest(inputs: SkillPackInput[], packageName = 'generated
     inputs: string
   }
   execution_mode: 'deterministic'
+  recovery_mode: 'tiered'
+  vision_enabled: true
   llm_required: false
   inputs: Array<{ name: string; type: 'string'; sensitive?: boolean }>
 } {
@@ -170,6 +179,8 @@ export function buildManifest(inputs: SkillPackInput[], packageName = 'generated
       inputs: './inputs.json',
     },
     execution_mode: 'deterministic',
+    recovery_mode: 'tiered',
+    vision_enabled: true,
     llm_required: false,
     inputs: inputs.map((input) => ({
       name: input.name,
@@ -197,25 +208,78 @@ export async function generateSkillMD(jsonText: string): Promise<string> {
   return result.skillMd
 }
 
-export async function buildSkillPackage(jsonText: string): Promise<SkillPackBuildResult> {
+export type BuildSkillPackageOptions = {
+  /** When set, uses ``POST /skill-pack/build/stream`` and invokes this for each server log row as it is produced. */
+  onLog?: (entry: SkillPackBuildLogEntry) => void
+}
+
+export type AppendWorkflowToSkillPackageOptions = {
+  /** When set, uses ``POST /skill-pack/bundles/:slug/append/stream`` and invokes this for each server log row. */
+  onLog?: (entry: SkillPackBuildLogEntry) => void
+}
+
+export async function buildSkillPackage(
+  jsonText: string,
+  packageName?: string,
+  bundleName?: string,
+  options?: BuildSkillPackageOptions,
+): Promise<SkillPackBuildResult> {
   const payload = parseJsonSource(jsonText)
   validateSource(payload)
-  const result = await postBuildSkillPack({ json_text: JSON.stringify(payload) })
+  const body = {
+    json_text: JSON.stringify(payload),
+    ...(packageName ? { package_name: packageName } : {}),
+    ...(bundleName ? { bundle_name: bundleName } : {}),
+  }
+  const result = options?.onLog
+    ? await postBuildSkillPackStream(body, options.onLog)
+    : await postBuildSkillPack(body)
   return {
     name: result.name,
+    bundleSlug: result.bundle_slug ?? bundleName ?? 'default',
     indexJson: result.index_json,
     skillMd: result.skill_md,
     executionJson: result.execution_json,
     recoveryJson: result.recovery_json,
-    skillJson: result.skill_json,
     inputsJson: result.inputs_json,
     manifestJson: result.manifest_json,
-    executionMd: result.execution_md,
-    executionPlanJson: result.execution_plan_json,
     inputCount: result.input_count,
     stepCount: result.step_count,
     usedLlm: result.used_llm,
     warnings: result.warnings,
+    buildLog: result.build_log ?? [],
+  }
+}
+
+export async function appendWorkflowToSkillPackage(
+  bundleSlug: string,
+  jsonText: string,
+  appendedPackageName?: string,
+  options?: AppendWorkflowToSkillPackageOptions,
+): Promise<SkillPackBuildResult> {
+  const payload = parseJsonSource(jsonText)
+  validateSource(payload)
+  const body = {
+    json_text: JSON.stringify(payload),
+    ...(appendedPackageName ? { package_name: appendedPackageName } : {}),
+  }
+  const result = options?.onLog
+    ? await postAppendSkillPackStream(bundleSlug, body, options.onLog)
+    : await postAppendSkillPack(bundleSlug, body)
+  return {
+    name: result.name,
+    bundleSlug: result.bundle_slug ?? bundleSlug,
+    indexJson: result.index_json,
+    skillMd: result.skill_md,
+    executionJson: result.execution_json,
+    recoveryJson: result.recovery_json,
+    inputsJson: result.inputs_json,
+    manifestJson: result.manifest_json,
+    inputCount: result.input_count,
+    stepCount: result.step_count,
+    usedLlm: result.used_llm,
+    warnings: result.warnings,
+    buildLog: result.build_log ?? [],
   }
 }
 
@@ -237,14 +301,12 @@ export async function downloadSkillPackZip(result: SkillPackBuildResult): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: result.name,
+      bundle_name: result.bundleSlug,
       skill_md: result.skillMd,
       execution_json: result.executionJson,
       recovery_json: result.recoveryJson,
-      skill_json: result.skillJson,
       inputs_json: result.inputsJson,
       manifest_json: result.manifestJson,
-      execution_md: result.executionMd,
-      execution_plan_json: result.executionPlanJson,
     }),
   })
   if (!response.ok) {

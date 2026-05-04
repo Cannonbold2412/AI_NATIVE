@@ -8,7 +8,7 @@ The implementation is centered on three layers:
 | --- | --- | --- |
 | API | `app/api/skill_pack_routes.py` | Accept build/export/list/read/delete requests |
 | Builder | `app/services/skill_pack_builder.py` | Parse raw JSON, call the structuring LLM, validate, compile, and assemble package artifacts |
-| Storage | `app/storage/skill_packages.py` | Maintain `skill_package/`, copy engine files, write workflow files, read/delete saved packages |
+| Storage | `app/storage/skill_packages.py` | Maintain `output/skill_package/<bundle_slug>/` (README, index, engine, workflows), migrate legacy flat layout once into `legacy/` |
 
 There is also an optional prose-generation helper in `app/llm/skill_pack_llm.py`, but the main build path does not use it today.
 
@@ -53,18 +53,20 @@ Raw JSON text
 
 ## What gets created
 
-A generated workflow is stored under:
+A **named bundle** (`bundle_slug`) is stored under:
 
 ```text
-skill_package/
+output/skill_package/<bundle_slug>/
   README.md
+  index.json
   engine/
+    orchestrator.ts (when present in repo engine/)
     execution.ts
     recovery.ts
     logging.ts
     config.ts
   workflows/
-    <package_name>/
+    <workflow_slug>/
       skill.md
       execution.json
       recovery.json
@@ -75,7 +77,7 @@ skill_package/
         Image_<n>.png|jpg|jpeg|gif|webp
 ```
 
-The workflow folder name is the slugified package name. This slug is the canonical runtime identifier.
+The **`bundle_slug`** is the folder you choose when building/appending (`POST /skill-pack/build` sends `bundle_name`, default **`default`**). **`workflow_slug`** is the slugified workflow name inside that bundle.
 
 ## Primary HTTP API
 
@@ -83,12 +85,18 @@ Routes live in `app/api/skill_pack_routes.py`.
 
 | Method | Path | Behavior |
 | --- | --- | --- |
-| `POST` | `/skill-pack/build` | Build a package from `{ "json_text": "..." }` |
-| `GET` | `/skill-pack/packages` | List saved workflow folders |
-| `GET` | `/skill-pack/{package_name}` | Read saved files for one package |
-| `DELETE` | `/skill-pack/{package_name}` | Delete one saved workflow folder |
-| `POST` | `/skill-pack/export` | Build a ZIP from provided file bodies |
-| `GET` | `/skill-pack/{package_name}/download` | ZIP a saved package from disk |
+| `POST` | `/skill-pack/build` | Build a workflow into `bundle_name` (default `default`): `{ "json_text", optional "package_name", "bundle_name" }` |
+| `POST` | `/skill-pack/bundles/{bundle}/build` | Same as build, bundle taken from path |
+| `POST` | `/skill-pack/bundles/{bundle}/append` | Append another workflow JSON into that bundle |
+| `GET` | `/skill-pack/packages` | List bundles (each has `workflows[]` metadata) |
+| `GET` | `/skill-pack/bundles/{bundle}` | Read flattened file map for the whole bundle |
+| `GET` | `/skill-pack/bundles/{bundle}/workflows/{workflow}` | Read bundle root + one workflow (legacy-style key layout) |
+| `DELETE` | `/skill-pack/bundles/{bundle}` | Delete an entire bundle directory |
+| `PATCH` | `/skill-pack/bundles/{bundle}` | Rename a bundle |
+| `DELETE` | `/skill-pack/bundles/{bundle}/workflows/{workflow}` | Remove one workflow folder |
+| `PATCH` | `/skill-pack/bundles/{bundle}/workflows/{workflow}` | Rename one workflow folder |
+| `POST` | `/skill-pack/export` | Build a ZIP from provided file bodies (`bundle_name` optional, default `default`) |
+| `GET` | `/skill-pack/bundles/{bundle}/download` | ZIP entire bundle from disk |
 
 The frontend wrapper is `frontend/src/api/workflowApi.ts`.
 
@@ -242,8 +250,7 @@ Transient HTTP statuses retried by the builder:
 
 Retry count:
 
-- up to `min(5, number_of_configured_keys)` when a key pool exists
-- otherwise one attempt
+- at most **3** HTTP attempts (initial call + up to two retries) on transient statuses
 
 The retry loop is only for those transient HTTP statuses.
 
@@ -753,19 +760,20 @@ Unsupported or missing assets are silently skipped.
 
 ## Step 13: Persist to disk
 
-`write_skill_package_files()` in `app/storage/skill_packages.py` writes the package.
+`write_skill_package_files(bundle_slug, workflow_slug, files, ...)` in `app/storage/skill_packages.py` writes one workflow and refreshes that bundle’s `index.json` and `README.md`.
 
 ### Scaffold behavior
 
-Before writing a workflow, `ensure_skill_package_scaffold()` guarantees:
+`ensure_bundle_scaffold(bundle_slug)` guarantees:
 
-- `skill_package/`
-- `skill_package/workflows/`
-- `skill_package/engine/`
-- `skill_package/README.md`
+- `output/skill_package/<bundle_slug>/`
+- `workflows/`
+- `engine/` (copy from repo `engine/`)
+- `README.md` (bundle-wide)
 
 The engine files are copied from the repo-level `engine/` directory:
 
+- `orchestrator.ts`
 - `execution.ts`
 - `recovery.ts`
 - `logging.ts`
@@ -791,7 +799,7 @@ These legacy files are deleted from the workflow folder if present:
 - `execution.md`
 - `execution_plan.json`
 
-That cleanup matters because the HTTP response still includes fields named `skill_json`, `execution_md`, and `execution_plan_json`, but those are not persisted as standalone files anymore.
+Those legacy response/export fields are no longer emitted or accepted; generated packages use the canonical workflow files only.
 
 ### Visuals directory behavior
 
@@ -805,23 +813,17 @@ That cleanup matters because the HTTP response still includes fields named `skil
 
 | Key | Meaning |
 | --- | --- |
-| `name` | package slug |
+| `name` | workflow folder slug |
+| `bundle_slug` | bundle directory under `output/skill_package/` |
 | `skill_md` | generated markdown |
 | `execution_json` | serialized runtime plan |
 | `recovery_json` | serialized recovery map |
-| `skill_json` | serialized validated structured workflow |
 | `inputs_json` | serialized inputs payload |
 | `manifest_json` | serialized manifest |
-| `execution_md` | markdown summary of compiled plan |
-| `execution_plan_json` | same content as `execution_json` in this path |
 | `input_count` | number of inferred inputs |
 | `step_count` | number of compiled execution steps |
 | `used_llm` | always `true` in the current build path |
 | `warnings` | currently always `[]` |
-
-### Response field caveat
-
-`execution_md` and `execution_plan_json` are convenience response fields. They are not written back to the workflow folder anymore.
 
 ## ZIP export flow
 
@@ -829,8 +831,8 @@ ZIP building lives in `build_skill_package_zip(...)`.
 
 Two entry points use it:
 
-- `POST /skill-pack/export`
-- `GET /skill-pack/{package_name}/download`
+- `POST /skill-pack/export` (optional `bundle_name` for path prefix inside the ZIP)
+- `GET /skill-pack/bundles/{bundle}/download` (full bundle tree from disk)
 
 ### Required export inputs
 
@@ -839,50 +841,30 @@ Strictly required:
 - non-empty `skill_md`
 - non-empty `inputs_json`
 - non-empty `manifest_json`
-
-### How `execution.json` is resolved during export
-
-Resolution order:
-
-1. explicit `execution_json`
-2. fallback `execution_plan_json`
-3. derive from `skill_json`
-
-If derivation is needed:
-
-- `skill_json` is parsed
-- `generate_execution_plan()` is called
-- the resulting plan is validated
-
-### How `recovery.json` is resolved during export
-
-If explicit `recovery_json` is missing:
-
-- derive from `skill_json` when available
-- otherwise use `{ "steps": [] }`
+- non-empty `execution_json`
+- non-empty `recovery_json`
 
 ### ZIP contents
 
-The archive always includes:
+`POST /skill-pack/export` uses `output/skill_package/<bundle>/` as the logical root (`<bundle>` from `bundle_name`, default `default`). The archive includes:
 
-- `skill_package/README.md`
-- `skill_package/engine/*.ts`
-- `skill_package/workflows/<name>/skill.md`
-- `skill_package/workflows/<name>/execution.json`
-- `skill_package/workflows/<name>/recovery.json`
-- `skill_package/workflows/<name>/inputs.json`
-- `skill_package/workflows/<name>/manifest.json`
+- `<root>/README.md`
+- `<root>/<index>.json`
+- `<root>/engine/*.ts`
+- `<root>/workflows/<workflow_slug>/skill.md`
+- `<root>/workflows/<workflow_slug>/execution.json`
+- `<root>/workflows/<workflow_slug>/recovery.json`
+- `<root>/workflows/<workflow_slug>/inputs.json`
+- `<root>/workflows/<workflow_slug>/manifest.json`
 
-It also includes:
+Workflow `visuals/`:
 
-- `visuals/<Image_*>` files when they exist on disk for that package
-- otherwise `visuals/.gitkeep`
+- populated when assets exist under that workflow folder on disk
+- otherwise `<root>/workflows/<workflow_slug>/visuals/.gitkeep`
 
-The ZIP filename is:
+The export ZIP filename is derived from the bundle path and workflow slug, e.g. `output_skill_package_<bundle>_<workflow>.zip`.
 
-```text
-skill_package_<slug>.zip
-```
+`GET /skill-pack/bundles/{bundle}/download` zips the on-disk bundle tree as-is under `output/skill_package/<bundle>/`.
 
 ## Runtime execution model
 
@@ -943,30 +925,28 @@ Important limitation:
 
 ### List
 
-`list_skill_package_summaries()`:
+`list_skill_bundle_summaries()` (exposed via `GET /skill-pack/packages` as `packages`):
 
-- scans `skill_package/workflows/`
-- sorts folders by modification time descending
-- returns only folders that contain at least one canonical workflow file
+- scans direct child directories of `output/skill_package/`
+- each entry is one **bundle**; nested `workflows/` holds workflow folders with manifests
+- sorts bundles by newest workflow modification time descending
 
 Each row contains:
 
-- `package_name`
+- `package_name` — the bundle slug
 - `modified_at`
-- `files`
+- `workflows` — per-workflow metadata (`workflow_slug`, labels, file list)
+- `files` — flattened search keys for UI (e.g. `workflows/foo/skill.md`)
 
 ### Read
 
-`read_skill_package_files(package_name)` returns:
-
-- root `README.md`
-- all engine files under `engine/`
-- workflow files
-- visual assets encoded as base64 under keys like `visuals/Image_1.png`
+- `read_skill_package_bundle_files(bundle_slug)` — full bundle as a flat key map (`README.md`, `engine/...`, `workflows/<slug>/...`).
+- `read_skill_package_files(bundle_slug, workflow_slug)` — bundle README/index/engine plus **unprefixed** keys for one workflow (`skill.md`, `visuals/...`).
 
 ### Delete
 
-`delete_skill_package(package_name)` removes the workflow directory with `shutil.rmtree`.
+- `delete_skill_package_bundle(bundle_slug)` removes the entire bundle directory.
+- `delete_skill_package_workflow(bundle_slug, workflow_slug)` removes one workflow folder and refreshes `index.json`.
 
 ## Important invariants
 
@@ -990,7 +970,6 @@ If one of those moves and the others do not, the builder will either reject vali
 - Success validation for login is hard-coded to `text=Dashboard`.
 - Recovery is heuristic and strongest for text-based selectors.
 - `skill.md` is deterministic and concise; it is not a full natural-language agent spec.
-- `execution_md` exists in responses but is not persisted on disk.
 - `scroll` is fully supported in builder and runtime even if older docs or callers assume otherwise.
 - Visual assets are best-effort. Missing images do not fail the build.
 

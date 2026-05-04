@@ -2,7 +2,7 @@
 
 Pipeline:
 
-``raw skills.json -> LLM structuring -> deterministic compiler -> package files``.
+``raw skills.json -> declaration cleanup -> LLM structuring (trimmed steps) -> compiler -> package files``.
 
 The LLM is the only layer that interprets messy recordings. This module only
 validates structured output, compiles allowed runtime actions, and writes the
@@ -11,11 +11,17 @@ package artifacts.
 
 from __future__ import annotations
 
+import copy
+import logging
 import json
 import re
+import time
+import base64
+import tempfile
 from collections.abc import Iterable
 from io import BytesIO
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 from urllib import error, request
 from urllib.parse import parse_qs, urlparse, urlunparse
@@ -23,15 +29,40 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from app.config import settings
 from app.llm.pack_llm_keys import configured_pack_keys, next_pack_api_key
+from app.services.skill_pack_build_log import skill_pack_build_log_scope, skill_pack_log_append
 from app.storage.skill_packages import (
+    BUNDLE_SKILL_MANIFEST_FILENAME,
     INDEX_FILENAME,
-    SKILL_PACKAGE_DIRNAME,
+    INSTALL_BAT_FILENAME,
+    INSTALL_JS_FILENAME,
     VISUAL_IMAGE_SUFFIXES,
+    bundle_root_dir,
+    format_bundle_skill_manifest_text,
+    format_install_bat_text,
+    format_install_js_text,
+    read_bridge_files,
+    read_cli_files,
     read_engine_files,
+    read_skill_package_files,
     read_skill_package_visual_asset_bytes,
-    skill_package_readme,
+    resolve_workflow_dir,
+    skill_package_root_posix,
+    validate_bundle_slug,
+    write_bundle_skill_manifest,
+    write_skill_package_index,
     write_skill_package_files,
 )
+
+_logger = logging.getLogger(__name__)
+
+
+class SkillPackBuildUserError(ValueError):
+    """Validation or LLM failure with any ``build_log`` rows gathered so far."""
+
+    def __init__(self, message: str, build_log: list[dict[str, Any]]) -> None:
+        super().__init__(message)
+        self.build_log = build_log
+
 
 _PACK_LLM_TRANSIENT_HTTP = frozenset({502, 503, 504})
 
@@ -97,6 +128,7 @@ Output JSON ONLY:
 """
 
 _VAR_PATTERN = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+_HYPHEN_COLLAPSE_RE = re.compile(r"-+")
 _CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 _NON_WORD = re.compile(r"[^a-zA-Z0-9]+")
 _TEXT_SELECTOR_RE = re.compile(r"^\s*text\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|(.+?))\s*$", re.IGNORECASE)
@@ -107,6 +139,7 @@ _STEP_CONTAINER_KEYS = ("skills", "workflows", "flows", "scenarios", "recordings
 _METADATA_KEYS = ("meta", "package_meta", "metadata", "package", "workflow", "recording", "session")
 _TITLE_KEYS = ("title", "name", "id", "slug", "workflow_name", "workflowName")
 _INPUT_CONTAINER_KEYS = ("inputs", "parameters", "params", "variables")
+_INPUT_DECLARATION_KEYS = frozenset(_INPUT_CONTAINER_KEYS)
 _INPUT_NAME_KEYS = ("name", "id", "key", "label", "input_name", "inputName", "field", "binding")
 _STEP_VISUAL_KEYS = ("full_screenshot", "scroll_screenshot", "element_snapshot")
 _STEP_SCREENSHOT_URL_KEYS = ("full_url", "scroll_url", "element_url")
@@ -114,9 +147,11 @@ _STEP_SCREENSHOT_URL_KEYS = ("full_url", "scroll_url", "element_url")
 _ALLOWED_STRUCTURED_TYPES = {"navigate", "fill", "click", "scroll"}
 _ALLOWED_EXECUTION_TYPES = {"navigate", "fill", "click", "assert_visible", "scroll"}
 _GENERIC_SELECTORS = {"input", "button", "textarea", "select"}
+_GENERIC_LABELS = {"input", "button", "textarea", "select"}
 _SENSITIVE_HINTS = ("password", "passcode", "passwd", "secret", "token", "api_key", "apikey", "private_key", "credential", "auth", "otp", "pin")
 _LOGIN_TEXT = ("sign in", "signin", "log in", "login")
 _DESTRUCTIVE_TEXT = ("delete", "remove", "destroy", "drop", "archive", "reset", "disable", "revoke")
+_RECOVERY_VISUAL_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 
 
 def _parse_json_text(json_text: str) -> Any:
@@ -127,6 +162,64 @@ def _parse_json_text(json_text: str) -> Any:
     if not isinstance(payload, (dict, list)):
         raise ValueError("JSON root must be an object or array.")
     return payload
+
+
+def preprocess_skill_pack_declarations(value: Any) -> Any:
+    """Return a deep copy with unused declaration blocks removed from the whole tree.
+
+    Drops ``inputs`` / ``parameters`` / ``params`` / ``variables`` everywhere — the
+    pack builder does not use them for ``inputs.json`` (only ``{{placeholders}}`` in
+    structured steps matter). Screenshot and session fields are left intact so
+    ``_collect_visual_assets`` can still resolve ``visuals/`` files.
+    """
+
+    root = copy.deepcopy(value)
+    _preprocess_declaration_blocks_in_place(root)
+    return root
+
+
+def _preprocess_declaration_blocks_in_place(node: Any) -> None:
+    if isinstance(node, list):
+        for item in node:
+            _preprocess_declaration_blocks_in_place(item)
+        return
+    if not isinstance(node, dict):
+        return
+
+    for key in list(node.keys()):
+        if key in _INPUT_DECLARATION_KEYS:
+            del node[key]
+
+    for child in list(node.values()):
+        _preprocess_declaration_blocks_in_place(child)
+
+
+def sanitize_raw_steps_for_llm(raw_steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deep-copy raw recording steps and drop heavy fields only for the structuring LLM.
+
+    The on-disk payload still carries screenshots for asset collection; the chat
+    request omits ``screenshot`` / ``visual`` / ``signals.visual`` / ``extras.session_id``
+    to shrink tokens.
+    """
+
+    return [_sanitize_recording_step_for_llm(step) for step in raw_steps if isinstance(step, dict)]
+
+
+def _sanitize_recording_step_for_llm(step: dict[str, Any]) -> dict[str, Any]:
+    c = copy.deepcopy(step)
+    c.pop("screenshot", None)
+    c.pop("visual", None)
+    sig = c.get("signals")
+    if isinstance(sig, dict):
+        sig.pop("visual", None)
+        if not sig:
+            c.pop("signals", None)
+    extras = c.get("extras")
+    if isinstance(extras, dict):
+        extras.pop("session_id", None)
+        if not extras:
+            c.pop("extras", None)
+    return c
 
 
 def _normalize_name(raw: str) -> str:
@@ -145,6 +238,47 @@ def _humanize_name(name: str) -> str:
 
 def _slugify_name(value: str) -> str:
     return _normalize_name(value) or "generated_skill"
+
+
+def slugify_skill_package_folder_name(value: str) -> str:
+    """Stable slug for workflow folder names under ``workflows/``."""
+
+    return _slugify_name(value)
+
+
+def slugify_skill_bundle_name(value: str | None) -> str:
+    """Stable slug for a named skill package bundle under ``output/skill_package/``."""
+
+    return _slugify_name(value or "default")
+
+
+def hyphen_skill_plugin_name(raw_slug: str) -> str:
+    """Normalize a slug to hyphen-case for OpenCode / Claude / Codex skill folder ``name`` fields."""
+
+    base = str(raw_slug or "").strip().lower().replace("_", "-")
+    base = _HYPHEN_COLLAPSE_RE.sub("-", base).strip("-")
+    if not base:
+        base = "generated-skill"
+    if len(base) > 64:
+        base = base[:64].strip("-")
+    return base or "generated-skill"
+
+
+def skill_package_agent_plugin_name(bundle_slug: str, workflow_slug: str) -> str:
+    """Per-workflow plugin folder name: ``<bundle>_<workflow>`` → hyphen form (e.g. ``render`` + ``deploy_app`` → ``render-deploy-app``)."""
+
+    return hyphen_skill_plugin_name(f"{bundle_slug}_{workflow_slug}")
+
+
+def _bundle_skill_file_path(bundle_slug: str) -> str:
+    return BUNDLE_SKILL_MANIFEST_FILENAME.format(bundle_slug=bundle_slug)
+
+
+def _resolve_bundle_slug(explicit: str | None) -> str:
+    slug = slugify_skill_bundle_name(explicit)
+    if not validate_bundle_slug(slug):
+        raise ValueError(f'Invalid skill package name "{explicit}". Reserved or malformed slugs are not allowed.')
+    return slug
 
 
 def _json_text(value: Any) -> str:
@@ -201,11 +335,78 @@ def _extract_steps(payload: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _raw_workflow_title(item: dict[str, Any], fallback_index: int) -> str:
+    return (
+        _first_text_from_keys(item, _TITLE_KEYS)
+        or _first_text_from_keys(_get_mapping(item.get("meta")), _TITLE_KEYS)
+        or f"workflow_{fallback_index}"
+    )
+
+
+def _enumerate_raw_workflows(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        steps = _extract_steps(payload)
+        return [{"title": "generated_skill", "payload": payload, "steps": steps}] if steps else []
+
+    for key in _STEP_CONTAINER_KEYS:
+        container = payload.get(key)
+        if isinstance(container, list):
+            workflows: list[dict[str, Any]] = []
+            for index, item in enumerate(container, start=1):
+                if not isinstance(item, dict):
+                    continue
+                steps = _extract_steps(item)
+                if not steps:
+                    continue
+                workflows.append({"title": _raw_workflow_title(item, index), "payload": item, "steps": steps})
+            if workflows:
+                return workflows
+        if isinstance(container, dict):
+            workflows = []
+            for index, (name, item) in enumerate(container.items(), start=1):
+                if not isinstance(item, dict):
+                    continue
+                steps = _extract_steps(item)
+                if not steps:
+                    continue
+                workflows.append(
+                    {
+                        "title": _first_text_from_keys(item, _TITLE_KEYS) or str(name) or f"workflow_{index}",
+                        "payload": item,
+                        "steps": steps,
+                    }
+                )
+            if workflows:
+                return workflows
+
+    steps = _extract_steps(payload)
+    return [{"title": _package_title(payload), "payload": payload, "steps": steps}] if steps else []
+
+
+def _primary_skill_sheet_title(payload: dict[str, Any]) -> str:
+    """Prefer a human workflow title nested under skills[] instead of root skill_* ids."""
+
+    raw = payload.get("skills")
+    if not isinstance(raw, list):
+        return ""
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        for key in ("title", "name"):
+            text = _json_text(item.get(key))
+            if text and text != "default":
+                return text
+    return ""
+
+
 def _package_title(payload: Any, structured: dict[str, Any] | None = None) -> str:
     goal = _json_text((structured or {}).get("goal"))
     if goal:
         return goal
     if isinstance(payload, dict):
+        nested = _primary_skill_sheet_title(payload)
+        if nested:
+            return nested
         for container in (*(_get_mapping(payload.get(key)) for key in _METADATA_KEYS), payload):
             value = _first_text_from_keys(container, _TITLE_KEYS)
             if value:
@@ -449,9 +650,13 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
         body["response_format"] = {"type": "json_object"}
     raw_body = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     url = _chat_completions_url(endpoint)
+    parsed_call = urlparse(url)
+    api_path = (parsed_call.path or "/").strip() or "/"
+    strict_json_response = body.get("response_format") is not None
     _timeout_s = max(0.2, settings.pack_llm_timeout_ms / 1000.0)
-    keys_pool = configured_pack_keys()
-    max_tries = min(5, max(1, len(keys_pool))) if keys_pool else 1
+    # Transient 5xx retries: up to this many HTTP POSTs total (initial + retries).
+    max_tries = 3
+    raw_step_count = len(raw_steps)
 
     raw = ""
     for attempt in range(max_tries):
@@ -461,23 +666,131 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
             headers["Authorization"] = f"Bearer {pack_key}"
 
         req = request.Request(url, data=raw_body, headers=headers, method="POST")
+        skill_pack_log_append(
+            {
+                "kind": "llm_request_sent",
+                "attempt": attempt + 1,
+                "model": model,
+                "host": (parsed_ep.netloc or "").lower() or None,
+                "path": api_path,
+                "timeout_ms": int(settings.pack_llm_timeout_ms),
+                "payload_bytes": len(raw_body),
+                "raw_step_count": raw_step_count,
+                "max_attempts": max_tries,
+                "strict_json_response": strict_json_response,
+            }
+        )
+        t0 = time.perf_counter()
         try:
             with request.urlopen(req, timeout=_timeout_s) as res:
                 raw = res.read().decode("utf-8")
+                skill_pack_log_append(
+                    {
+                        "kind": "llm_response_received",
+                        "attempt": attempt + 1,
+                        "elapsed_ms": round((time.perf_counter() - t0) * 1000, 2),
+                        "response_chars": len(raw),
+                    }
+                )
                 break
         except error.HTTPError as exc:
+            err_preview = ""
+            try:
+                err_chunk = exc.read()
+                err_preview = err_chunk.decode("utf-8", errors="replace").strip().replace("\n", " ")[:1400]
+            except Exception:
+                err_preview = ""
+            elapsed_http = round((time.perf_counter() - t0) * 1000, 2)
+            skill_pack_log_append(
+                {
+                    "kind": "llm_http_error",
+                    "attempt": attempt + 1,
+                    "status": exc.code,
+                    "reason": str(exc.reason),
+                    "elapsed_ms": elapsed_http,
+                    "response_body_chars": len(err_preview),
+                    **({"response_body_preview": err_preview} if err_preview else {}),
+                }
+            )
             if exc.code in _PACK_LLM_TRANSIENT_HTTP and attempt < max_tries - 1:
+                skill_pack_log_append(
+                    {"kind": "llm_retry", "attempt": attempt + 1, "reason": f"HTTP {exc.code}"}
+                )
                 continue
-            raise ValueError(
-                f"LLM structuring request failed (HTTP {exc.code}: {exc.reason!s})."
-            ) from exc
+            _logger.warning(
+                "LLM structuring HTTP failure final host=%s path=%s model=%s steps=%s attempt=%s/%s status=%s elapsed_ms=%s preview=%s",
+                (parsed_ep.netloc or "").lower(),
+                api_path,
+                model,
+                raw_step_count,
+                attempt + 1,
+                max_tries,
+                exc.code,
+                elapsed_http,
+                (err_preview[:240] + "…") if len(err_preview) > 240 else err_preview,
+            )
+            msg = (
+                f"LLM structuring request failed (HTTP {exc.code}: {exc.reason!s}); "
+                f"attempt {attempt + 1}/{max_tries}, {raw_step_count} raw steps, POST {api_path}."
+            )
+            if err_preview:
+                frag = err_preview[:420]
+                if len(err_preview) > 420:
+                    frag += "…"
+                msg += f" Response body fragment: {frag}"
+            raise ValueError(msg) from exc
         except (error.URLError, TimeoutError, OSError, ValueError) as exc:
-            raise ValueError("LLM structuring request failed.") from exc
+            elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+            is_timeout = isinstance(exc, TimeoutError) or (
+                isinstance(exc, error.URLError)
+                and exc.reason is not None
+                and "timed out" in str(exc.reason).lower()
+            )
+            if is_timeout:
+                skill_pack_log_append(
+                    {
+                        "kind": "llm_timeout",
+                        "attempt": attempt + 1,
+                        "timeout_ms": int(settings.pack_llm_timeout_ms),
+                        "elapsed_ms": elapsed_ms,
+                        "path": api_path,
+                        "raw_step_count": raw_step_count,
+                    }
+                )
+            else:
+                skill_pack_log_append(
+                    {
+                        "kind": "llm_network_error",
+                        "attempt": attempt + 1,
+                        "elapsed_ms": elapsed_ms,
+                        "detail": str(exc)[:500],
+                        "exc_type": type(exc).__name__,
+                    }
+                )
+            detail = (
+                f"LLM structuring request failed ({type(exc).__name__}); attempt {attempt + 1}/{max_tries}; "
+                f"{raw_step_count} raw steps; POST {api_path}: {exc!s}"
+            )
+            _logger.warning("LLM structuring transport error %s", detail[:700])
+            raise ValueError(detail) from exc
 
+    t_parse0 = time.perf_counter()
     try:
         response = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise ValueError("LLM structuring provider returned invalid JSON.") from exc
+    skill_pack_log_append(
+        {
+            "kind": "llm_response_parsed",
+            "elapsed_ms": round((time.perf_counter() - t_parse0) * 1000, 2),
+            "response_chars": len(raw),
+            **(
+                {"top_level_keys": sorted(response.keys())}
+                if isinstance(response, dict) and len(response) <= 24
+                else {"dict_key_estimate": len(response) if isinstance(response, dict) else 0}
+            ),
+        }
+    )
     if not isinstance(response, dict):
         raise ValueError("LLM structuring provider returned an invalid response.")
     if "goal" in response and "steps" in response:
@@ -591,7 +904,7 @@ def structure_steps_with_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
 
     if not raw_steps:
         raise ValueError("No workflow steps detected in JSON.")
-    structured = _call_structuring_llm(raw_steps)
+    structured = _call_structuring_llm(sanitize_raw_steps_for_llm(raw_steps))
     return _validate_structured_output(structured)
 
 
@@ -671,19 +984,13 @@ def generate_execution_plan(payload: Any, inputs: list[dict[str, Any]] | None = 
 def _selector_target(step: dict[str, Any]) -> dict[str, str]:
     selector = str(step.get("selector") or "")
     text = _selector_text(selector)
-    target_type = "field" if step.get("type") == "fill" else "button"
-    section = ""
-    lowered = text.lower()
-    if any(token in lowered for token in _DESTRUCTIVE_TEXT):
-        section = "danger zone"
-    elif any(token in lowered for token in _LOGIN_TEXT):
-        section = "login form"
-    return {"text": text, "type": target_type, "section": section}
+    role = "textbox" if step.get("type") == "fill" else ""
+    return {"text": text, "role": role}
 
 
 def _recovery_slug_from_step(step: dict[str, Any]) -> str:
     target = _selector_target(step)
-    raw = " ".join(part for part in (str(step.get("type") or ""), target["text"] or target["type"]) if part)
+    raw = " ".join(part for part in (str(step.get("type") or ""), target["text"] or target["role"] or "action") if part)
     return _normalize_name(raw)
 
 
@@ -708,50 +1015,187 @@ def _fallback_text_variants(text: str) -> list[str]:
     out: list[str] = []
     for item in variants:
         clean = " ".join(item.split())
-        if clean and clean not in out:
+        if clean and clean.lower() not in _GENERIC_LABELS and clean not in out:
             out.append(clean)
     return out[:4]
 
 
-def _anchors_for_step(target: dict[str, str]) -> list[str]:
-    anchors: list[str] = []
-    section = target.get("section", "")
-    if section:
-        anchors.append(section)
-    text = target.get("text", "").lower()
-    if section == "danger zone" or any(token in text for token in _DESTRUCTIVE_TEXT):
-        anchors.append("bottom")
-    return anchors
+def _sanitize_recovery_label(value: Any) -> str:
+    clean = " ".join(str(value or "").split())
+    if not clean:
+        return ""
+    if clean.lower() in _GENERIC_LABELS:
+        return ""
+    return clean
 
 
-def _visual_hint_for_step(step: dict[str, Any], target: dict[str, str]) -> str:
-    text = target.get("text", "").lower()
+def _sanitize_recovery_selector(selector: Any) -> str:
+    text = str(selector or "").strip()
+    if not text:
+        return ""
+    if _is_xpath(text) or "xpath" in text.lower():
+        return ""
+    lowered = text.lower()
+    if lowered.startswith(".") or "[class" in lowered or "class=" in lowered:
+        return ""
+    return text
+
+
+def _selector_alternatives(step: dict[str, Any], target: dict[str, str]) -> list[str]:
+    selector = _sanitize_recovery_selector(step.get("selector"))
+    if not selector:
+        return []
+    out: list[str] = []
+    text = _sanitize_recovery_label(target.get("text"))
+    if selector.lower().startswith("text=") and text:
+        out.append(f"text={json.dumps(text)}")
     if step.get("type") == "fill":
-        return "text input"
-    if target.get("section") == "danger zone" or any(token in text for token in _DESTRUCTIVE_TEXT):
-        return "red button"
-    return "visible button"
+        match = _INPUT_NAME_RE.search(selector)
+        if match:
+            name = match.group(1).strip()
+            out.append(f'input[name="{name}"]')
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in out:
+        clean = _sanitize_recovery_selector(item)
+        if clean and clean != selector and clean not in seen:
+            seen.add(clean)
+            deduped.append(clean)
+    return deduped
 
 
-def generate_recovery(structured_steps: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:
+def _anchors_for_step(step: dict[str, Any], target: dict[str, str]) -> list[dict[str, Any]]:
+    anchors: list[dict[str, Any]] = []
+    target_text = _sanitize_recovery_label(target.get("text"))
+    lowered = target_text.lower()
+    if any(token in lowered for token in _LOGIN_TEXT):
+        anchors.append({"text": "Login", "priority": 1})
+    if any(token in lowered for token in _DESTRUCTIVE_TEXT):
+        anchors.append({"text": "Danger Zone", "priority": 1})
+    if step.get("type") == "fill" and target_text:
+        anchors.append({"text": target_text, "priority": 2})
+    elif step.get("type") == "click" and target_text:
+        anchors.append({"text": target_text, "priority": 2})
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for anchor in anchors:
+        text = _sanitize_recovery_label(anchor.get("text"))
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        deduped.append({"text": text, "priority": int(anchor.get("priority") or 1)})
+    return deduped[:4]
+
+
+def get_visual_ref(step_id: int, visuals_dir: Path) -> str | None:
+    for suffix in _RECOVERY_VISUAL_SUFFIXES:
+        path = visuals_dir / f"Image_{step_id}{suffix}"
+        if path.is_file():
+            return f"visuals/{path.name}"
+    return None
+
+
+def _build_recovery_entry(step: dict[str, Any], step_id: int, visuals_dir: Path | None) -> dict[str, Any]:
+    selector = _sanitize_recovery_selector(step.get("selector"))
+    if not selector:
+        raise ValueError(f"Recovery step {step_id} is missing a valid selector.")
+    target = _selector_target(step)
+    target_text = _sanitize_recovery_label(target.get("text"))
+    fallback_role = target.get("role") or ""
+    entry: dict[str, Any] = {
+        "step_id": step_id,
+        "intent": _recovery_slug_from_step(step),
+        "target": {
+            "text": target_text,
+            "role": target.get("role") or "",
+        },
+        "anchors": _anchors_for_step(step, target),
+        "fallback": {
+            "text_variants": _fallback_text_variants(target_text),
+            "role": fallback_role,
+        },
+        "selector_context": {
+            "primary": selector,
+            "alternatives": _selector_alternatives(step, target),
+        },
+        "visual_metadata": {
+            "step_id": step_id,
+            "source": "stored_step_visual",
+            "available": False,
+        },
+        "recovery_metadata": {
+            "mode": "tiered",
+            "action_type": str(step.get("type") or ""),
+            "generated_by": "skill_pack_builder",
+        },
+    }
+    if visuals_dir is not None:
+        visual_ref = get_visual_ref(step_id, visuals_dir)
+        if visual_ref:
+            entry["visual_ref"] = visual_ref
+            entry["visual_metadata"]["available"] = True
+    return entry
+
+
+def _validate_recovery_entries(compiled: list[dict[str, Any]], entries: list[dict[str, Any]], visuals_dir: Path | None) -> None:
+    actionable_steps = [index for index, step in enumerate(compiled, start=1) if step.get("type") in {"fill", "click"}]
+    if len(entries) != len(actionable_steps):
+        raise ValueError("Every compiled fill/click step must have exactly one recovery entry.")
+    by_step_id: dict[int, list[dict[str, Any]]] = {}
+    for entry in entries:
+        by_step_id.setdefault(int(entry.get("step_id") or 0), []).append(entry)
+        if not str(entry.get("intent") or "").strip():
+            raise ValueError("Recovery entries must include intent.")
+        anchors = entry.get("anchors")
+        if not isinstance(anchors, list) or not anchors:
+            raise ValueError("Recovery entries must include anchors.")
+        if not all(_sanitize_recovery_label(_get_mapping(anchor).get("text")) for anchor in anchors):
+            raise ValueError("Recovery anchors must use non-generic text labels.")
+        fallback = _get_mapping(entry.get("fallback"))
+        text_variants = fallback.get("text_variants")
+        if not isinstance(text_variants, list) or not text_variants:
+            raise ValueError("Recovery fallback.text_variants is required.")
+        if not all(_sanitize_recovery_label(item) for item in text_variants):
+            raise ValueError("Recovery fallback.text_variants must be non-generic labels.")
+        selector_context = _get_mapping(entry.get("selector_context"))
+        primary = _sanitize_recovery_selector(selector_context.get("primary"))
+        alternatives = selector_context.get("alternatives")
+        if not primary or not isinstance(alternatives, list):
+            raise ValueError("Recovery selector_context must include primary and alternatives.")
+        if any(not _sanitize_recovery_selector(item) for item in alternatives):
+            raise ValueError("Recovery selector_context alternatives must be valid selectors.")
+        if "validation" in json.dumps(entry, ensure_ascii=False).lower():
+            raise ValueError("Recovery entries must not include validation data.")
+        if "scroll" in json.dumps(entry, ensure_ascii=False).lower():
+            raise ValueError("Recovery entries must not include scroll data.")
+        if visuals_dir is None:
+            if "visual_ref" in entry:
+                raise ValueError("visual_ref requires an existing visuals directory.")
+        else:
+            expected_ref = get_visual_ref(int(entry["step_id"]), visuals_dir)
+            actual_ref = entry.get("visual_ref")
+            if actual_ref and actual_ref != expected_ref:
+                raise ValueError("visual_ref must point to the matching Image_<step_id> asset.")
+            if expected_ref is None and actual_ref:
+                raise ValueError("visual_ref must be omitted when the step image is missing.")
+            if expected_ref is not None and actual_ref != expected_ref:
+                raise ValueError("visual_ref must be present only for matching step images.")
+    for step_id in actionable_steps:
+        if len(by_step_id.get(step_id, [])) != 1:
+            raise ValueError("Every compiled fill/click step must have exactly one recovery entry.")
+
+
+def generate_recovery(
+    structured_steps: dict[str, Any] | list[dict[str, Any]],
+    visuals_dir: Path | None = None,
+) -> dict[str, Any]:
     compiled = compile_execution(structured_steps)
     entries: list[dict[str, Any]] = []
     for index, step in enumerate(compiled, start=1):
         if step.get("type") not in {"fill", "click"}:
             continue
-        target = _selector_target(step)
-        entries.append(
-            {
-                "step_id": index,
-                "intent": _recovery_slug_from_step(step),
-                "target": target,
-                "anchors": _anchors_for_step(target),
-                "fallback": {
-                    "text_variants": _fallback_text_variants(target.get("text", "")),
-                    "visual_hint": _visual_hint_for_step(step, target),
-                },
-            }
-        )
+        entries.append(_build_recovery_entry(step, index, visuals_dir))
+    _validate_recovery_entries(compiled, entries, visuals_dir)
     return {"steps": entries}
 
 
@@ -835,6 +1279,8 @@ def build_manifest(inputs: list[dict[str, Any]], package_name: str, description:
             "inputs": "./inputs.json",
         },
         "execution_mode": "deterministic",
+        "recovery_mode": "tiered",
+        "vision_enabled": True,
         "llm_required": False,
         "inputs": [
             {
@@ -916,8 +1362,15 @@ def _instruction_for_step(step: dict[str, Any]) -> str:
     return ""
 
 
-def generate_skill_markdown(package_name: str, structured_steps: dict[str, Any], inputs: list[dict[str, Any]]) -> str:
-    lines = [f"# {package_name}", "", "## Inputs"]
+def generate_skill_markdown(
+    package_name: str,
+    structured_steps: dict[str, Any],
+    inputs: list[dict[str, Any]],
+    *,
+    document_title: str | None = None,
+) -> str:
+    heading = (document_title or "").strip() or _humanize_name(package_name).title()
+    lines = [f"# {heading}", "", "## Inputs"]
     if inputs:
         for item in inputs:
             suffix = " Keep this value secure." if item.get("sensitive") else ""
@@ -977,92 +1430,334 @@ def _validate_execution_plan(plan: list[dict[str, Any]]) -> None:
         raise ValueError("execution.json must contain at least one click and one fill step.")
 
 
-def build_skill_package(json_text: str) -> dict[str, Any]:
-    payload = _parse_json_text(json_text)
-    raw_steps = _extract_steps(payload)
+def _pipeline_phase_append(phase: str, state: str, **fields: Any) -> None:
+    row: dict[str, Any] = {"kind": "pipeline_phase", "phase": phase, "state": state}
+    row.update(fields)
+    skill_pack_log_append(row)
+
+
+def _compile_workflow_payload(payload: Any, raw_steps: list[dict[str, Any]], package_name: str | None = None, source_title: str = "") -> dict[str, Any]:
     if not raw_steps:
         raise ValueError("No workflow steps detected in JSON.")
+    wt = str(source_title or "").strip() or "workflow"
+    _pipeline_phase_append("llm_structure", "start", workflow_title=wt, raw_step_count=len(raw_steps))
+    t_llm = time.perf_counter()
     structured = structure_steps_with_llm(raw_steps)
-    package_name = _slugify_name(_package_title(payload, structured))
+    _pipeline_phase_append(
+        "llm_structure",
+        "done",
+        workflow_title=wt,
+        elapsed_ms=round((time.perf_counter() - t_llm) * 1000, 2),
+        canonical_step_count=len(structured["steps"]),
+        goal_chars=len(str(structured.get("goal") or "")),
+    )
+    package_name = _slugify_name(package_name or source_title or _package_title(payload, structured=None) or "generated_skill")
+    _pipeline_phase_append(
+        "deterministic_compile",
+        "start",
+        workflow_title=wt,
+        package_name=package_name,
+    )
+    t_det = time.perf_counter()
     inputs = parse_inputs(structured)
     execution_plan = compile_execution(structured)
     _validate_execution_plan(execution_plan)
-    recovery_map = generate_recovery(structured)
     manifest = build_manifest(inputs, package_name, str(structured.get("goal") or ""))
-    skill_md = generate_skill_markdown(package_name, structured, inputs)
-
+    skill_md = generate_skill_markdown(
+        package_name,
+        structured,
+        inputs,
+        document_title=(source_title or "").strip() or None,
+    )
+    _pipeline_phase_append(
+        "deterministic_compile",
+        "done",
+        workflow_title=wt,
+        elapsed_ms=round((time.perf_counter() - t_det) * 1000, 2),
+        execution_plan_steps=len(execution_plan),
+        input_slots=len(inputs),
+        skill_md_chars=len(skill_md),
+    )
+    visual_assets = _collect_visual_assets(payload)
+    viz_count = len(visual_assets) if isinstance(visual_assets, dict) else 0
+    _pipeline_phase_append("recovery_map", "start", workflow_title=wt, visual_assets=viz_count)
+    t_rec = time.perf_counter()
+    with tempfile.TemporaryDirectory() as tmp:
+        visuals_dir = Path(tmp) / "visuals"
+        visuals_dir.mkdir(parents=True, exist_ok=True)
+        for filename, content in sorted(visual_assets.items()):
+            safe_name = Path(filename).name
+            if not safe_name:
+                continue
+            (visuals_dir / safe_name).write_bytes(content)
+        recovery_map = generate_recovery(structured, visuals_dir)
+    rec_items = recovery_map.get("steps") if isinstance(recovery_map, dict) else []
+    rec_n = len(rec_items) if isinstance(rec_items, list) else 0
+    _pipeline_phase_append(
+        "recovery_map",
+        "done",
+        workflow_title=wt,
+        elapsed_ms=round((time.perf_counter() - t_rec) * 1000, 2),
+        recovery_entries=rec_n,
+    )
+    _pipeline_phase_append("serialize_artifacts", "start", workflow_title=wt)
+    t_ser = time.perf_counter()
     inputs_json = json.dumps({"inputs": inputs}, ensure_ascii=False, indent=2)
     manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
     execution_json = json.dumps(execution_plan, ensure_ascii=False, indent=2)
     recovery_json = json.dumps(recovery_map, ensure_ascii=False, indent=2)
-    structured_json = json.dumps(structured, ensure_ascii=False, indent=2)
-    execution_md = generate_execution_plan(structured, inputs)[0]
-    visual_assets = _collect_visual_assets(payload)
-
-    package_dir = write_skill_package_files(
-        package_name,
-        {
-            "skill.md": skill_md,
-            "execution.json": execution_json,
-            "recovery.json": recovery_json,
-            "inputs.json": inputs_json,
-            "manifest.json": manifest_json,
-        },
-        visual_assets=visual_assets,
+    chars_total = len(inputs_json) + len(manifest_json) + len(execution_json) + len(recovery_json)
+    _pipeline_phase_append(
+        "serialize_artifacts",
+        "done",
+        workflow_title=wt,
+        elapsed_ms=round((time.perf_counter() - t_ser) * 1000, 2),
+        json_chars=chars_total,
     )
-    index_path = package_dir.parents[1] / INDEX_FILENAME
-    index_json = index_path.read_text(encoding="utf-8") if index_path.is_file() else json.dumps({"workflows": []}, indent=2)
 
     return {
         "name": package_name,
-        "index_json": index_json,
-        "skill_md": skill_md,
         "execution_json": execution_json,
         "recovery_json": recovery_json,
-        "skill_json": structured_json,
         "inputs_json": inputs_json,
         "manifest_json": manifest_json,
-        "execution_md": execution_md,
-        "execution_plan_json": execution_json,
         "input_count": len(inputs),
         "step_count": len(execution_plan),
         "used_llm": True,
         "warnings": [],
+        "visual_assets": visual_assets,
     }
+
+
+def _compile_skill_package_payloads(payload: Any, package_name: str | None = None) -> list[dict[str, Any]]:
+    raw_workflows = _enumerate_raw_workflows(payload)
+    if not raw_workflows:
+        raise ValueError("No workflow steps detected in JSON.")
+    total = len(raw_workflows)
+    skill_pack_log_append({"kind": "bundle_compile_outline", "workflow_count": total})
+    compiled: list[dict[str, Any]] = []
+    for index, raw_workflow in enumerate(raw_workflows, start=1):
+        label = str(raw_workflow["title"] or f"workflow_{index}")
+        skill_pack_log_append(
+            {
+                "kind": "workflow_compile_start",
+                "index": index,
+                "total": total,
+                "title": label,
+                "raw_steps": len(raw_workflow["steps"]),
+            }
+        )
+        explicit_name = package_name if len(raw_workflows) == 1 else None
+        compiled.append(
+            _compile_workflow_payload(
+                raw_workflow["payload"],
+                raw_workflow["steps"],
+                package_name=explicit_name,
+                source_title=label,
+            )
+        )
+        skill_pack_log_append(
+            {"kind": "workflow_compile_complete", "index": index, "total": total, "package_name": str(compiled[-1]["name"])}
+        )
+    return compiled
+
+
+def _persist_skill_package_artifacts(compiled: dict[str, Any], bundle_slug: str) -> dict[str, Any]:
+    workflow_slug = str(compiled["name"])
+    write_skill_package_files(
+        bundle_slug,
+        workflow_slug,
+        {
+            "execution.json": str(compiled["execution_json"]),
+            "recovery.json": str(compiled["recovery_json"]),
+            "inputs.json": str(compiled["inputs_json"]),
+            "manifest.json": str(compiled["manifest_json"]),
+        },
+        visual_assets=compiled.get("visual_assets") if isinstance(compiled.get("visual_assets"), dict) else None,
+    )
+    bundle_root = bundle_root_dir(bundle_slug)
+    index_path = (bundle_root or Path()) / INDEX_FILENAME
+    index_json = (
+        index_path.read_text(encoding="utf-8")
+        if bundle_root and index_path.is_file()
+        else json.dumps({"workflows": []}, indent=2)
+    )
+
+    return {
+        "name": workflow_slug,
+        "bundle_slug": bundle_slug,
+        "index_json": index_json,
+        "execution_json": str(compiled["execution_json"]),
+        "recovery_json": str(compiled["recovery_json"]),
+        "inputs_json": str(compiled["inputs_json"]),
+        "manifest_json": str(compiled["manifest_json"]),
+        "input_count": int(compiled["input_count"]),
+        "step_count": int(compiled["step_count"]),
+        "used_llm": bool(compiled["used_llm"]),
+        "warnings": list(compiled.get("warnings") or []),
+    }
+
+
+def _refresh_bundle_runtime_files(bundle_slug: str) -> str:
+    bundle_root = bundle_root_dir(bundle_slug)
+    if bundle_root is None or not bundle_root.is_dir():
+        return json.dumps({"workflows": []}, indent=2)
+    write_skill_package_index(bundle_root)
+    write_bundle_skill_manifest(bundle_root, bundle_slug)
+    index_path = bundle_root / INDEX_FILENAME
+    if index_path.is_file():
+        return index_path.read_text(encoding="utf-8")
+    workflows: list[dict[str, str]] = []
+    for workflow_dir in sorted((bundle_root / "workflows").iterdir(), key=lambda item: item.name):
+        manifest_path = workflow_dir / "manifest.json"
+        if not manifest_path.is_file():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+        workflows.append(
+            {
+                "name": workflow_dir.name,
+                "description": str(manifest.get("description") or workflow_dir.name),
+                "manifest": f"workflows/{workflow_dir.name}/manifest.json",
+            }
+        )
+    return json.dumps({"workflows": workflows}, ensure_ascii=False, indent=2)
+
+
+def build_skill_package(
+    json_text: str,
+    package_name: str | None = None,
+    *,
+    bundle_slug: str | None = None,
+    realtime_sink: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    with skill_pack_build_log_scope(realtime_sink=realtime_sink) as build_log:
+        try:
+            payload = preprocess_skill_pack_declarations(_parse_json_text(json_text))
+            slug = _resolve_bundle_slug(bundle_slug)
+            skill_pack_log_append(
+                {
+                    "kind": "persist_phase",
+                    "state": "start",
+                    "bundle_slug": slug,
+                    "workflow_package_hint": package_name,
+                }
+            )
+            compiled_workflows = _compile_skill_package_payloads(payload, package_name=package_name)
+            persisted = [_persist_skill_package_artifacts(compiled, slug) for compiled in compiled_workflows]
+            index_json = _refresh_bundle_runtime_files(slug)
+            bundle_root = bundle_root_dir(slug)
+            skill_path = (bundle_root / _bundle_skill_file_path(slug)) if bundle_root is not None else None
+            result = dict(persisted[0])
+            result["index_json"] = index_json
+            result["skill_md"] = (
+                skill_path.read_text(encoding="utf-8") if skill_path and skill_path.is_file() else format_bundle_skill_manifest_text(slug)
+            )
+            result["workflow_names"] = [item["name"] for item in persisted]
+            result["build_log"] = build_log
+            skill_pack_log_append({"kind": "persist_phase", "state": "done", "workflow_names": result["workflow_names"]})
+            return result
+        except SkillPackBuildUserError:
+            raise
+        except ValueError as exc:
+            raise SkillPackBuildUserError(str(exc), list(build_log)) from exc
+
+
+def _decode_visual_assets_from_package_files(files: dict[str, str]) -> dict[str, bytes]:
+    decoded: dict[str, bytes] = {}
+    for filename, encoded in files.items():
+        if not filename.startswith("visuals/"):
+            continue
+        leaf = Path(filename).name
+        if not leaf or leaf.startswith("."):
+            continue
+        if Path(leaf).suffix.lower() not in VISUAL_IMAGE_SUFFIXES:
+            continue
+        try:
+            decoded[leaf] = base64.standard_b64decode(encoded)
+        except Exception:
+            continue
+    return decoded
+
+
+def _parse_existing_inputs(inputs_raw: str) -> list[dict[str, Any]]:
+    if not str(inputs_raw or "").strip():
+        return []
+    try:
+        parsed = _parse_json_text(inputs_raw)
+    except ValueError:
+        return []
+    if isinstance(parsed, dict):
+        items = parsed.get("inputs")
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+    return []
+
+
+def append_workflow_to_skill_package(
+    bundle_slug: str,
+    json_text: str,
+    appended_package_name: str | None = None,
+    *,
+    realtime_sink: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    slug = _resolve_bundle_slug(bundle_slug)
+    bundle_root = bundle_root_dir(slug)
+    if bundle_root is None or not bundle_root.is_dir():
+        raise ValueError("Skill package bundle not found.")
+
+    with skill_pack_build_log_scope(realtime_sink=realtime_sink) as build_log:
+        try:
+            payload = preprocess_skill_pack_declarations(_parse_json_text(json_text))
+            compiled_workflows = _compile_skill_package_payloads(payload, package_name=appended_package_name)
+            for compiled in compiled_workflows:
+                appended_name = str(compiled["name"])
+                if resolve_workflow_dir(slug, appended_name):
+                    raise ValueError(f'Workflow "{appended_name}" already exists in bundle "{slug}".')
+            persisted: list[dict[str, Any]] = []
+            for compiled in compiled_workflows:
+                compiled["warnings"] = [f'Added workflow "{compiled["name"]}" to bundle "{slug}".']
+                persisted.append(_persist_skill_package_artifacts(compiled, slug))
+            index_json = _refresh_bundle_runtime_files(slug)
+            bundle_root = bundle_root_dir(slug)
+            skill_path = (bundle_root / _bundle_skill_file_path(slug)) if bundle_root is not None else None
+            result = dict(persisted[0])
+            result["index_json"] = index_json
+            result["skill_md"] = (
+                skill_path.read_text(encoding="utf-8") if skill_path and skill_path.is_file() else format_bundle_skill_manifest_text(slug)
+            )
+            result["workflow_names"] = [item["name"] for item in persisted]
+            result["build_log"] = build_log
+            return result
+        except SkillPackBuildUserError:
+            raise
+        except ValueError as exc:
+            raise SkillPackBuildUserError(str(exc), list(build_log)) from exc
 
 
 def build_skill_package_zip(
     package_name: str,
     skill_md: str,
-    skill_json: str,
     inputs_json: str,
     manifest_json: str,
-    execution_md: str = "",
-    execution_plan_json: str = "",
     execution_json: str = "",
     recovery_json: str = "",
+    *,
+    skill_pack_bundle: str | None = None,
 ) -> tuple[str, bytes]:
     name = _slugify_name(package_name)
-    if not skill_md.strip():
-        raise ValueError("skill.md content is required for export.")
+    bundle_segment = _resolve_bundle_slug(skill_pack_bundle)
+    bundle_posix = bundle_segment
     if not inputs_json.strip() or not manifest_json.strip():
         raise ValueError("inputs.json and manifest.json are required for export.")
+    if not execution_json.strip() or not recovery_json.strip():
+        raise ValueError("execution.json and recovery.json are required for export.")
     manifest_json = _normalize_manifest_json(manifest_json, inputs_json, name)
-    if not execution_json.strip():
-        execution_json = execution_plan_json.strip()
-    if not execution_json.strip():
-        if not skill_json.strip():
-            raise ValueError("execution.json is required for export.")
-        parsed_skill = _parse_json_text(skill_json)
-        _, plan = generate_execution_plan(parsed_skill)
-        _validate_execution_plan(plan)
-        execution_json = json.dumps(plan, ensure_ascii=False, indent=2)
-    if not recovery_json.strip():
-        if skill_json.strip():
-            recovery_json = json.dumps(generate_recovery(_parse_json_text(skill_json)), ensure_ascii=False, indent=2)
-        else:
-            recovery_json = json.dumps({"steps": []}, ensure_ascii=False, indent=2)
-    visual_assets = read_skill_package_visual_asset_bytes(name)
+    visual_assets = read_skill_package_visual_asset_bytes(bundle_segment, name)
 
     try:
         parsed_plan = _parse_json_text(execution_json)
@@ -1075,18 +1770,22 @@ def build_skill_package_zip(
     _validate_execution_plan(parsed_plan)
 
     buffer = BytesIO()
+    workflow_root = f"{bundle_posix}/workflows/{name}"
+    description = _manifest_description(name, json.loads(manifest_json).get("description", ""))
     with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
-        workflow_root = f"{SKILL_PACKAGE_DIRNAME}/workflows/{name}"
-        archive.writestr(f"{SKILL_PACKAGE_DIRNAME}/README.md", skill_package_readme(name))
+        archive.writestr(f"{bundle_posix}/{INSTALL_JS_FILENAME}", format_install_js_text(bundle_segment))
+        archive.writestr(f"{bundle_posix}/{INSTALL_BAT_FILENAME}", format_install_bat_text(bundle_segment))
+        for filename, content in read_cli_files(bundle_segment).items():
+            archive.writestr(f"{bundle_posix}/{filename}", content)
         archive.writestr(
-            f"{SKILL_PACKAGE_DIRNAME}/{INDEX_FILENAME}",
+            f"{bundle_posix}/{INDEX_FILENAME}",
             json.dumps(
                 {
                     "workflows": [
                         {
                             "name": name,
-                            "description": _manifest_description(name, json.loads(manifest_json).get("description", "")),
-                            "manifest": f"/skills/{name}/manifest.json",
+                            "description": description,
+                            "manifest": f"workflows/{name}/manifest.json",
                         }
                     ]
                 },
@@ -1096,15 +1795,48 @@ def build_skill_package_zip(
             + "\n",
         )
         for filename, content in read_engine_files().items():
-            archive.writestr(f"{SKILL_PACKAGE_DIRNAME}/engine/{filename}", content)
-        archive.writestr(f"{workflow_root}/skill.md", skill_md)
+            archive.writestr(f"{bundle_posix}/engine/{filename}", content)
+        for filename, content in read_bridge_files().items():
+            archive.writestr(f"{bundle_posix}/bridge/{filename}", content)
         archive.writestr(f"{workflow_root}/execution.json", execution_json)
         archive.writestr(f"{workflow_root}/recovery.json", recovery_json)
         archive.writestr(f"{workflow_root}/inputs.json", inputs_json)
         archive.writestr(f"{workflow_root}/manifest.json", manifest_json)
+        archive.writestr(
+            f"{bundle_posix}/{_bundle_skill_file_path(bundle_segment)}",
+            skill_md.strip()
+            or format_bundle_skill_manifest_text(
+                bundle_segment,
+                [{"name": name, "description": description, "manifest": f"workflows/{name}/manifest.json"}],
+            ),
+        )
         if visual_assets:
             for filename, content in sorted(visual_assets.items()):
                 archive.writestr(f"{workflow_root}/visuals/{Path(filename).name}", content)
-        else:
-            archive.writestr(f"{workflow_root}/visuals/.gitkeep", "")
-    return f"{SKILL_PACKAGE_DIRNAME}_{name}.zip", buffer.getvalue()
+    archive_name_root = bundle_segment.replace("/", "_").replace("\\", "_")
+    return f"{archive_name_root}_{name}.zip", buffer.getvalue()
+
+
+def zip_skill_bundle_from_disk(bundle_slug: str) -> tuple[str, bytes]:
+    """Write every file under ``output/skill_package/<bundle_slug>/`` into one ZIP.
+
+    Archive paths are rooted at ``<bundle_slug>/`` (the skill package name), matching the download filename
+    ``<slug>.zip``. On-disk layout under ``output/skill_package/`` is not recreated inside the ZIP.
+    """
+
+    slug = _resolve_bundle_slug(bundle_slug)
+    bundle_path = bundle_root_dir(slug)
+    if bundle_path is None or not bundle_path.is_dir():
+        raise ValueError("Skill package bundle not found.")
+    zip_prefix = slug
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        for path in sorted(bundle_path.rglob("*")):
+            if path.is_file():
+                rel = path.relative_to(bundle_path).as_posix()
+                # Drop duplicate top-level segments when on-disk tree is `<slug>/<slug>/…`.
+                while rel.startswith(f"{slug}/"):
+                    rel = rel[len(slug) + 1 :]
+                arcname = f"{zip_prefix}/{rel}"
+                archive.write(path, arcname)
+    return f"{slug}.zip", buffer.getvalue()

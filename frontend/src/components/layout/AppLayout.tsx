@@ -1,7 +1,13 @@
+'use client'
+
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { fetchMe } from '@/api/productApi'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Sheet,
   SheetContent,
@@ -13,22 +19,54 @@ import {
 import { cn } from '@/lib/utils'
 import {
   BookOpen,
+  BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   FolderKanban,
+  Hammer,
   Home,
   Layers,
   Menu,
   Package,
+  Radio,
+  Rocket,
+  Search,
+  Settings,
+  Users,
 } from 'lucide-react'
 
 const DESKTOP_SIDEBAR_KEY = 'ai-native-sidebar-collapsed'
 
-const navItems = [
-  { to: '/', label: 'Home', icon: Home, exact: true },
-  { to: '/skills', label: 'Skills', icon: BookOpen, exact: false },
-  { to: '/packages', label: 'Skill Packages', icon: FolderKanban, exact: false },
-  { to: '/skill-pack-builder', label: 'Skill Pack Builder', icon: Package, exact: false },
+const navGroups = [
+  {
+    label: 'Operate',
+    items: [
+      { to: '/', label: 'Dashboard', icon: Home, exact: true },
+      { to: '/recordings/new', label: 'Recorder', icon: Radio, exact: false },
+      { to: '/skills', label: 'Workflows', icon: BookOpen, exact: false },
+      { to: '/packages', label: 'Packages', icon: FolderKanban, exact: false },
+    ],
+  },
+  {
+    label: 'Build',
+    items: [
+      { to: '/skill-pack-builder', label: 'Skill Pack Builder', icon: Package, exact: false },
+      { to: '/jobs', label: 'Jobs', icon: Hammer, exact: false },
+    ],
+  },
+  {
+    label: 'Release',
+    items: [{ to: '/publish', label: 'Publish & Deploy', icon: Rocket, exact: false }],
+  },
+  {
+    label: 'Manage',
+    items: [
+      { to: '/team', label: 'Team', icon: Users, exact: false },
+      { to: '/billing', label: 'Billing', icon: CreditCard, exact: false },
+      { to: '/settings', label: 'Settings', icon: Settings, exact: false },
+    ],
+  },
 ] as const
 
 export function ProductMark({ className }: { className?: string }) {
@@ -52,33 +90,39 @@ function SidebarNav({
   collapsed: boolean
   onNavigate?: () => void
 }) {
-  const location = useLocation()
+  const pathname = usePathname()
 
   return (
     <nav className="space-y-1.5" aria-label="Primary">
-      {navItems.map((item) => {
-        const Icon = item.icon
-        const active =
-          item.exact ? location.pathname === item.to : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
-        return (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.exact}
-            onClick={onNavigate}
-            className={cn(
-              'group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition-colors',
-              'hover:border-white/8 hover:bg-white/[0.045] hover:text-white',
-              active ? 'border-white/10 bg-white/[0.07] text-white' : 'text-zinc-400',
-              collapsed && 'justify-center px-2.5',
-            )}
-            title={collapsed ? item.label : undefined}
-          >
-            <Icon className="size-4 shrink-0" />
-            <span className={cn('truncate', collapsed && 'hidden')}>{item.label}</span>
-          </NavLink>
-        )
-      })}
+      {navGroups.map((group) => (
+        <div key={group.label} className="space-y-1.5">
+          <p className={cn('px-3 pt-3 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-600', collapsed && 'sr-only')}>
+            {group.label}
+          </p>
+          {group.items.map((item) => {
+            const Icon = item.icon
+            const active =
+              item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(`${item.to}/`)
+            return (
+              <Link
+                key={item.to}
+                href={item.to}
+                onClick={onNavigate}
+                className={cn(
+                  'group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition-colors',
+                  'hover:border-white/8 hover:bg-white/[0.045] hover:text-white',
+                  active ? 'border-white/10 bg-white/[0.07] text-white' : 'text-zinc-400',
+                  collapsed && 'justify-center px-2.5',
+                )}
+                title={collapsed ? item.label : undefined}
+              >
+                <Icon className="size-4 shrink-0" />
+                <span className={cn('truncate', collapsed && 'hidden')}>{item.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      ))}
     </nav>
   )
 }
@@ -98,11 +142,11 @@ function SidebarRail({
       )}
     >
       <div className="flex items-center gap-3 border-b border-white/8 px-4 py-4">
-        <Link to="/" className={cn('flex min-w-0 items-center gap-3', collapsed && 'justify-center')}>
+        <Link href="/" className={cn('flex min-w-0 items-center gap-3', collapsed && 'justify-center')}>
           <ProductMark />
           <div className={cn('min-w-0', collapsed && 'hidden')}>
             <p className="truncate text-sm font-semibold text-white">AI Skill Platform</p>
-            <p className="truncate text-xs text-zinc-500">Recorder workspace</p>
+            <p className="truncate text-xs text-zinc-500">Team workspace</p>
           </div>
         </Link>
         <Button
@@ -140,11 +184,11 @@ function SidebarRail({
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-white">Workspace</p>
             <Badge variant="outline" className="border-white/10 bg-white/5 text-zinc-300">
-              Dark
+              Active
             </Badge>
           </div>
           <p className="text-xs leading-5 text-zinc-500">
-            Record flows, refine steps, and review saved packages from one quiet workspace.
+            Record flows, refine steps, publish packages, and monitor jobs.
           </p>
         </div>
       </div>
@@ -163,6 +207,7 @@ type AppShellProps = {
 export function AppShell({ title, description, actions, mainClassName, children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const meQ = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: 60_000 })
 
   useEffect(() => {
     const stored = window.localStorage.getItem(DESKTOP_SIDEBAR_KEY)
@@ -193,7 +238,7 @@ export function AppShell({ title, description, actions, mainClassName, children 
               <ProductMark />
               <div>
                 <SheetTitle className="text-white">AI Skill Platform</SheetTitle>
-                <SheetDescription className="text-zinc-500">Recorder workspace</SheetDescription>
+                <SheetDescription className="text-zinc-500">Team workspace</SheetDescription>
               </div>
             </div>
           </SheetHeader>
@@ -246,7 +291,32 @@ export function AppShell({ title, description, actions, mainClassName, children 
                   </div>
                 ) : null}
               </div>
+              <div className="hidden min-w-48 max-w-72 flex-1 lg:block">
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-500" />
+                  <Input
+                    aria-label="Global search"
+                    placeholder="Search workspace"
+                    className="h-9 border-white/10 bg-white/[0.035] pl-9 text-sm text-zinc-100 placeholder:text-zinc-500"
+                  />
+                </label>
+              </div>
               {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="hidden border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] sm:inline-flex"
+              >
+                <Link href="/recordings/new">Create</Link>
+              </Button>
+              <div className="hidden min-w-0 max-w-44 items-center gap-2 rounded-lg border border-white/8 bg-white/[0.03] px-2.5 py-1.5 md:flex">
+                <BriefcaseBusiness className="size-3.5 shrink-0 text-zinc-500" />
+                <span className="truncate text-xs text-zinc-300">{meQ.data?.workspace.name ?? 'Local workspace'}</span>
+              </div>
+              <Badge variant="outline" className="hidden border-emerald-500/20 bg-emerald-500/10 text-emerald-200 sm:inline-flex">
+                Live
+              </Badge>
             </div>
           </header>
 
