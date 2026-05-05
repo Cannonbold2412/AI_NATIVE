@@ -36,11 +36,13 @@ _EXTRAS_NOISE_KEYS = frozenset({
     "content_fp", "primary_selector_kind", "fallback_selector_order",
     "selector_signature",
 })
-_MAX_INNER_TEXT = 120
-_MAX_NORMALIZED_TEXT = 200
-_MAX_PARENT_TEXT = 100
+_MAX_INNER_TEXT = 80
+_MAX_NORMALIZED_TEXT = 120
+_MAX_PARENT_TEXT = 60
 _MAX_SIBLING_TEXT = 80
 _MAX_SIBLINGS = 2
+_MAX_ANCHOR_ELEMENT = 80
+_SELECTOR_PRIORITY = ("text_based", "css")
 
 
 def _get_step_action_type(step: dict[str, Any]) -> str:
@@ -230,13 +232,21 @@ def _sanitize_recording_step_for_llm(step: dict[str, Any]) -> dict[str, Any] | N
     if isinstance(target, dict):
         target.pop("id", None)
         target.pop("classes", None)
+        target.pop("tag", None)
+        target.pop("role", None)
         if "inner_text" in target:
             target["inner_text"] = _trim_str(target["inner_text"], _MAX_INNER_TEXT)
 
     selectors = c.get("selectors")
     if isinstance(selectors, dict):
         selectors.pop("xpath", None)
-        if not any(v for v in selectors.values()):
+        best = next(
+            (selectors[k] for k in _SELECTOR_PRIORITY if selectors.get(k)),
+            None,
+        )
+        if best:
+            c["selectors"] = {"selector": best}
+        else:
             c.pop("selectors", None)
 
     context = c.get("context")
@@ -255,8 +265,12 @@ def _sanitize_recording_step_for_llm(step: dict[str, Any]) -> dict[str, Any] | N
 
     semantic = c.get("semantic")
     if isinstance(semantic, dict):
+        for k in ("intent_hint", "input_type", "role"):
+            semantic.pop(k, None)
         if "normalized_text" in semantic:
             semantic["normalized_text"] = _trim_str(semantic["normalized_text"], _MAX_NORMALIZED_TEXT)
+        if not any(v for v in semantic.values() if v is not None):
+            c.pop("semantic", None)
 
     page = c.get("page")
     if isinstance(page, dict):
@@ -278,8 +292,12 @@ def _sanitize_recording_step_for_llm(step: dict[str, Any]) -> dict[str, Any] | N
             c.pop("extras", None)
 
     anchors = c.get("anchors")
-    if isinstance(anchors, list) and not anchors:
-        c.pop("anchors", None)
+    if isinstance(anchors, list):
+        for anchor in anchors:
+            if isinstance(anchor, dict) and "element" in anchor:
+                anchor["element"] = _trim_str(anchor["element"], _MAX_ANCHOR_ELEMENT)
+        if not anchors:
+            c.pop("anchors", None)
 
     return c
 
