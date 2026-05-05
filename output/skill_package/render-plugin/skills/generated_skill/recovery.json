@@ -1,0 +1,319 @@
+{
+  "steps": [
+    {
+      "step_id": 2,
+      "intent": "fill_email",
+      "target": {
+        "text": "email",
+        "role": "textbox"
+      },
+      "anchors": [
+        {
+          "text": "email",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "email"
+        ],
+        "role": "textbox"
+      },
+      "selector_context": {
+        "primary": "input[name=\"email\"]",
+        "alternatives": []
+      },
+      "visual_metadata": {
+        "step_id": 2,
+        "source": "stored_step_visual",
+        "available": true
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "fill",
+        "generated_by": "skill_pack_builder"
+      },
+      "visual_ref": "visuals/Image_1.jpg"
+    },
+    {
+      "step_id": 3,
+      "intent": "fill_password",
+      "target": {
+        "text": "password",
+        "role": "textbox"
+      },
+      "anchors": [
+        {
+          "text": "password",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "password"
+        ],
+        "role": "textbox"
+      },
+      "selector_context": {
+        "primary": "input[name=\"password\"]",
+        "alternatives": []
+      },
+      "visual_metadata": {
+        "step_id": 3,
+        "source": "stored_step_visual",
+        "available": true
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "fill",
+        "generated_by": "skill_pack_builder"
+      },
+      "visual_ref": "visuals/Image_2.jpg"
+    },
+    {
+      "step_id": 4,
+      "intent": "click_sign_in",
+      "target": {
+        "text": "Sign in",
+        "role": ""
+      },
+      "anchors": [
+        {
+          "text": "Login",
+          "priority": 1
+        },
+        {
+          "text": "Sign in",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "Sign in",
+          "Log in"
+        ],
+        "role": ""
+      },
+      "selector_context": {
+        "primary": "text=Sign in",
+        "alternatives": [
+          "text=\"Sign in\""
+        ]
+      },
+      "visual_metadata": {
+        "step_id": 4,
+        "source": "stored_step_visual",
+        "available": true
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "click",
+        "generated_by": "skill_pack_builder"
+      },
+      "visual_ref": "visuals/Image_3.jpg"
+    },
+    {
+      "step_id": 5,
+      "intent": "assert_post_login",
+      "target": {
+        "text": "New",
+        "role": ""
+      },
+      "anchors": [
+        {
+          "text": "New",
+          "priority": 1
+        },
+        {
+          "text": "Services",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "New",
+          "Services",
+          "Databases",
+          "New Web Service"
+        ],
+        "role": ""
+      },
+      "selector_context": {
+        "primary": "text=New",
+        "alternatives": [
+          "text=Services",
+          "text=Databases",
+          "[data-testid='create-resource-btn']"
+        ]
+      },
+      "visual_metadata": {
+        "step_id": 5,
+        "source": "manual_fix",
+        "available": false
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "assert_visible",
+        "generated_by": "manual_fix"
+      }
+    },
+    {
+      "step_id": 7,
+      "intent": "click_db_name",
+      "target": {
+        "text": "{{db_name}}",
+        "role": ""
+      },
+      "anchors": [
+        {
+          "text": "{{db_name}}",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "{{db_name}}"
+        ],
+        "role": ""
+      },
+      "selector_context": {
+        "primary": "text={{db_name}}",
+        "alternatives": [
+          "text=\"{{db_name}}\""
+        ]
+      },
+      "visual_metadata": {
+        "step_id": 7,
+        "source": "stored_step_visual",
+        "available": true
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "click",
+        "generated_by": "skill_pack_builder"
+      },
+      "visual_ref": "visuals/Image_6.jpg"
+    },
+    {
+      "step_id": 10,
+      "intent": "click_delete_database",
+      "target": {
+        "text": "Delete Database",
+        "role": ""
+      },
+      "anchors": [
+        {
+          "text": "Danger Zone",
+          "priority": 1
+        },
+        {
+          "text": "Delete Database",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "Delete Database",
+          "Delete",
+          "Remove"
+        ],
+        "role": ""
+      },
+      "selector_context": {
+        "primary": "text=Delete Database",
+        "alternatives": [
+          "text=\"Delete Database\""
+        ]
+      },
+      "visual_metadata": {
+        "step_id": 10,
+        "source": "stored_step_visual",
+        "available": true
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "click",
+        "generated_by": "skill_pack_builder"
+      },
+      "visual_ref": "visuals/Image_9.jpg"
+    },
+    {
+      "step_id": 11,
+      "intent": "fill_sudo_command",
+      "target": {
+        "text": "sudo command",
+        "role": "textbox"
+      },
+      "anchors": [
+        {
+          "text": "sudo command",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "sudo command"
+        ],
+        "role": "textbox"
+      },
+      "selector_context": {
+        "primary": "input[name=\"sudoCommand\"]",
+        "alternatives": []
+      },
+      "visual_metadata": {
+        "step_id": 11,
+        "source": "stored_step_visual",
+        "available": true
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "fill",
+        "generated_by": "skill_pack_builder"
+      },
+      "visual_ref": "visuals/Image_10.jpg"
+    },
+    {
+      "step_id": 13,
+      "intent": "click_delete_database",
+      "target": {
+        "text": "Delete Database",
+        "role": ""
+      },
+      "anchors": [
+        {
+          "text": "Danger Zone",
+          "priority": 1
+        },
+        {
+          "text": "Delete Database",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "Delete Database",
+          "Delete",
+          "Remove"
+        ],
+        "role": ""
+      },
+      "selector_context": {
+        "primary": "text=Delete Database",
+        "alternatives": [
+          "text=\"Delete Database\""
+        ]
+      },
+      "visual_metadata": {
+        "step_id": 13,
+        "source": "stored_step_visual",
+        "available": true
+      },
+      "recovery_metadata": {
+        "mode": "tiered",
+        "action_type": "click",
+        "generated_by": "skill_pack_builder"
+      },
+      "visual_ref": "visuals/Image_12.jpg"
+    }
+  ]
+}

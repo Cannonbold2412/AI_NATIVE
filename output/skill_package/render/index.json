@@ -1,9 +1,0 @@
-{
-  "workflows": [
-    {
-      "name": "delete_database",
-      "description": "Delete a database on Render",
-      "manifest": "workflows/delete_database/manifest.json"
-    }
-  ]
-}

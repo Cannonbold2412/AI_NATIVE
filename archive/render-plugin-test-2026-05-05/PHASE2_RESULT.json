@@ -1,0 +1,20 @@
+{
+  "understood": true,
+  "planned_steps": [
+    "Navigate to Render login page",
+    "Fill email field with user_email",
+    "Fill password field with user_password",
+    "Click Sign in button (recovery: try 'Log in' if primary selector fails)",
+    "Assert Dashboard is visible (confirms login success)",
+    "Scroll down 201px to find database in list",
+    "Click on database matching db_name (recovery: text variant support via {{db_name}} interpolation)",
+    "Scroll up 201px to reveal Delete Database button",
+    "Assert Delete Database button is visible",
+    "Click Delete Database button (recovery: try 'Delete' or 'Remove' if needed)",
+    "Fill sudo command field with 'sudo delete database {{db_name}}'",
+    "Assert Delete Database button still visible (confirms form readiness)",
+    "Click Delete Database to confirm deletion"
+  ],
+  "recovery_strategy_clear": true,
+  "blockers": []
+}

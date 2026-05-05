@@ -88,5 +88,4 @@ class RecordedEvent(BaseModel):
     page: PageContext
     state_change: StateChange
     timing: Timing
-    # Opaque extension point for future phases (compiler, confidence audit).
     extras: dict[str, Any] = Field(default_factory=dict)

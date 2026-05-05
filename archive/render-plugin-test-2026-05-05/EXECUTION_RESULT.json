@@ -1,0 +1,110 @@
+{
+  "skill": "generated_skill",
+  "passed": false,
+  "steps": [
+    {
+      "step": 1,
+      "type": "navigate",
+      "selector": "",
+      "status": "ok",
+      "latency_ms": 1159
+    },
+    {
+      "step": 2,
+      "type": "fill",
+      "selector": "input[name=\"email\"]",
+      "status": "ok",
+      "latency_ms": 150
+    },
+    {
+      "step": 3,
+      "type": "fill",
+      "selector": "input[name=\"password\"]",
+      "status": "ok",
+      "latency_ms": 13
+    },
+    {
+      "step": 4,
+      "type": "click",
+      "selector": "text=Sign in",
+      "status": "ok",
+      "latency_ms": 46
+    },
+    {
+      "step": 5,
+      "type": "assert_visible",
+      "selector": "text=New",
+      "status": "failed",
+      "error": "Error: locator.waitFor: Error: strict mode violation: locator('text=New') resolved to 2 elements:",
+      "latency_ms": 21079
+    },
+    {
+      "step": 6,
+      "type": "scroll",
+      "selector": "",
+      "status": "ok",
+      "latency_ms": 4
+    },
+    {
+      "step": 7,
+      "type": "click",
+      "selector": "text=conxa-db",
+      "status": "failed",
+      "error": "TimeoutError: locator.click: Timeout 5000ms exceeded.",
+      "latency_ms": 11010
+    },
+    {
+      "step": 8,
+      "type": "scroll",
+      "selector": "",
+      "status": "ok",
+      "latency_ms": 3
+    },
+    {
+      "step": 9,
+      "type": "assert_visible",
+      "selector": "text=Delete Database",
+      "status": "failed",
+      "error": "TimeoutError: locator.waitFor: Timeout 5000ms exceeded.",
+      "latency_ms": 5021
+    },
+    {
+      "step": 10,
+      "type": "click",
+      "selector": "text=Delete Database",
+      "status": "failed",
+      "error": "TimeoutError: locator.click: Timeout 5000ms exceeded.",
+      "latency_ms": 17061
+    },
+    {
+      "step": 11,
+      "type": "fill",
+      "selector": "input[name=\"sudoCommand\"]",
+      "status": "failed",
+      "error": "TimeoutError: locator.fill: Timeout 5000ms exceeded.",
+      "latency_ms": 11056
+    },
+    {
+      "step": 12,
+      "type": "assert_visible",
+      "selector": "text=Delete Database",
+      "status": "failed",
+      "error": "TimeoutError: locator.waitFor: Timeout 5000ms exceeded.",
+      "latency_ms": 5003
+    },
+    {
+      "step": 13,
+      "type": "click",
+      "selector": "text=Delete Database",
+      "status": "failed",
+      "error": "TimeoutError: locator.click: Timeout 5000ms exceeded.",
+      "latency_ms": 17041
+    }
+  ],
+  "summary": {
+    "total": 13,
+    "ok": 6,
+    "recovered": 0,
+    "failed": 7
+  }
+}

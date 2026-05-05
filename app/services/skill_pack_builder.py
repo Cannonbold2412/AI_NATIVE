@@ -18,6 +18,7 @@ import re
 import time
 import base64
 import tempfile
+from dataclasses import dataclass, field
 from collections.abc import Iterable
 from io import BytesIO
 from pathlib import Path
@@ -31,25 +32,23 @@ from app.config import settings
 from app.llm.pack_llm_keys import configured_pack_keys, next_pack_api_key
 from app.services.skill_pack_build_log import skill_pack_build_log_scope, skill_pack_log_append
 from app.storage.skill_packages import (
-    BUNDLE_SKILL_MANIFEST_FILENAME,
-    INDEX_FILENAME,
-    INSTALL_BAT_FILENAME,
-    INSTALL_JS_FILENAME,
+    SKILLS_SUBDIR,
     VISUAL_IMAGE_SUFFIXES,
+    _bundle_folder_name,
+    _sanitize_segment,
+    _write_bundle_index,
     bundle_root_dir,
-    format_bundle_skill_manifest_text,
-    format_install_bat_text,
-    format_install_js_text,
-    read_bridge_files,
-    read_cli_files,
-    read_engine_files,
+    format_credentials_example_json_text,
+    format_plugin_index_json,
+    format_plugin_readme_text,
+    format_test_cases_stub_json_text,
+    infer_auth_config,
+    format_auth_json_text,
     read_skill_package_files,
     read_skill_package_visual_asset_bytes,
     resolve_workflow_dir,
     skill_package_root_posix,
     validate_bundle_slug,
-    write_bundle_skill_manifest,
-    write_skill_package_index,
     write_skill_package_files,
 )
 
@@ -62,6 +61,68 @@ class SkillPackBuildUserError(ValueError):
     def __init__(self, message: str, build_log: list[dict[str, Any]]) -> None:
         super().__init__(message)
         self.build_log = build_log
+
+
+@dataclass(frozen=True)
+class RawWorkflow:
+    """One workflow recording extracted from a raw package payload."""
+
+    title: str
+    payload: Any
+    steps: list[dict[str, Any]]
+
+
+@dataclass
+class CompiledWorkflow:
+    """In-memory artifacts for one workflow before it is written to disk."""
+
+    name: str
+    execution_json: str
+    recovery_json: str
+    inputs_json: str
+    manifest_json: str
+    skill_md: str
+    inputs: list[dict[str, Any]]
+    step_count: int
+    visual_assets: dict[str, bytes]
+    used_llm: bool = True
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def input_count(self) -> int:
+        return len(self.inputs)
+
+
+@dataclass
+class PersistedWorkflow:
+    """API-facing summary for a workflow already written to bundle storage."""
+
+    name: str
+    bundle_slug: str
+    index_json: str
+    execution_json: str
+    recovery_json: str
+    inputs_json: str
+    manifest_json: str
+    input_count: int
+    step_count: int
+    used_llm: bool
+    warnings: list[str] = field(default_factory=list)
+
+    def to_response_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "bundle_slug": self.bundle_slug,
+            "index_json": self.index_json,
+            "execution_json": self.execution_json,
+            "recovery_json": self.recovery_json,
+            "inputs_json": self.inputs_json,
+            "manifest_json": self.manifest_json,
+            "input_count": self.input_count,
+            "step_count": self.step_count,
+            "used_llm": self.used_llm,
+            "warnings": list(self.warnings),
+        }
 
 
 _PACK_LLM_TRANSIENT_HTTP = frozenset({502, 503, 504})
@@ -178,6 +239,85 @@ def preprocess_skill_pack_declarations(value: Any) -> Any:
     return root
 
 
+def preprocess_plugin_json(plugin_json: dict) -> dict:
+    """Return a normalized plugin JSON copy with redundant aliases removed.
+
+    Keeps semantic workflow fields intact while collapsing screenshot aliases to
+    ``screenshot.full_url`` when a usable fallback exists.
+    """
+
+    if plugin_json is None or plugin_json == {}:
+        return plugin_json
+    if not isinstance(plugin_json, dict):
+        return plugin_json
+
+    def _json_size_bytes(value: Any) -> int:
+        """Return the compact UTF-8 JSON size for logging."""
+
+        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    def _resolve_screenshot_full_url(step: dict[str, Any]) -> str | None:
+        """Return the preferred screenshot URL from direct or nested fallback fields."""
+
+        screenshot = step.get("screenshot")
+        if isinstance(screenshot, dict):
+            for key in ("full_url", "scroll_url", "element_url"):
+                value = screenshot.get(key)
+                if value:
+                    return str(value)
+
+        visual = step.get("visual")
+        if isinstance(visual, dict):
+            value = visual.get("full_screenshot")
+            if value:
+                return str(value)
+
+        signals = step.get("signals")
+        if isinstance(signals, dict):
+            nested_visual = signals.get("visual")
+            if isinstance(nested_visual, dict):
+                value = nested_visual.get("full_screenshot")
+                if value:
+                    return str(value)
+
+        return None
+
+    original_size = _json_size_bytes(plugin_json)
+    cleaned = copy.deepcopy(plugin_json)
+
+    for key in ("name", "id", "slug", "workflow_name", "workflowName", "label"):
+        cleaned.pop(key, None)
+
+    for key in ("metadata", "package_meta", "package_metadata"):
+        cleaned.pop(key, None)
+
+    steps = cleaned.get("steps")
+    if "steps" not in cleaned:
+        _logger.warning("Plugin JSON preprocessing skipped step normalization because 'steps' is missing.")
+    elif isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+
+            screenshot_full_url = _resolve_screenshot_full_url(step)
+            had_screenshot = isinstance(step.get("screenshot"), dict)
+
+            step.pop("visual", None)
+            step.pop("signals", None)
+
+            if screenshot_full_url:
+                step["screenshot"] = {"full_url": screenshot_full_url}
+            elif had_screenshot:
+                screenshot = copy.deepcopy(step["screenshot"])
+                screenshot.pop("scroll_url", None)
+                screenshot.pop("element_url", None)
+                step["screenshot"] = screenshot
+
+    cleaned_size = _json_size_bytes(cleaned)
+    _logger.info(f"Plugin JSON preprocessed. Size reduction: {original_size} → {cleaned_size} bytes")
+    return cleaned
+
+
 def _preprocess_declaration_blocks_in_place(node: Any) -> None:
     if isinstance(node, list):
         for item in node:
@@ -271,7 +411,8 @@ def skill_package_agent_plugin_name(bundle_slug: str, workflow_slug: str) -> str
 
 
 def _bundle_skill_file_path(bundle_slug: str) -> str:
-    return BUNDLE_SKILL_MANIFEST_FILENAME.format(bundle_slug=bundle_slug)
+    """Return path to orchestration/index.md (the entry-point for Claude in new layout)."""
+    return "orchestration/index.md"
 
 
 def _resolve_bundle_slug(explicit: str | None) -> str:
@@ -343,22 +484,22 @@ def _raw_workflow_title(item: dict[str, Any], fallback_index: int) -> str:
     )
 
 
-def _enumerate_raw_workflows(payload: Any) -> list[dict[str, Any]]:
+def _enumerate_raw_workflows(payload: Any) -> list[RawWorkflow]:
     if not isinstance(payload, dict):
         steps = _extract_steps(payload)
-        return [{"title": "generated_skill", "payload": payload, "steps": steps}] if steps else []
+        return [RawWorkflow(title="generated_skill", payload=payload, steps=steps)] if steps else []
 
     for key in _STEP_CONTAINER_KEYS:
         container = payload.get(key)
         if isinstance(container, list):
-            workflows: list[dict[str, Any]] = []
+            workflows: list[RawWorkflow] = []
             for index, item in enumerate(container, start=1):
                 if not isinstance(item, dict):
                     continue
                 steps = _extract_steps(item)
                 if not steps:
                     continue
-                workflows.append({"title": _raw_workflow_title(item, index), "payload": item, "steps": steps})
+                workflows.append(RawWorkflow(title=_raw_workflow_title(item, index), payload=item, steps=steps))
             if workflows:
                 return workflows
         if isinstance(container, dict):
@@ -370,17 +511,17 @@ def _enumerate_raw_workflows(payload: Any) -> list[dict[str, Any]]:
                 if not steps:
                     continue
                 workflows.append(
-                    {
-                        "title": _first_text_from_keys(item, _TITLE_KEYS) or str(name) or f"workflow_{index}",
-                        "payload": item,
-                        "steps": steps,
-                    }
+                    RawWorkflow(
+                        title=_first_text_from_keys(item, _TITLE_KEYS) or str(name) or f"workflow_{index}",
+                        payload=item,
+                        steps=steps,
+                    )
                 )
             if workflows:
                 return workflows
 
     steps = _extract_steps(payload)
-    return [{"title": _package_title(payload), "payload": payload, "steps": steps}] if steps else []
+    return [RawWorkflow(title=_package_title(payload), payload=payload, steps=steps)] if steps else []
 
 
 def _primary_skill_sheet_title(payload: dict[str, Any]) -> str:
@@ -944,7 +1085,7 @@ def compile_execution(structured_steps: dict[str, Any] | list[dict[str, Any]]) -
             _append_step(plan, {"type": "assert_visible", "selector": step["selector"]})
         _append_step(plan, step)
         if _is_login_click(step):
-            _append_step(plan, {"type": "assert_visible", "selector": "text=Dashboard"})
+            _append_step(plan, {"type": "assert_visible", "selector": "text=New"})
     return plan
 
 
@@ -1276,7 +1417,7 @@ def build_manifest(inputs: list[dict[str, Any]], package_name: str, description:
         "entry": {
             "execution": "./execution.json",
             "recovery": "./recovery.json",
-            "inputs": "./inputs.json",
+            "input": "./input.json",
         },
         "execution_mode": "deterministic",
         "recovery_mode": "tiered",
@@ -1436,35 +1577,71 @@ def _pipeline_phase_append(phase: str, state: str, **fields: Any) -> None:
     skill_pack_log_append(row)
 
 
-def _compile_workflow_payload(payload: Any, raw_steps: list[dict[str, Any]], package_name: str | None = None, source_title: str = "") -> dict[str, Any]:
+def _write_visual_assets_to_temp_dir(visual_assets: dict[str, bytes], parent: Path) -> Path:
+    visuals_dir = parent / "visuals"
+    visuals_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in sorted(visual_assets.items()):
+        safe_name = Path(filename).name
+        if safe_name:
+            (visuals_dir / safe_name).write_bytes(content)
+    return visuals_dir
+
+
+def _generate_recovery_with_visuals(structured: dict[str, Any], visual_assets: dict[str, bytes]) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory() as tmp:
+        visuals_dir = _write_visual_assets_to_temp_dir(visual_assets, Path(tmp))
+        return generate_recovery(structured, visuals_dir)
+
+
+def _serialize_workflow_artifacts(
+    *,
+    inputs: list[dict[str, Any]],
+    manifest: dict[str, Any],
+    execution_plan: list[dict[str, Any]],
+    recovery_map: dict[str, Any],
+) -> tuple[str, str, str, str]:
+    return (
+        json.dumps({"inputs": inputs}, ensure_ascii=False, indent=2),
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        json.dumps(execution_plan, ensure_ascii=False, indent=2),
+        json.dumps(recovery_map, ensure_ascii=False, indent=2),
+    )
+
+
+def _compile_workflow_payload(
+    payload: Any,
+    raw_steps: list[dict[str, Any]],
+    package_name: str | None = None,
+    source_title: str = "",
+) -> CompiledWorkflow:
     if not raw_steps:
         raise ValueError("No workflow steps detected in JSON.")
-    wt = str(source_title or "").strip() or "workflow"
-    _pipeline_phase_append("llm_structure", "start", workflow_title=wt, raw_step_count=len(raw_steps))
+    workflow_title = str(source_title or "").strip() or "workflow"
+    _pipeline_phase_append("llm_structure", "start", workflow_title=workflow_title, raw_step_count=len(raw_steps))
     t_llm = time.perf_counter()
     structured = structure_steps_with_llm(raw_steps)
     _pipeline_phase_append(
         "llm_structure",
         "done",
-        workflow_title=wt,
+        workflow_title=workflow_title,
         elapsed_ms=round((time.perf_counter() - t_llm) * 1000, 2),
         canonical_step_count=len(structured["steps"]),
         goal_chars=len(str(structured.get("goal") or "")),
     )
-    package_name = _slugify_name(package_name or source_title or _package_title(payload, structured=None) or "generated_skill")
+    workflow_slug = _slugify_name(package_name or source_title or _package_title(payload, structured=None) or "generated_skill")
     _pipeline_phase_append(
         "deterministic_compile",
         "start",
-        workflow_title=wt,
-        package_name=package_name,
+        workflow_title=workflow_title,
+        package_name=workflow_slug,
     )
     t_det = time.perf_counter()
     inputs = parse_inputs(structured)
     execution_plan = compile_execution(structured)
     _validate_execution_plan(execution_plan)
-    manifest = build_manifest(inputs, package_name, str(structured.get("goal") or ""))
+    manifest = build_manifest(inputs, workflow_slug, str(structured.get("goal") or ""))
     skill_md = generate_skill_markdown(
-        package_name,
+        workflow_slug,
         structured,
         inputs,
         document_title=(source_title or "").strip() or None,
@@ -1472,7 +1649,7 @@ def _compile_workflow_payload(payload: Any, raw_steps: list[dict[str, Any]], pac
     _pipeline_phase_append(
         "deterministic_compile",
         "done",
-        workflow_title=wt,
+        workflow_title=workflow_title,
         elapsed_ms=round((time.perf_counter() - t_det) * 1000, 2),
         execution_plan_steps=len(execution_plan),
         input_slots=len(inputs),
@@ -1480,150 +1657,254 @@ def _compile_workflow_payload(payload: Any, raw_steps: list[dict[str, Any]], pac
     )
     visual_assets = _collect_visual_assets(payload)
     viz_count = len(visual_assets) if isinstance(visual_assets, dict) else 0
-    _pipeline_phase_append("recovery_map", "start", workflow_title=wt, visual_assets=viz_count)
+    _pipeline_phase_append("recovery_map", "start", workflow_title=workflow_title, visual_assets=viz_count)
     t_rec = time.perf_counter()
-    with tempfile.TemporaryDirectory() as tmp:
-        visuals_dir = Path(tmp) / "visuals"
-        visuals_dir.mkdir(parents=True, exist_ok=True)
-        for filename, content in sorted(visual_assets.items()):
-            safe_name = Path(filename).name
-            if not safe_name:
-                continue
-            (visuals_dir / safe_name).write_bytes(content)
-        recovery_map = generate_recovery(structured, visuals_dir)
+    recovery_map = _generate_recovery_with_visuals(structured, visual_assets)
     rec_items = recovery_map.get("steps") if isinstance(recovery_map, dict) else []
     rec_n = len(rec_items) if isinstance(rec_items, list) else 0
     _pipeline_phase_append(
         "recovery_map",
         "done",
-        workflow_title=wt,
+        workflow_title=workflow_title,
         elapsed_ms=round((time.perf_counter() - t_rec) * 1000, 2),
         recovery_entries=rec_n,
     )
-    _pipeline_phase_append("serialize_artifacts", "start", workflow_title=wt)
+    _pipeline_phase_append("serialize_artifacts", "start", workflow_title=workflow_title)
     t_ser = time.perf_counter()
-    inputs_json = json.dumps({"inputs": inputs}, ensure_ascii=False, indent=2)
-    manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
-    execution_json = json.dumps(execution_plan, ensure_ascii=False, indent=2)
-    recovery_json = json.dumps(recovery_map, ensure_ascii=False, indent=2)
+    inputs_json, manifest_json, execution_json, recovery_json = _serialize_workflow_artifacts(
+        inputs=inputs,
+        manifest=manifest,
+        execution_plan=execution_plan,
+        recovery_map=recovery_map,
+    )
     chars_total = len(inputs_json) + len(manifest_json) + len(execution_json) + len(recovery_json)
     _pipeline_phase_append(
         "serialize_artifacts",
         "done",
-        workflow_title=wt,
+        workflow_title=workflow_title,
         elapsed_ms=round((time.perf_counter() - t_ser) * 1000, 2),
         json_chars=chars_total,
     )
 
-    return {
-        "name": package_name,
-        "execution_json": execution_json,
-        "recovery_json": recovery_json,
-        "inputs_json": inputs_json,
-        "manifest_json": manifest_json,
-        "input_count": len(inputs),
-        "step_count": len(execution_plan),
-        "used_llm": True,
-        "warnings": [],
-        "visual_assets": visual_assets,
-    }
+    return CompiledWorkflow(
+        name=workflow_slug,
+        execution_json=execution_json,
+        recovery_json=recovery_json,
+        inputs_json=inputs_json,
+        manifest_json=manifest_json,
+        skill_md=skill_md,
+        inputs=inputs,
+        step_count=len(execution_plan),
+        visual_assets=visual_assets,
+    )
 
 
-def _compile_skill_package_payloads(payload: Any, package_name: str | None = None) -> list[dict[str, Any]]:
+def _compile_skill_package_payloads(payload: Any, package_name: str | None = None) -> list[CompiledWorkflow]:
     raw_workflows = _enumerate_raw_workflows(payload)
     if not raw_workflows:
         raise ValueError("No workflow steps detected in JSON.")
     total = len(raw_workflows)
     skill_pack_log_append({"kind": "bundle_compile_outline", "workflow_count": total})
-    compiled: list[dict[str, Any]] = []
+    compiled: list[CompiledWorkflow] = []
     for index, raw_workflow in enumerate(raw_workflows, start=1):
-        label = str(raw_workflow["title"] or f"workflow_{index}")
+        label = str(raw_workflow.title or f"workflow_{index}")
         skill_pack_log_append(
             {
                 "kind": "workflow_compile_start",
                 "index": index,
                 "total": total,
                 "title": label,
-                "raw_steps": len(raw_workflow["steps"]),
+                "raw_steps": len(raw_workflow.steps),
             }
         )
         explicit_name = package_name if len(raw_workflows) == 1 else None
         compiled.append(
             _compile_workflow_payload(
-                raw_workflow["payload"],
-                raw_workflow["steps"],
+                raw_workflow.payload,
+                raw_workflow.steps,
                 package_name=explicit_name,
                 source_title=label,
             )
         )
         skill_pack_log_append(
-            {"kind": "workflow_compile_complete", "index": index, "total": total, "package_name": str(compiled[-1]["name"])}
+            {"kind": "workflow_compile_complete", "index": index, "total": total, "package_name": compiled[-1].name}
         )
     return compiled
 
 
-def _persist_skill_package_artifacts(compiled: dict[str, Any], bundle_slug: str) -> dict[str, Any]:
-    workflow_slug = str(compiled["name"])
+def _workflow_file_payload(compiled: CompiledWorkflow) -> dict[str, str]:
+    return {
+        "execution.json": compiled.execution_json,
+        "recovery.json": compiled.recovery_json,
+        "input.json": compiled.inputs_json,
+        "manifest.json": compiled.manifest_json,
+        "SKILL.md": compiled.skill_md,
+        "tests/test-cases.json": format_test_cases_stub_json_text(compiled.inputs),
+    }
+
+
+def _persist_skill_package_artifacts(compiled: CompiledWorkflow, bundle_slug: str) -> PersistedWorkflow:
     write_skill_package_files(
         bundle_slug,
-        workflow_slug,
-        {
-            "execution.json": str(compiled["execution_json"]),
-            "recovery.json": str(compiled["recovery_json"]),
-            "inputs.json": str(compiled["inputs_json"]),
-            "manifest.json": str(compiled["manifest_json"]),
-        },
-        visual_assets=compiled.get("visual_assets") if isinstance(compiled.get("visual_assets"), dict) else None,
+        compiled.name,
+        _workflow_file_payload(compiled),
+        visual_assets=compiled.visual_assets,
     )
-    bundle_root = bundle_root_dir(bundle_slug)
-    index_path = (bundle_root or Path()) / INDEX_FILENAME
-    index_json = (
-        index_path.read_text(encoding="utf-8")
-        if bundle_root and index_path.is_file()
-        else json.dumps({"workflows": []}, indent=2)
+    # Build plugin index JSON from disk (handles multi-skill append correctly)
+    index_json = _build_plugin_index_json(bundle_slug)
+
+    return PersistedWorkflow(
+        name=compiled.name,
+        bundle_slug=bundle_slug,
+        index_json=index_json,
+        execution_json=compiled.execution_json,
+        recovery_json=compiled.recovery_json,
+        inputs_json=compiled.inputs_json,
+        manifest_json=compiled.manifest_json,
+        input_count=compiled.input_count,
+        step_count=compiled.step_count,
+        used_llm=compiled.used_llm,
+        warnings=list(compiled.warnings),
     )
 
-    return {
-        "name": workflow_slug,
-        "bundle_slug": bundle_slug,
-        "index_json": index_json,
-        "execution_json": str(compiled["execution_json"]),
-        "recovery_json": str(compiled["recovery_json"]),
-        "inputs_json": str(compiled["inputs_json"]),
-        "manifest_json": str(compiled["manifest_json"]),
-        "input_count": int(compiled["input_count"]),
-        "step_count": int(compiled["step_count"]),
-        "used_llm": bool(compiled["used_llm"]),
-        "warnings": list(compiled.get("warnings") or []),
-    }
+
+def _build_plugin_index_json(bundle_slug: str) -> str:
+    """Read plugin index from disk, falling back to empty structure."""
+    bundle_root = bundle_root_dir(bundle_slug)
+    slug = _sanitize_segment(bundle_slug)
+    if bundle_root:
+        index_path = bundle_root / f"{slug}.json"
+        if index_path.is_file():
+            return index_path.read_text(encoding="utf-8")
+    return json.dumps({"plugin": slug, "version": "1.0.0", "skills": []}, indent=2)
 
 
 def _refresh_bundle_runtime_files(bundle_slug: str) -> str:
     bundle_root = bundle_root_dir(bundle_slug)
     if bundle_root is None or not bundle_root.is_dir():
-        return json.dumps({"workflows": []}, indent=2)
-    write_skill_package_index(bundle_root)
-    write_bundle_skill_manifest(bundle_root, bundle_slug)
-    index_path = bundle_root / INDEX_FILENAME
-    if index_path.is_file():
-        return index_path.read_text(encoding="utf-8")
-    workflows: list[dict[str, str]] = []
-    for workflow_dir in sorted((bundle_root / "workflows").iterdir(), key=lambda item: item.name):
-        manifest_path = workflow_dir / "manifest.json"
-        if not manifest_path.is_file():
-            continue
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            manifest = {}
-        workflows.append(
-            {
-                "name": workflow_dir.name,
-                "description": str(manifest.get("description") or workflow_dir.name),
-                "manifest": f"workflows/{workflow_dir.name}/manifest.json",
-            }
-        )
-    return json.dumps({"workflows": workflows}, ensure_ascii=False, indent=2)
+        slug = _sanitize_segment(bundle_slug)
+        return json.dumps({"plugin": slug, "version": "1.0.0", "skills": []}, indent=2)
+    _write_bundle_index(bundle_root, bundle_slug)
+    return _build_plugin_index_json(bundle_slug)
+
+
+def _prepare_skill_package_payload(json_text: str) -> Any:
+    """Parse user JSON and normalize noisy declaration fields before compilation."""
+
+    payload = _parse_json_text(json_text)
+    if isinstance(payload, dict):
+        title_hint = _package_title(payload)
+        source_session_id = _source_session_id(payload)
+        payload = preprocess_plugin_json(payload)
+        if title_hint and title_hint != "generated_skill" and not _first_text_from_keys(payload, _TITLE_KEYS):
+            payload["title"] = title_hint
+        if source_session_id and not _source_session_id(payload):
+            payload["package_meta"] = {**_get_mapping(payload.get("package_meta")), "source_session_id": source_session_id}
+    return preprocess_skill_pack_declarations(payload)
+
+
+def _prepare_append_payload(json_text: str) -> Any:
+    """Alias for append callers so the append path shares the same cleanup pipeline."""
+
+    return _prepare_skill_package_payload(json_text)
+
+
+def _log_persist_phase_start(bundle_slug: str, package_name: str | None) -> None:
+    skill_pack_log_append(
+        {
+            "kind": "persist_phase",
+            "state": "start",
+            "bundle_slug": bundle_slug,
+            "workflow_package_hint": package_name,
+        }
+    )
+
+
+def _persist_compiled_workflows(compiled_workflows: list[CompiledWorkflow], bundle_slug: str) -> list[PersistedWorkflow]:
+    return [_persist_skill_package_artifacts(compiled, bundle_slug) for compiled in compiled_workflows]
+
+
+def _ensure_new_workflow_names(bundle_slug: str, compiled_workflows: list[CompiledWorkflow]) -> None:
+    for compiled in compiled_workflows:
+        if resolve_workflow_dir(bundle_slug, compiled.name):
+            raise ValueError(f'Workflow "{compiled.name}" already exists in bundle "{bundle_slug}".')
+
+
+def _read_bundle_entry_markdown(bundle_slug: str) -> str:
+    return _read_bundle_skill_markdown(bundle_slug)
+
+
+def _read_bundle_skill_markdown(bundle_slug: str) -> str:
+    bundle_root = bundle_root_dir(bundle_slug)
+    if bundle_root is None:
+        return ""
+
+    skill_path = bundle_root / _bundle_skill_file_path(bundle_slug)
+    if not skill_path.is_file():
+        return ""
+    return skill_path.read_text(encoding="utf-8")
+
+
+def _format_build_skill_package_result(
+    persisted_workflows: list[PersistedWorkflow],
+    *,
+    bundle_slug: str,
+    index_json: str,
+    build_log: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not persisted_workflows:
+        raise ValueError("No compiled workflows were persisted.")
+
+    workflow_names = [item.name for item in persisted_workflows]
+    result = persisted_workflows[0].to_response_dict()
+    result["index_json"] = index_json
+    result["skill_md"] = _read_bundle_skill_markdown(bundle_slug)
+    result["workflow_names"] = workflow_names
+    result["build_log"] = build_log
+    return result
+
+
+def _format_append_workflow_result(
+    persisted_workflows: list[PersistedWorkflow],
+    *,
+    bundle_slug: str,
+    index_json: str,
+    build_log: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not persisted_workflows:
+        raise ValueError("No appended workflows were persisted.")
+
+    result = persisted_workflows[0].to_response_dict()
+    result["index_json"] = index_json
+    result["skill_md"] = _read_bundle_entry_markdown(bundle_slug)
+    result["workflow_names"] = [item.name for item in persisted_workflows]
+    result["build_log"] = build_log
+    return result
+
+
+def _build_skill_package_transaction(
+    json_text: str,
+    package_name: str | None,
+    bundle_slug: str | None,
+    build_log: list[dict[str, Any]],
+) -> dict[str, Any]:
+    payload = _prepare_skill_package_payload(json_text)
+    resolved_bundle_slug = _resolve_bundle_slug(bundle_slug)
+
+    _log_persist_phase_start(resolved_bundle_slug, package_name)
+
+    compiled_workflows = _compile_skill_package_payloads(payload, package_name=package_name)
+    persisted_workflows = _persist_compiled_workflows(compiled_workflows, resolved_bundle_slug)
+    refreshed_index_json = _refresh_bundle_runtime_files(resolved_bundle_slug)
+
+    result = _format_build_skill_package_result(
+        persisted_workflows,
+        bundle_slug=resolved_bundle_slug,
+        index_json=refreshed_index_json,
+        build_log=build_log,
+    )
+    skill_pack_log_append({"kind": "persist_phase", "state": "done", "workflow_names": result["workflow_names"]})
+    return result
 
 
 def build_skill_package(
@@ -1635,30 +1916,7 @@ def build_skill_package(
 ) -> dict[str, Any]:
     with skill_pack_build_log_scope(realtime_sink=realtime_sink) as build_log:
         try:
-            payload = preprocess_skill_pack_declarations(_parse_json_text(json_text))
-            slug = _resolve_bundle_slug(bundle_slug)
-            skill_pack_log_append(
-                {
-                    "kind": "persist_phase",
-                    "state": "start",
-                    "bundle_slug": slug,
-                    "workflow_package_hint": package_name,
-                }
-            )
-            compiled_workflows = _compile_skill_package_payloads(payload, package_name=package_name)
-            persisted = [_persist_skill_package_artifacts(compiled, slug) for compiled in compiled_workflows]
-            index_json = _refresh_bundle_runtime_files(slug)
-            bundle_root = bundle_root_dir(slug)
-            skill_path = (bundle_root / _bundle_skill_file_path(slug)) if bundle_root is not None else None
-            result = dict(persisted[0])
-            result["index_json"] = index_json
-            result["skill_md"] = (
-                skill_path.read_text(encoding="utf-8") if skill_path and skill_path.is_file() else format_bundle_skill_manifest_text(slug)
-            )
-            result["workflow_names"] = [item["name"] for item in persisted]
-            result["build_log"] = build_log
-            skill_pack_log_append({"kind": "persist_phase", "state": "done", "workflow_names": result["workflow_names"]})
-            return result
+            return _build_skill_package_transaction(json_text, package_name, bundle_slug, build_log)
         except SkillPackBuildUserError:
             raise
         except ValueError as exc:
@@ -1712,27 +1970,19 @@ def append_workflow_to_skill_package(
 
     with skill_pack_build_log_scope(realtime_sink=realtime_sink) as build_log:
         try:
-            payload = preprocess_skill_pack_declarations(_parse_json_text(json_text))
+            payload = _prepare_append_payload(json_text)
             compiled_workflows = _compile_skill_package_payloads(payload, package_name=appended_package_name)
+            _ensure_new_workflow_names(slug, compiled_workflows)
             for compiled in compiled_workflows:
-                appended_name = str(compiled["name"])
-                if resolve_workflow_dir(slug, appended_name):
-                    raise ValueError(f'Workflow "{appended_name}" already exists in bundle "{slug}".')
-            persisted: list[dict[str, Any]] = []
-            for compiled in compiled_workflows:
-                compiled["warnings"] = [f'Added workflow "{compiled["name"]}" to bundle "{slug}".']
-                persisted.append(_persist_skill_package_artifacts(compiled, slug))
+                compiled.warnings = [f'Added workflow "{compiled.name}" to bundle "{slug}".']
+            persisted = _persist_compiled_workflows(compiled_workflows, slug)
             index_json = _refresh_bundle_runtime_files(slug)
-            bundle_root = bundle_root_dir(slug)
-            skill_path = (bundle_root / _bundle_skill_file_path(slug)) if bundle_root is not None else None
-            result = dict(persisted[0])
-            result["index_json"] = index_json
-            result["skill_md"] = (
-                skill_path.read_text(encoding="utf-8") if skill_path and skill_path.is_file() else format_bundle_skill_manifest_text(slug)
+            return _format_append_workflow_result(
+                persisted,
+                bundle_slug=slug,
+                index_json=index_json,
+                build_log=build_log,
             )
-            result["workflow_names"] = [item["name"] for item in persisted]
-            result["build_log"] = build_log
-            return result
         except SkillPackBuildUserError:
             raise
         except ValueError as exc:
@@ -1749,9 +1999,21 @@ def build_skill_package_zip(
     *,
     skill_pack_bundle: str | None = None,
 ) -> tuple[str, bytes]:
+    from app.storage.skill_packages import (
+        _EXECUTOR_JS,
+        _PACKAGE_JSON,
+        _RECOVERY_JS,
+        _TRACKER_JS,
+        _VALIDATOR_JS,
+        _ORCHESTRATION_SCHEMA_JSON,
+        _orchestration_index_md,
+        _orchestration_planner_md,
+        _bundle_folder_name,
+    )
+
     name = _slugify_name(package_name)
     bundle_segment = _resolve_bundle_slug(skill_pack_bundle)
-    bundle_posix = bundle_segment
+    bundle_folder = _bundle_folder_name(bundle_segment)
     if not inputs_json.strip() or not manifest_json.strip():
         raise ValueError("inputs.json and manifest.json are required for export.")
     if not execution_json.strip() or not recovery_json.strip():
@@ -1769,50 +2031,65 @@ def build_skill_package_zip(
         raise ValueError("execution.json steps must be objects.")
     _validate_execution_plan(parsed_plan)
 
-    buffer = BytesIO()
-    workflow_root = f"{bundle_posix}/workflows/{name}"
+    # Infer auth and build per-skill inputs list from inputs_json
+    inputs_list = _parse_existing_inputs(inputs_json)
+    auth_config = infer_auth_config(inputs_list)
+    sensitive = [i for i in inputs_list if i.get("sensitive")]
     description = _manifest_description(name, json.loads(manifest_json).get("description", ""))
+
+    # Plugin index (single-skill export)
+    plugin_index = format_plugin_index_json(
+        bundle_segment,
+        [{"name": name, "description": description}],
+    )
+    readme = format_plugin_readme_text(bundle_segment, [{"name": name, "description": description}])
+    test_cases = format_test_cases_stub_json_text(inputs_list)
+
+    # Per-skill SKILL.md (simple version from manifest data since structured steps not available here)
+    heading = description or name.replace("_", " ").title()
+    skill_md_lines = [f"# {heading}", "", "## Inputs"]
+    if inputs_list:
+        for item in inputs_list:
+            suffix = " Keep this value secure." if item.get("sensitive") else ""
+            skill_md_lines.append(f"- `{{{{{item['name']}}}}}`: Enter {item['name'].replace('_', ' ')}.{suffix}")
+    else:
+        skill_md_lines.append("- No runtime inputs are required.")
+    skill_md_lines.extend(["", "Execution: `../../execution/executor.js`"])
+    per_skill_skill_md = "\n".join(skill_md_lines).strip() + "\n"
+
+    orch_index = _orchestration_index_md(
+        bundle_segment.replace("_", " ").title(), bundle_segment, [name]
+    )
+    orch_planner = _orchestration_planner_md(bundle_segment)
+
+    buffer = BytesIO()
+    skill_root = f"{bundle_folder}/skills/{name}"
     with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
-        archive.writestr(f"{bundle_posix}/{INSTALL_JS_FILENAME}", format_install_js_text(bundle_segment))
-        archive.writestr(f"{bundle_posix}/{INSTALL_BAT_FILENAME}", format_install_bat_text(bundle_segment))
-        for filename, content in read_cli_files(bundle_segment).items():
-            archive.writestr(f"{bundle_posix}/{filename}", content)
-        archive.writestr(
-            f"{bundle_posix}/{INDEX_FILENAME}",
-            json.dumps(
-                {
-                    "workflows": [
-                        {
-                            "name": name,
-                            "description": description,
-                            "manifest": f"workflows/{name}/manifest.json",
-                        }
-                    ]
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-        )
-        for filename, content in read_engine_files().items():
-            archive.writestr(f"{bundle_posix}/engine/{filename}", content)
-        for filename, content in read_bridge_files().items():
-            archive.writestr(f"{bundle_posix}/bridge/{filename}", content)
-        archive.writestr(f"{workflow_root}/execution.json", execution_json)
-        archive.writestr(f"{workflow_root}/recovery.json", recovery_json)
-        archive.writestr(f"{workflow_root}/inputs.json", inputs_json)
-        archive.writestr(f"{workflow_root}/manifest.json", manifest_json)
-        archive.writestr(
-            f"{bundle_posix}/{_bundle_skill_file_path(bundle_segment)}",
-            skill_md.strip()
-            or format_bundle_skill_manifest_text(
-                bundle_segment,
-                [{"name": name, "description": description, "manifest": f"workflows/{name}/manifest.json"}],
-            ),
-        )
+        # Bundle-level files
+        archive.writestr(f"{bundle_folder}/{bundle_segment}.json", plugin_index)
+        archive.writestr(f"{bundle_folder}/README.md", readme)
+        archive.writestr(f"{bundle_folder}/auth/auth.json", format_auth_json_text(auth_config))
+        archive.writestr(f"{bundle_folder}/auth/credentials.example.json", format_credentials_example_json_text(sensitive))
+        # Orchestration
+        archive.writestr(f"{bundle_folder}/orchestration/index.md", orch_index)
+        archive.writestr(f"{bundle_folder}/orchestration/planner.md", orch_planner)
+        archive.writestr(f"{bundle_folder}/orchestration/schema.json", _ORCHESTRATION_SCHEMA_JSON + "\n")
+        # Execution scaffolds
+        archive.writestr(f"{bundle_folder}/package.json", _PACKAGE_JSON)
+        archive.writestr(f"{bundle_folder}/execution/executor.js", _EXECUTOR_JS)
+        archive.writestr(f"{bundle_folder}/execution/recovery.js", _RECOVERY_JS)
+        archive.writestr(f"{bundle_folder}/execution/tracker.js", _TRACKER_JS)
+        archive.writestr(f"{bundle_folder}/execution/validator.js", _VALIDATOR_JS)
+        # Per-skill files
+        archive.writestr(f"{skill_root}/SKILL.md", per_skill_skill_md)
+        archive.writestr(f"{skill_root}/manifest.json", manifest_json)
+        archive.writestr(f"{skill_root}/execution.json", execution_json)
+        archive.writestr(f"{skill_root}/input.json", inputs_json)
+        archive.writestr(f"{skill_root}/recovery.json", recovery_json)
+        archive.writestr(f"{skill_root}/tests/test-cases.json", test_cases)
         if visual_assets:
             for filename, content in sorted(visual_assets.items()):
-                archive.writestr(f"{workflow_root}/visuals/{Path(filename).name}", content)
+                archive.writestr(f"{skill_root}/visuals/{Path(filename).name}", content)
     archive_name_root = bundle_segment.replace("/", "_").replace("\\", "_")
     return f"{archive_name_root}_{name}.zip", buffer.getvalue()
 

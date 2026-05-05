@@ -291,7 +291,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertEqual(manifest["name"], "delete_database")
         self.assertEqual(manifest["entry"]["execution"], "./execution.json")
         self.assertEqual(manifest["entry"]["recovery"], "./recovery.json")
-        self.assertEqual(manifest["entry"]["inputs"], "./inputs.json")
+        self.assertEqual(manifest["entry"]["input"], "./input.json")
         self.assertEqual(manifest["execution_mode"], "deterministic")
         self.assertEqual(manifest["recovery_mode"], "tiered")
         self.assertTrue(manifest["vision_enabled"])
@@ -307,12 +307,12 @@ class SkillPackBuilderTests(unittest.TestCase):
 
             execution = json.loads(package["execution_json"])
             index = json.loads(package["index_json"])
-            skill_md = package["skill_md"]
             self.assertEqual(package["name"], "delete_database_recording")
-            index_by_name = {item["name"]: item for item in index["workflows"]}
+            # New layout: index has "skills" key instead of "workflows"
+            index_by_name = {item["name"]: item for item in index["skills"]}
             self.assertEqual(
                 index_by_name["delete_database_recording"]["manifest"],
-                "workflows/delete_database_recording/manifest.json",
+                "skills/delete_database_recording/manifest.json",
             )
             self.assertTrue(package["used_llm"])
             self.assertEqual(package["input_count"], 3)
@@ -321,14 +321,8 @@ class SkillPackBuilderTests(unittest.TestCase):
             self.assertNotIn("execution_plan_json", package)
             self.assertFalse(any(step["type"] == "wait" for step in execution))
             self.assertIn({"type": "click", "selector": "text=Delete Database"}, execution)
-            self.assertIn("name: render", skill_md)
-            self.assertIn("description: Render automation workflows", skill_md)
-            self.assertIn('"workflow": "delete_database_recording"', skill_md)
-            self.assertIn("Return ONLY JSON. No explanations.", skill_md)
-            self.assertIn("* DO NOT output text outside JSON", skill_md)
-            self.assertNotIn("* DO NOT include UI steps", skill_md)
 
-    def test_build_skill_package_writes_claude_skill_only(self) -> None:
+    def test_build_skill_package_writes_skill_files_in_new_layout(self) -> None:
         from app.services.skill_pack_builder import build_skill_package
         from app.storage.skill_packages import bundle_root_dir, skill_package_dir
 
@@ -336,16 +330,27 @@ class SkillPackBuilderTests(unittest.TestCase):
             with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
                 package = build_skill_package(json.dumps(_raw_workflow()), bundle_slug="render")
 
-            wf_dir = skill_package_dir("render", package["name"])
+            wf_name = package["name"]
             br = bundle_root_dir("render")
             self.assertIsNotNone(br)
-            cl = br / "claude" / "skills" / "render" / "SKILL.md"
-            self.assertTrue(cl.is_file())
-            text = cl.read_text(encoding="utf-8")
-            self.assertIn('"workflow": "delete_database_recording"', text)
+            # Per-skill SKILL.md under skills/{wf}/SKILL.md
+            skill_md_path = br / "skills" / wf_name / "SKILL.md"
+            self.assertTrue(skill_md_path.is_file())
+            # Plugin index {slug}.json at bundle root
+            plugin_index_path = br / "render.json"
+            self.assertTrue(plugin_index_path.is_file())
+            plugin_index = json.loads(plugin_index_path.read_text(encoding="utf-8"))
+            skill_names = [s["name"] for s in plugin_index["skills"]]
+            self.assertIn(wf_name, skill_names)
+            # orchestration/index.md exists
+            self.assertTrue((br / "orchestration" / "index.md").is_file())
+            # execution/*.js exist
+            self.assertTrue((br / "execution" / "executor.js").is_file())
+            self.assertTrue((br / "execution" / "tracker.js").is_file())
+            # Legacy dirs should NOT exist
             self.assertFalse((br / ".opencode").exists())
             self.assertFalse((br / ".codex").exists())
-            self.assertFalse((wf_dir / ".opencode").exists())
+            self.assertFalse((br / "claude").exists())
 
     def test_building_multiple_workflows_creates_multiple_bundle_folders(self) -> None:
         from app.services.skill_pack_builder import build_skill_package
@@ -368,17 +373,17 @@ class SkillPackBuilderTests(unittest.TestCase):
                 )
 
             index = json.loads(second["index_json"])
-            index_by_name = {item["name"]: item for item in index["workflows"]}
+            index_by_name = {item["name"]: item for item in index["skills"]}
             self.assertEqual(set(index_by_name), {"delete_database", "delete_web_service"})
             self.assertEqual(
                 index_by_name["delete_database"]["manifest"],
-                "workflows/delete_database/manifest.json",
+                "skills/delete_database/manifest.json",
             )
             self.assertEqual(
                 index_by_name["delete_web_service"]["manifest"],
-                "workflows/delete_web_service/manifest.json",
+                "skills/delete_web_service/manifest.json",
             )
-            self.assertIn("claude/skills/default/SKILL.md", read_skill_package_files("default", first["name"]))
+            self.assertIn("SKILL.md", read_skill_package_files("default", first["name"]))
             self.assertNotIn("skill.md", read_skill_package_files("default", second["name"]))
 
     def test_append_workflow_creates_new_folder_and_keeps_existing_files_unchanged(self) -> None:
@@ -406,15 +411,10 @@ class SkillPackBuilderTests(unittest.TestCase):
 
             self.assertEqual(appended["name"], "delete_web_service")
             self.assertEqual(before["execution.json"], after["execution.json"])
-            self.assertEqual(before["execution.json"], after["execution.json"])
-            self.assertIn("bridge/run.js", appended_files)
-            self.assertEqual(
-                json.loads(appended["index_json"])["workflows"],
-                [
-                    {"name": "delete_database", "description": "Delete Database", "manifest": "workflows/delete_database/manifest.json"},
-                    {"name": "delete_web_service", "description": "Delete Web Service", "manifest": "workflows/delete_web_service/manifest.json"},
-                ],
-            )
+            self.assertIn("execution/executor.js", appended_files)
+            index_skills = json.loads(appended["index_json"])["skills"]
+            skill_names = {s["name"] for s in index_skills}
+            self.assertEqual(skill_names, {"delete_database", "delete_web_service"})
 
     def test_skill_pack_build_error_includes_build_log_payload(self) -> None:
         from app.main import app
@@ -494,25 +494,26 @@ class SkillPackBuilderTests(unittest.TestCase):
                 self.assertEqual(build_response.status_code, 200)
                 payload = build_response.json()
                 self.assertIn("index_json", payload)
-                index_by_name = {item["name"]: item for item in json.loads(payload["index_json"])["workflows"]}
+                index_by_name = {item["name"]: item for item in json.loads(payload["index_json"])["skills"]}
                 self.assertEqual(
                     index_by_name["delete_database_recording"]["manifest"],
-                    "workflows/delete_database_recording/manifest.json",
+                    "skills/delete_database_recording/manifest.json",
                 )
                 files_response = client.get(f"/skill-pack/bundles/default")
                 self.assertEqual(files_response.status_code, 200)
                 files_payload = files_response.json()
                 self.assertEqual(files_payload["package_name"], "default")
                 fn = files_payload["files"]
-                wf_prefix = f"workflows/{payload['name']}/"
-                self.assertIn("install.js", fn)
-                self.assertIn("install.bat", fn)
-                self.assertIn("render.js", fn)
-                self.assertIn("render.bat", fn)
-                self.assertIn("index.json", fn)
-                self.assertIn("claude/skills/default/SKILL.md", fn)
+                wf_prefix = f"skills/{payload['name']}/"
+                self.assertIn("default.json", fn)
+                self.assertIn("README.md", fn)
+                self.assertIn("auth/auth.json", fn)
+                self.assertIn("execution/executor.js", fn)
+                self.assertIn("orchestration/index.md", fn)
+                self.assertNotIn("install.js", fn)
+                self.assertNotIn("install.bat", fn)
+                self.assertNotIn("index.json", fn)
                 self.assertNotIn("skill.json", fn)
-                self.assertNotIn("README.md", fn)
                 self.assertIn(f"{wf_prefix}execution.json", fn)
                 self.assertIn(f"{wf_prefix}recovery.json", fn)
                 export_response = client.post(
@@ -528,53 +529,48 @@ class SkillPackBuilderTests(unittest.TestCase):
                 )
 
             self.assertEqual(export_response.status_code, 200)
-            bundle_path = "default"
-            wf = f"{bundle_path}/workflows/{payload['name']}"
+            bundle_folder = "default-plugin"
+            wf_name = payload["name"]
+            skill_root = f"{bundle_folder}/skills/{wf_name}"
             with ZipFile(BytesIO(export_response.content)) as archive:
                 names = archive.namelist()
-                self.assertIn(f"{bundle_path}/install.js", names)
-                self.assertIn(f"{bundle_path}/install.bat", names)
-                self.assertIn(f"{bundle_path}/render.js", names)
-                self.assertIn(f"{bundle_path}/render.bat", names)
-                self.assertIn(f"{bundle_path}/index.json", names)
-                self.assertIn(f"{bundle_path}/engine/executor.js", names)
-                self.assertNotIn(f"{bundle_path}/engine/recovery.js", names)
-                self.assertIn(f"{bundle_path}/bridge/run.js", names)
-                self.assertIn(f"{bundle_path}/claude/skills/default/SKILL.md", names)
-                self.assertIn(f"{wf}/execution.json", names)
-                self.assertIn(f"{wf}/recovery.json", names)
-                self.assertIn(f"{wf}/inputs.json", names)
-                self.assertIn(f"{wf}/manifest.json", names)
-                self.assertNotIn(f"{wf}/skill.md", names)
-                index = json.loads(archive.read(f"{bundle_path}/index.json"))
-                self.assertEqual(
-                    index["workflows"][0]["manifest"],
-                    "workflows/delete_database_recording/manifest.json",
-                )
-                manifest = json.loads(archive.read(f"{wf}/manifest.json"))
+                # New bundle-level files
+                self.assertIn(f"{bundle_folder}/default.json", names)
+                self.assertIn(f"{bundle_folder}/README.md", names)
+                self.assertIn(f"{bundle_folder}/auth/auth.json", names)
+                self.assertIn(f"{bundle_folder}/auth/credentials.example.json", names)
+                self.assertIn(f"{bundle_folder}/orchestration/index.md", names)
+                self.assertIn(f"{bundle_folder}/orchestration/planner.md", names)
+                self.assertIn(f"{bundle_folder}/orchestration/schema.json", names)
+                self.assertIn(f"{bundle_folder}/execution/executor.js", names)
+                self.assertIn(f"{bundle_folder}/execution/recovery.js", names)
+                self.assertIn(f"{bundle_folder}/execution/tracker.js", names)
+                self.assertIn(f"{bundle_folder}/execution/validator.js", names)
+                # Per-skill files
+                self.assertIn(f"{skill_root}/SKILL.md", names)
+                self.assertIn(f"{skill_root}/execution.json", names)
+                self.assertIn(f"{skill_root}/recovery.json", names)
+                self.assertIn(f"{skill_root}/input.json", names)
+                self.assertIn(f"{skill_root}/manifest.json", names)
+                self.assertIn(f"{skill_root}/tests/test-cases.json", names)
+                # Old files must not exist
+                self.assertNotIn(f"{bundle_folder}/install.js", names)
+                self.assertNotIn(f"{bundle_folder}/install.bat", names)
+                self.assertNotIn(f"{bundle_folder}/render.js", names)
+                self.assertNotIn(f"{bundle_folder}/index.json", names)
+                self.assertNotIn(f"{bundle_folder}/engine/executor.js", names)
+                self.assertNotIn(f"{bundle_folder}/bridge/run.js", names)
+                # Content checks
+                plugin_index = json.loads(archive.read(f"{bundle_folder}/default.json"))
+                self.assertEqual(plugin_index["skills"][0]["manifest"], f"skills/{wf_name}/manifest.json")
+                manifest = json.loads(archive.read(f"{skill_root}/manifest.json"))
                 self.assertEqual(manifest["entry"]["execution"], "./execution.json")
-                install_bat = archive.read(f"{bundle_path}/install.bat").decode("utf-8")
-                install_js = archive.read(f"{bundle_path}/install.js").decode("utf-8")
-                render_js = archive.read(f"{bundle_path}/render.js").decode("utf-8")
-                render_bat = archive.read(f"{bundle_path}/render.bat").decode("utf-8")
-                self.assertEqual(
-                    install_bat,
-                    '@echo off\r\ncd /d "%~dp0"\r\necho Installing Render Skill...\r\nnode install.js\r\necho Done!\r\npause\r\n',
-                )
-                self.assertIn('const claudeCandidates = [path.join(claudeRoot, "CLAUDE.md"), path.join(claudeRoot, "Claude.md")];', install_js)
-                self.assertIn('fs.cpSync(source, target, { recursive: true, force: true });', install_js)
-                self.assertIn('const fs = require("fs");', install_js)
-                self.assertIn('const os = require("os");', install_js)
-                self.assertIn('const path = require("path");', install_js)
-                self.assertNotIn('require("child_process")', install_js)
-                self.assertIn('Source skill path:', install_js)
-                self.assertIn('Target skill path:', install_js)
-                self.assertIn('CLAUDE.md path:', install_js)
-                self.assertIn('console.log(`Registered ${skillName} in ${claudePath}`);', install_js)
-                self.assertIn('const input = process.argv.slice(2).join(" ").trim();', render_js)
-                self.assertIn('childProcess.spawnSync("claude", [input]', render_js)
-                self.assertIn('const bridgePath = path.join(__dirname, "bridge", "run.js");', render_js)
-                self.assertEqual(render_bat, '@echo off\r\ncd /d "%~dp0"\r\nnode "%~dp0render.js" %*\r\n')
+                self.assertEqual(manifest["entry"]["input"], "./input.json")
+                executor_js = archive.read(f"{bundle_folder}/execution/executor.js").decode("utf-8")
+                self.assertIn("executeSkill", executor_js)
+                tracker_js = archive.read(f"{bundle_folder}/execution/tracker.js").decode("utf-8")
+                self.assertIn("CONXA_TRACKER_URL", tracker_js)
+                self.assertIn(".catch(() => {})", tracker_js)
 
     def test_skill_pack_api_rename_package(self) -> None:
         from app.main import app
@@ -591,7 +587,7 @@ class SkillPackBuilderTests(unittest.TestCase):
             "entry": {
                 "execution": "./execution.json",
                 "recovery": "./recovery.json",
-                "inputs": "./inputs.json",
+                "input": "./input.json",
             },
         }
 
@@ -602,7 +598,7 @@ class SkillPackBuilderTests(unittest.TestCase):
                 {
                     "execution.json": "[]",
                     "recovery.json": "{}",
-                    "inputs.json": "{}",
+                    "input.json": "{}",
                     "manifest.json": json.dumps(manifest),
                 },
             )
@@ -718,42 +714,29 @@ class SkillPackBuilderTests(unittest.TestCase):
                     )
 
                     self.assertEqual(filename, "default_delete_database_visual_assets_test.zip")
-                    wf_base = "default/workflows/delete_database_visual_assets_test"
-                    bundle_base = "default"
+                    bundle_folder = "default-plugin"
+                    skill_name = "delete_database_visual_assets_test"
+                    skill_base = f"{bundle_folder}/skills/{skill_name}"
                     with ZipFile(BytesIO(zipped)) as archive:
                         names = archive.namelist()
-                        self.assertIn(f"{bundle_base}/claude/skills/default/SKILL.md", names)
-                        self.assertIn(
-                            f"{wf_base}/visuals/Image_0.jpg",
-                            names,
-                        )
-                        self.assertIn(
-                            f"{wf_base}/visuals/Image_1.jpg",
-                            names,
-                        )
-                        self.assertIn(
-                            f"{wf_base}/visuals/Image_2.png",
-                            names,
-                        )
-                        self.assertEqual(
-                            archive.read(
-                                f"{wf_base}/visuals/Image_0.jpg",
-                            ),
-                            b"launch-image",
-                        )
+                        self.assertIn(f"{bundle_folder}/default.json", names)
+                        self.assertIn(f"{skill_base}/SKILL.md", names)
+                        self.assertIn(f"{skill_base}/visuals/Image_0.jpg", names)
+                        self.assertIn(f"{skill_base}/visuals/Image_1.jpg", names)
+                        self.assertIn(f"{skill_base}/visuals/Image_2.png", names)
+                        self.assertEqual(archive.read(f"{skill_base}/visuals/Image_0.jpg"), b"launch-image")
 
-    def test_install_script_registration_block_is_deduplicated_and_uses_expected_paths(self) -> None:
-        from app.storage.skill_packages import format_install_js_text
+    def test_execution_scaffolds_have_correct_structure(self) -> None:
+        from app.storage.skill_packages import _EXECUTOR_JS, _RECOVERY_JS, _TRACKER_JS, _VALIDATOR_JS
 
-        install_js = format_install_js_text("render")
-        self.assertIn('const source = path.join(__dirname, "claude", "skills", skillName);', install_js)
-        self.assertIn('const target = path.join(claudeRoot, "skills", skillName);', install_js)
-        self.assertIn('const claudeCandidates = [path.join(claudeRoot, "CLAUDE.md"), path.join(claudeRoot, "Claude.md")];', install_js)
-        self.assertIn('* **render** (~/.claude/skills/render/SKILL.md) - Render automation workflows. Trigger: /render', install_js)
-        self.assertIn('* mentions render automation tasks', install_js)
-        self.assertIn('* OR uses /render', install_js)
-        self.assertIn('if (!existing.includes(`# ${skillName}`) && !existing.includes(`skill: \\"${skillName}\\"`)) {', install_js)
-        self.assertNotIn('require("playwright")', install_js)
+        self.assertIn("executeSkill", _EXECUTOR_JS)
+        self.assertIn("execution.json", _EXECUTOR_JS)
+        self.assertIn("runLayer", _RECOVERY_JS)
+        self.assertIn("tracker.send", _RECOVERY_JS)
+        self.assertIn("CONXA_TRACKER_URL", _TRACKER_JS)
+        self.assertIn(".catch(() => {})", _TRACKER_JS)
+        self.assertIn("validateInput", _VALIDATOR_JS)
+        self.assertIn("input.json", _VALIDATOR_JS)
 
     def test_recovery_get_visual_ref_supports_expected_extensions(self) -> None:
         from app.services.skill_pack_builder import get_visual_ref
@@ -808,11 +791,13 @@ class SkillPackBuilderTests(unittest.TestCase):
             self.assertEqual(set(package["workflow_names"]), {"delete_database", "delete_web_service"})
             bundle_root = bundle_root_dir("render")
             assert bundle_root is not None
-            self.assertTrue((bundle_root / "workflows" / "delete_database").is_dir())
-            self.assertTrue((bundle_root / "workflows" / "delete_web_service").is_dir())
-            skill_text = (bundle_root / "claude" / "skills" / "render" / "SKILL.md").read_text(encoding="utf-8")
-            self.assertIn('"workflow": "delete_database"', skill_text)
-            self.assertIn('"workflow": "delete_web_service"', skill_text)
+            self.assertTrue((bundle_root / "skills" / "delete_database").is_dir())
+            self.assertTrue((bundle_root / "skills" / "delete_web_service").is_dir())
+            # Plugin index should list both skills
+            plugin_index = json.loads((bundle_root / "render.json").read_text(encoding="utf-8"))
+            skill_names = {s["name"] for s in plugin_index["skills"]}
+            self.assertIn("delete_database", skill_names)
+            self.assertIn("delete_web_service", skill_names)
 
     def test_existing_visuals_are_preserved_when_workflow_is_rewritten(self) -> None:
         from app.services.skill_pack_builder import build_skill_package
@@ -833,21 +818,19 @@ class SkillPackBuilderTests(unittest.TestCase):
 
             self.assertEqual(existing.read_bytes(), before)
 
-    def test_runtime_files_contain_expected_static_behaviors(self) -> None:
-        from app.storage.skill_packages import format_render_bat_text, read_bridge_files, read_cli_files, read_engine_files
+    def test_bundle_scaffold_creates_expected_directories(self) -> None:
+        from app.storage.skill_packages import ensure_bundle_scaffold
 
-        engine_files = read_engine_files()
-        bridge_files = read_bridge_files()
-        cli_files = read_cli_files("render")
-        self.assertIn("executeWorkflow(name, inputs = {})", engine_files["executor.js"])
-        self.assertIn("execution.json for ${name} must be a JSON array.", engine_files["executor.js"])
-        self.assertIn('console.log(`[executor] step ${index + 1}: ${JSON.stringify(rendered)}`);', engine_files["executor.js"])
-        self.assertNotIn("waitFor", engine_files["executor.js"])
-        self.assertNotIn("recoverStep", engine_files["executor.js"])
-        self.assertIn("JSON.parse(raw)", bridge_files["run.js"])
-        self.assertIn("Array.isArray(plan)", bridge_files["run.js"])
-        self.assertIn("validateEntry(entry, index)", bridge_files["run.js"])
-        self.assertIn('childProcess.spawnSync("claude", [input]', cli_files["render.js"])
-        self.assertIn("extractFirstJsonArray", cli_files["render.js"])
-        self.assertIn('process.execPath, [bridgePath, JSON.stringify(plan)]', cli_files["render.js"])
-        self.assertEqual(format_render_bat_text("render"), '@echo off\r\ncd /d "%~dp0"\r\nnode "%~dp0render.js" %*\r\n')
+        with _temporary_skill_package_root():
+            root = ensure_bundle_scaffold("render")
+            self.assertTrue((root / "skills").is_dir())
+            self.assertTrue((root / "auth").is_dir())
+            self.assertTrue((root / "orchestration").is_dir())
+            self.assertTrue((root / "execution").is_dir())
+            self.assertTrue((root / "execution" / "executor.js").is_file())
+            self.assertTrue((root / "execution" / "tracker.js").is_file())
+            self.assertTrue((root / "execution" / "recovery.js").is_file())
+            self.assertTrue((root / "execution" / "validator.js").is_file())
+            self.assertTrue((root / "orchestration" / "schema.json").is_file())
+            self.assertFalse((root / "engine").exists())
+            self.assertFalse((root / "bridge").exists())
