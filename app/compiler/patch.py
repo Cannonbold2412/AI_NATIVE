@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.anchors.schema import normalize_anchor_list
+from app.compiler.action_policy import no_recovery_block, recovery_enabled_for_action
 from app.compiler.intent_access import get_effective_intent_from_skill_step
 from app.compiler.recovery_policy import (
     merge_recovery_strategies_for_wait_shape,
@@ -36,8 +37,13 @@ def _build_reference_from_signals(step: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _enhance_step_with_llm(step: dict[str, Any]) -> dict[str, Any]:
-    """1-click fix enhancement: improve intent + anchors + strategies (assist-only)."""
+def _enhance_step_with_llm(step: dict[str, Any], *, user_edited_recovery: bool = False) -> dict[str, Any]:
+    """1-click fix enhancement: improve intent + anchors + strategies (assist-only).
+
+    When user_edited_recovery=True, skips vision anchor enrichment to preserve user edits.
+    """
+    from app.llm.anchor_vision_llm import generate_anchors_from_image_bytes
+
     out = dict(step)
     signals = out.get("signals") or {}
     dom = signals.get("dom") or {}
@@ -63,10 +69,33 @@ def _enhance_step_with_llm(step: dict[str, Any]) -> dict[str, Any]:
             sem["llm_intent"] = resolved
         signals["semantic"] = sem
         out["signals"] = signals
+        if not recovery_enabled_for_action(out.get("action")):
+            out["recovery"] = no_recovery_block(resolved)
+            return out
         recovery = dict(out.get("recovery") or {})
         recovery["intent"] = resolved or llm.intent
         recovery["final_intent"] = str(recovery.get("intent") or "").strip()
         anchors = list(recovery.get("anchors") or [])
+
+        if not user_edited_recovery:
+            visual = signals.get("visual") or {}
+            full_screenshot = str(visual.get("full_screenshot") or "").strip()
+            if full_screenshot:
+                try:
+                    from app.editor.assets import resolve_skill_asset
+
+                    asset_path = resolve_skill_asset(full_screenshot)
+                    if asset_path.is_file():
+                        image_bytes = asset_path.read_bytes()
+                        intent_hint = resolved or llm.intent or ""
+                        vision_anchors = generate_anchors_from_image_bytes(
+                            image_bytes, intent_hint, 0, policy=pol
+                        )
+                        if vision_anchors:
+                            anchors = vision_anchors + anchors
+                except Exception:
+                    pass
+
         recovery["anchors"] = anchors
         intent_for_recovery = str(recovery.get("intent") or resolved or llm.intent or "").strip()
         strategies = list(recovery_strategies_for_intent(intent_for_recovery, pol))
@@ -96,6 +125,31 @@ def _apply_top_level_step_fields(step: dict[str, Any], patch: dict[str, Any]) ->
         step["signals"] = signals
     if "value" in patch:
         step["value"] = patch["value"]
+    if "url" in patch and isinstance(patch["url"], str):
+        url = str(patch["url"]).strip()
+        step["url"] = url
+        action = step.get("action")
+        if isinstance(action, dict):
+            action["url"] = url
+            step["action"] = action
+        signals = dict(step.get("signals") or {})
+        context = dict(signals.get("context") or {})
+        context["page_url"] = url
+        signals["context"] = context
+        step["signals"] = signals
+    if "check_kind" in patch and isinstance(patch["check_kind"], str):
+        step["check_kind"] = str(patch["check_kind"]).strip() or "url"
+    if "check_pattern" in patch and isinstance(patch["check_pattern"], str):
+        step["check_pattern"] = str(patch["check_pattern"]).strip()
+    if "check_selector" in patch and isinstance(patch["check_selector"], str):
+        step["check_selector"] = str(patch["check_selector"]).strip()
+    if "check_text" in patch and isinstance(patch["check_text"], str):
+        step["check_text"] = str(patch["check_text"]).strip()
+    if "check_threshold" in patch:
+        try:
+            step["check_threshold"] = float(patch["check_threshold"])
+        except (TypeError, ValueError):
+            pass
 
 
 def _normalize_step_anchor_blocks(step: dict[str, Any]) -> dict[str, Any]:
@@ -113,6 +167,10 @@ def _sync_recovery_deterministic(step: dict[str, Any]) -> dict[str, Any]:
     """After a non-LLM patch, align recovery strategies with intent + wait_for (deterministic)."""
     pol = get_policy_bundle().data
     intent = get_effective_intent_from_skill_step(step) or str(step.get("intent") or "").strip()
+    if not recovery_enabled_for_action(step.get("action")):
+        out = dict(step)
+        out["recovery"] = no_recovery_block(intent)
+        return out
     recovery = dict(step.get("recovery") or {})
     recovery["intent"] = intent
     recovery["final_intent"] = intent
@@ -168,8 +226,9 @@ def apply_step_patch(
             step[key] = deep_merge(dict(base), dict(patch[key]))
     _apply_top_level_step_fields(step, patch)
     step = _normalize_step_anchor_blocks(step)
+    user_edited_recovery = "recovery" in patch and isinstance(patch.get("recovery"), dict)
     if assist_llm:
-        step = _enhance_step_with_llm(step)
+        step = _enhance_step_with_llm(step, user_edited_recovery=user_edited_recovery)
     else:
         step = _sync_recovery_deterministic(step)
     steps[step_index] = step

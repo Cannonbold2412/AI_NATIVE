@@ -16,6 +16,8 @@ from app.editor.patch_gate import validate_editor_patch
 from app.editor.workflow_service import (
     build_workflow_response,
     delete_step_at,
+    ensure_initial_navigation_step,
+    insert_step_after,
     merge_skill_inputs,
     reorder_steps,
     replace_string_literals_in_skill_document,
@@ -25,6 +27,7 @@ from app.editor.recording_visual import (
     apply_recording_event_visual_to_step_or_raise,
     clear_step_visual_screenshots_or_raise,
     screenshot_items_for_skill,
+    update_step_visual_bbox_and_regenerate_anchors_or_raise,
 )
 from app.llm.anchor_vision_llm import VisionAnchorGenerationError
 from app.metrics.store import metrics
@@ -39,7 +42,10 @@ router = APIRouter(prefix="/skills", tags=["skills-workflow"])
 
 
 def _asset_base_url(request: Request) -> str:
-    return str(request.base_url).rstrip("/")
+    path = request.url.path
+    if path.startswith("/api/v1/"):
+        return "/api/v1"
+    return ""
 
 
 class StepPatchBody(BaseModel):
@@ -49,6 +55,11 @@ class StepPatchBody(BaseModel):
 
 class ReorderBody(BaseModel):
     new_order: list[int]
+
+
+class InsertStepBody(BaseModel):
+    action_kind: str = Field(..., min_length=1)
+    insert_after: int | None = None
 
 
 class SkillPatchBody(BaseModel):
@@ -71,6 +82,15 @@ class ApplyRecordingVisualBody(BaseModel):
     event_index: int = Field(ge=0)
 
 
+class VisualBboxBody(BaseModel):
+    """CSS-pixel target region drawn over a step screenshot."""
+
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    w: float = Field(gt=0)
+    h: float = Field(gt=0)
+
+
 @router.get("", summary="List stored skill packages (newest first)")
 def list_skills() -> dict[str, Any]:
     return {"skills": list_skill_summaries()}
@@ -90,6 +110,9 @@ def get_workflow(skill_id: str, request: Request) -> dict[str, Any]:
     doc = read_skill(skill_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Unknown skill_id")
+    doc, changed = ensure_initial_navigation_step(doc)
+    if changed:
+        write_skill(skill_id, doc)
     wf = build_workflow_response(skill_id, doc, asset_base_url=_asset_base_url(request))
     return wf.model_dump(mode="json")
 
@@ -172,6 +195,45 @@ def post_apply_recording_visual(
     }
 
 
+@router.post("/{skill_id}/steps/{step_index}/visual-bbox")
+def post_update_visual_bbox(
+    skill_id: str,
+    step_index: int,
+    body: VisualBboxBody,
+    request: Request,
+) -> dict[str, Any]:
+    """Save a manually drawn visual bbox and regenerate vision-backed anchors for the step."""
+    metrics.inc("workflow_update_visual_bbox_attempts")
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    steps = ((doc.get("skills") or [{}])[0]).get("steps") or []
+    if step_index < 0 or step_index >= len(steps):
+        raise HTTPException(status_code=400, detail="step_index_out_of_range")
+    try:
+        new_doc = update_step_visual_bbox_and_regenerate_anchors_or_raise(
+            doc,
+            step_index,
+            body.model_dump(mode="json"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except VisionAnchorGenerationError as exc:
+        raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
+
+    steps_after = (new_doc.get("skills") or [{}])[0].get("steps") or []
+    rev = revalidate_step(dict(steps_after[step_index]))
+    write_skill(skill_id, new_doc)
+    metrics.inc("workflow_update_visual_bbox_successes")
+    wf = build_workflow_response(skill_id, new_doc, asset_base_url=_asset_base_url(request))
+    return {
+        "skill_id": skill_id,
+        "meta": new_doc.get("meta"),
+        "revalidation": rev,
+        "workflow": wf.model_dump(mode="json"),
+    }
+
+
 @router.post("/{skill_id}/steps/{step_index}/clear-step-visual")
 def post_clear_step_visual(
     skill_id: str,
@@ -243,6 +305,20 @@ def post_reorder(skill_id: str, body: ReorderBody, request: Request) -> dict[str
         raise HTTPException(status_code=404, detail="Unknown skill_id")
     try:
         new_doc = reorder_steps(doc, body.new_order)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_skill(skill_id, new_doc)
+    wf = build_workflow_response(skill_id, new_doc, asset_base_url=_asset_base_url(request))
+    return {"skill_id": skill_id, "meta": new_doc.get("meta"), "workflow": wf.model_dump(mode="json")}
+
+
+@router.post("/{skill_id}/steps")
+def post_insert_step(skill_id: str, body: InsertStepBody, request: Request) -> dict[str, Any]:
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    try:
+        new_doc = insert_step_after(doc, body.action_kind, body.insert_after)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     write_skill(skill_id, new_doc)

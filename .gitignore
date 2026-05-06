@@ -1,14 +1,67 @@
-data/
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Environment and local secrets
 .env
+.env.*
+!.env.example
+!*.env.example
 frontend/.env.local
+frontend/.env*.local
+credentials.json
+*.credentials.json
+!.credentials.example.json
+
+# Local app data and generated artifacts
+data/
+tmp/
 obsidian_vault/
 graphify-out/
-frontend/node_modules/
-frontend/dist/
-frontend/vite.*.log
-frontend/.env.example
 AI_NATIVE/
-tmp/
+
+# Frontend dependencies and build output
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/build/
+frontend/.turbo/
+frontend/.vercel/
+frontend/tsconfig.tsbuildinfo
+frontend/*.log
+
+# Generated package dependencies
+output/**/node_modules/
+output/**/.package-lock.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+vite.*.log
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tool-local settings
+.claude/settings.local.json

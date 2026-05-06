@@ -154,7 +154,9 @@ def _anchors_warning_eligible(reference: dict[str, Any]) -> bool:
 def audit_reference(reference: dict[str, Any]) -> list[str]:
     """Deterministic structural checks on a frozen signal_reference."""
     issues: list[str] = []
-    action = str(reference.get("action_kind") or "")
+    action = str(reference.get("action_kind") or "").strip().lower()
+    if action in {"navigate", "goto", "go_to", "open"}:
+        return issues
     if action != "scroll":
         sel = reference.get("selectors") or {}
         if not sel:

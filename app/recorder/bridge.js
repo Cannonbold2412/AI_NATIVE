@@ -217,9 +217,9 @@
       if (c.contains && c.contains(el)) {
         relation = "inside";
       } else if (rect.top >= r.bottom) {
-        relation = "below";
-      } else if (rect.bottom <= r.top) {
         relation = "above";
+      } else if (rect.bottom <= r.top) {
+        relation = "below";
       } else {
         relation = "inside";
       }

@@ -750,9 +750,16 @@ class SkillPackBuilderTests(unittest.TestCase):
 
             with patch.object(settings, "data_dir", data_dir):
                 with _temporary_skill_package_root():
-                    with patch(
+                    with patch.object(
+                        settings, "pack_recovery_vision_enabled", False
+                    ), patch(
                         "app.services.skill_pack_builder.structure_steps_with_llm",
                         return_value=_structured_workflow_with_visuals(),
+                    ), patch(
+                        "app.llm.anchor_vision_llm.generate_anchors_from_image_bytes",
+                        side_effect=AssertionError(
+                            "package build should not call vision recovery by default"
+                        ),
                     ):
                         package = build_skill_package(json.dumps(payload))
 

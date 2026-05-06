@@ -31,10 +31,12 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from app.config import settings
 from app.llm.pack_llm_keys import configured_pack_keys, next_pack_api_key
 from app.services.skill_pack_build_log import skill_pack_build_log_scope, skill_pack_log_append
+from app.services.skill_pack.payload import collect_visual_assets_for_structured_steps
 from app.storage.skill_packages import (
     SKILLS_SUBDIR,
     VISUAL_IMAGE_SUFFIXES,
     _bundle_folder_name,
+    _bundle_write_lock,
     _sanitize_segment,
     _write_bundle_index,
     bundle_root_dir,
@@ -314,7 +316,7 @@ def preprocess_plugin_json(plugin_json: dict) -> dict:
                 step["screenshot"] = screenshot
 
     cleaned_size = _json_size_bytes(cleaned)
-    _logger.info(f"Plugin JSON preprocessed. Size reduction: {original_size} → {cleaned_size} bytes")
+    _logger.info("Plugin JSON preprocessed. Size reduction: %s → %s bytes", original_size, cleaned_size)
     return cleaned
 
 
@@ -1305,10 +1307,9 @@ def _validate_recovery_entries(compiled: list[dict[str, Any]], entries: list[dic
             raise ValueError("Recovery selector_context must include primary and alternatives.")
         if any(not _sanitize_recovery_selector(item) for item in alternatives):
             raise ValueError("Recovery selector_context alternatives must be valid selectors.")
-        if "validation" in json.dumps(entry, ensure_ascii=False).lower():
-            raise ValueError("Recovery entries must not include validation data.")
-        if "scroll" in json.dumps(entry, ensure_ascii=False).lower():
-            raise ValueError("Recovery entries must not include scroll data.")
+        action_type = str(entry.get("type") or entry.get("action") or "").lower()
+        if action_type == "scroll":
+            raise ValueError("Recovery entries must not include scroll actions.")
         if visuals_dir is None:
             if "visual_ref" in entry:
                 raise ValueError("visual_ref requires an existing visuals directory.")
@@ -1560,11 +1561,7 @@ def _validate_execution_plan(plan: list[dict[str, Any]]) -> None:
                 _validate_selector(sel_scroll, step_type="click")
         elif step_type == "navigate" and not re.match(r"^https?://", str(step.get("url") or ""), re.IGNORECASE):
             raise ValueError("Navigate steps require absolute HTTP(S) URLs.")
-        if step_type == "wait":
-            raise ValueError("execution.json must not contain wait steps.")
     serialized = json.dumps(plan, ensure_ascii=False).lower()
-    if '"type": "wait"' in serialized or '"type":"wait"' in serialized:
-        raise ValueError("execution.json must not contain wait steps.")
     if "xpath" in serialized or re.search(r'"selector"\s*:\s*"(?:/|//|\./)', serialized):
         raise ValueError("execution.json must not contain XPath selectors.")
     if not has_click or not has_fill:
@@ -1655,7 +1652,7 @@ def _compile_workflow_payload(
         input_slots=len(inputs),
         skill_md_chars=len(skill_md),
     )
-    visual_assets = _collect_visual_assets(payload)
+    visual_assets = collect_visual_assets_for_structured_steps(structured["steps"], payload)
     viz_count = len(visual_assets) if isinstance(visual_assets, dict) else 0
     _pipeline_phase_append("recovery_map", "start", workflow_title=workflow_title, visual_assets=viz_count)
     t_rec = time.perf_counter()
@@ -1821,7 +1818,21 @@ def _log_persist_phase_start(bundle_slug: str, package_name: str | None) -> None
 
 
 def _persist_compiled_workflows(compiled_workflows: list[CompiledWorkflow], bundle_slug: str) -> list[PersistedWorkflow]:
-    return [_persist_skill_package_artifacts(compiled, bundle_slug) for compiled in compiled_workflows]
+    persisted: list[PersistedWorkflow] = []
+    try:
+        for compiled in compiled_workflows:
+            persisted.append(_persist_skill_package_artifacts(compiled, bundle_slug))
+        return persisted
+    except Exception:
+        import shutil
+        for persisted_item in persisted:
+            try:
+                workflow_dir = resolve_workflow_dir(bundle_slug, persisted_item.name)
+                if workflow_dir and workflow_dir.is_dir():
+                    shutil.rmtree(workflow_dir)
+            except Exception:
+                pass
+        raise
 
 
 def _ensure_new_workflow_names(bundle_slug: str, compiled_workflows: list[CompiledWorkflow]) -> None:
@@ -1894,8 +1905,11 @@ def _build_skill_package_transaction(
     _log_persist_phase_start(resolved_bundle_slug, package_name)
 
     compiled_workflows = _compile_skill_package_payloads(payload, package_name=package_name)
-    persisted_workflows = _persist_compiled_workflows(compiled_workflows, resolved_bundle_slug)
-    refreshed_index_json = _refresh_bundle_runtime_files(resolved_bundle_slug)
+    _ensure_new_workflow_names(resolved_bundle_slug, compiled_workflows)
+
+    with _bundle_write_lock(resolved_bundle_slug):
+        persisted_workflows = _persist_compiled_workflows(compiled_workflows, resolved_bundle_slug)
+        refreshed_index_json = _refresh_bundle_runtime_files(resolved_bundle_slug)
 
     result = _format_build_skill_package_result(
         persisted_workflows,
@@ -1919,7 +1933,7 @@ def build_skill_package(
             return _build_skill_package_transaction(json_text, package_name, bundle_slug, build_log)
         except SkillPackBuildUserError:
             raise
-        except ValueError as exc:
+        except (ValueError, OSError) as exc:
             raise SkillPackBuildUserError(str(exc), list(build_log)) from exc
 
 

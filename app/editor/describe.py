@@ -81,6 +81,10 @@ def describe_step(step: dict[str, Any], step_index: int) -> str:
     if act == "scroll":
         return f"Step {n}: Scroll the page"
     if act == "navigate" or act == "goto":
+        action = step.get("action") if isinstance(step.get("action"), dict) else {}
+        direct_url = str((action or {}).get("url") or step.get("url") or "").strip() if isinstance(action, dict) else str(step.get("url") or "").strip()
+        if direct_url:
+            return f"Step {n}: Go to {direct_url[:80]}{'…' if len(direct_url) > 80 else ''}"
         ctx = (step.get("signals") or {}).get("context") or {}
         url = str(ctx.get("page_url") or "").strip()
         if url:

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.compiler.action_policy import no_recovery_block, recovery_enabled_for_action
 from app.compiler.decision_layer import rank_merged_anchors
 from app.compiler.destructive_semantics import destructive_compiler_step
 from app.compiler.recovery_policy import (
@@ -251,6 +252,43 @@ def _build_validation(ev: dict[str, Any], state_diff: dict[str, Any], policy: di
     )
 
 
+def _initial_navigation_step(events: list[dict[str, Any]], bundle: PolicyBundle) -> SkillStep | None:
+    """Persist the browser starting URL so editor/runtime flows do not begin from about:blank."""
+    for ev in events:
+        url = str((ev.get("page") or {}).get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            continue
+        title = str((ev.get("page") or {}).get("title") or "")
+        return SkillStep(
+            action={"action": "navigate", "url": url},
+            intent="navigate_to_start_url",
+            url=url,
+            signals={
+                "context": {
+                    "page_url": url,
+                    "page_title": title,
+                },
+                "semantic": {
+                    "final_intent": "navigate_to_start_url",
+                    "llm_intent": "navigate_to_start_url",
+                },
+                "selectors": {},
+                "anchors": [],
+                "visual": {},
+            },
+            validation=ValidationBlock(
+                wait_for={"type": "url_change", "target": url, "timeout": 15000},
+                success_conditions={"url": url},
+            ),
+            recovery=RecoveryBlock(
+                **no_recovery_block("navigate_to_start_url"),
+            ),
+            confidence_protocol=_default_confidence_protocol(bundle),
+            decision_policy=DecisionPolicy(),
+        )
+    return None
+
+
 def _build_step(
     ev: dict[str, Any],
     bundle: PolicyBundle,
@@ -279,6 +317,7 @@ def _build_step(
             signals={
                 "visual": visual_signals,
             },
+            recovery=RecoveryBlock(**no_recovery_block("scroll_viewport")),
         )
     llm_raw = generate_intent_with_llm(ev)
     intent = normalize_compiler_intent(ev, llm_raw, policy)
@@ -303,12 +342,15 @@ def _build_step(
     )
     merged_anchors = rank_merged_anchors(merged_anchors, ev_with_intent, intent, policy)
     validation = _build_validation(ev_with_intent, state_diff, policy)
-    recovery_dict = default_recovery_block(intent, merged_anchors, policy)
-    recovery_dict = merge_recovery_strategies_for_wait_shape(
-        recovery_dict,
-        dict(validation.wait_for) if validation.wait_for else {},
-        policy,
-    )
+    if recovery_enabled_for_action(action_payload):
+        recovery_dict = default_recovery_block(intent, merged_anchors, policy)
+        recovery_dict = merge_recovery_strategies_for_wait_shape(
+            recovery_dict,
+            dict(validation.wait_for) if validation.wait_for else {},
+            policy,
+        )
+    else:
+        recovery_dict = no_recovery_block(intent)
     recovery = RecoveryBlock(**recovery_dict)
     target = _build_target(ev, policy)
     signals = _build_signals(
@@ -360,6 +402,9 @@ def compile_skill_package(
     session_root = (settings.data_dir / "sessions" / sid).resolve()
     cleaned_events = fix_step_order(clean_steps(events, pol), pol)
     steps = [_build_step(e, bundle, session_root=session_root, step_index=i) for i, e in enumerate(cleaned_events)]
+    initial_nav = _initial_navigation_step(cleaned_events, bundle)
+    if initial_nav is not None:
+        steps = [initial_nav, *steps]
     now = datetime.now(timezone.utc).isoformat()
     meta = SkillMeta(
         id=skill_id,

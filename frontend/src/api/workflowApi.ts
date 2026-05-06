@@ -109,6 +109,7 @@ const stepEditorSchema = z.object({
   action_type: z.string(),
   intent: z.string(),
   final_intent: z.string(),
+  url: z.string().default(''),
   target: recordUnknown,
   selectors: recordUnknown,
   anchors_signals: z.array(recordUnknown),
@@ -119,12 +120,19 @@ const stepEditorSchema = z.object({
   }),
   recovery: recordUnknown,
   value: z.unknown(),
+  scroll_mode: z.string().nullable().default(null),
+  scroll_selector: z.string().nullable().default(null),
   scroll_amount: z.number().int().nullable().default(null),
   input_binding: z.string().nullable().default(null),
   screenshot: stepScreenshotSchema,
   editable_fields: z.record(z.string(), z.boolean()),
   flags: stepFlagsSchema,
   parameter_bindings: z.array(recordUnknown),
+  check_kind: z.string().nullable().optional(),
+  check_pattern: z.string().nullable().optional(),
+  check_threshold: z.number().nullable().optional(),
+  check_selector: z.string().nullable().optional(),
+  check_text: z.string().nullable().optional(),
 })
 
 const suggestionSchema = z.object({
@@ -262,6 +270,7 @@ const skillPackBuildSchema = z.object({
   step_count: z.number(),
   used_llm: z.boolean(),
   warnings: z.array(z.string()),
+  workflow_names: z.array(z.string()).optional(),
   build_log: z.array(skillPackBuildLogEntrySchema).optional(),
 })
 
@@ -389,6 +398,34 @@ export function postClearStepVisual(
     )
 }
 
+export function postUpdateVisualBbox(
+  skillId: string,
+  stepIndex: number,
+  body: { x: number; y: number; w: number; h: number },
+): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  revalidation: Record<string, unknown>
+  workflow: WorkflowResponse
+}> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}/visual-bbox`
+  return fetch(apiUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(json)
+    .then(
+      (payload) =>
+        parseOrThrow(applyRecordingVisualResponseSchema, payload, endpoint) as {
+          skill_id: string
+          meta: Record<string, unknown>
+          revalidation: Record<string, unknown>
+          workflow: WorkflowResponse
+        },
+    )
+}
+
 export function patchStep(
   skillId: string,
   stepIndex: number,
@@ -493,6 +530,31 @@ export function postReorder(skillId: string, newOrder: number[]): Promise<{
     )
 }
 
+export function postInsertStep(
+  skillId: string,
+  body: { action_kind: string; insert_after?: number | null },
+): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  workflow: WorkflowResponse
+}> {
+  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps`
+  return fetch(apiUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(json)
+    .then(
+      (payload) =>
+        parseOrThrow(workflowMutationSchema, payload, endpoint) as {
+          skill_id: string
+          meta: Record<string, unknown>
+          workflow: WorkflowResponse
+        },
+    )
+}
+
 export function deleteStep(skillId: string, stepIndex: number): Promise<{
   skill_id: string
   meta: Record<string, unknown>
@@ -525,12 +587,12 @@ export function postCompileUpdated(
   }).then((r) => json<Record<string, unknown>>(r))
 }
 
-export function postStartRecording(startUrl: string): Promise<{ session_id: string; start_url: string }> {
+export function postStartRecording(): Promise<{ session_id: string }> {
   return fetch(apiUrl('/record'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ start_url: startUrl }),
-  }).then((r) => json<{ session_id: string; start_url: string }>(r))
+    body: JSON.stringify({}),
+  }).then((r) => json<{ session_id: string }>(r))
 }
 
 export function getRecordingStatus(sessionId: string): Promise<{
@@ -669,6 +731,7 @@ export function postBuildSkillPack(body: SkillPackBuildPayload): Promise<{
   step_count: number
   used_llm: boolean
   warnings: string[]
+  workflow_names?: string[]
   build_log?: SkillPackBuildLogEntry[]
 }> {
   const endpoint = '/skill-pack/build'
@@ -693,6 +756,7 @@ export function postBuildSkillPack(body: SkillPackBuildPayload): Promise<{
           step_count: number
           used_llm: boolean
           warnings: string[]
+          workflow_names?: string[]
           build_log?: SkillPackBuildLogEntry[]
         },
     )
@@ -711,6 +775,7 @@ export type SkillPackBuildApiResult = {
   step_count: number
   used_llm: boolean
   warnings: string[]
+  workflow_names?: string[]
   build_log?: SkillPackBuildLogEntry[]
 }
 
@@ -891,6 +956,7 @@ export function postAppendSkillPack(
   step_count: number
   used_llm: boolean
   warnings: string[]
+  workflow_names?: string[]
   build_log?: SkillPackBuildLogEntry[]
 }> {
   const endpoint = `/skill-pack/bundles/${encodeURIComponent(bundleName)}/append`
@@ -915,6 +981,7 @@ export function postAppendSkillPack(
           step_count: number
           used_llm: boolean
           warnings: string[]
+          workflow_names?: string[]
           build_log?: SkillPackBuildLogEntry[]
         },
     )

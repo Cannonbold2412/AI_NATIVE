@@ -1,0 +1,170 @@
+<svg viewBox="0 0 1000 1200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .title { font-size: 24px; font-weight: bold; fill: #333; }
+      .subtitle { font-size: 14px; fill: #666; }
+      .box { fill: #fff; stroke: #667eea; stroke-width: 2; }
+      .process { fill: #667eea; stroke: #333; stroke-width: 2; }
+      .data { fill: #e6f2ff; stroke: #667eea; stroke-width: 2; }
+      .highlight { fill: #fff3cd; stroke: #ffb347; stroke-width: 2; }
+      .text { font-size: 13px; fill: #333; font-family: Arial; }
+      .label { font-size: 12px; fill: #666; font-family: Arial; }
+      .arrow { stroke: #667eea; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .text-white { font-size: 12px; fill: #fff; font-weight: bold; font-family: Arial; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#667eea"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" class="title">📹 CONXA RECORDER PHASE: CAPTURE</text>
+  <text x="500" y="60" text-anchor="middle" class="subtitle">How Screen Interactions Become Structured Events</text>
+
+  <!-- Step 1: Browser Launch -->
+  <g>
+    <rect x="50" y="100" width="350" height="120" class="box" rx="8"/>
+    <circle cx="250" cy="135" r="25" class="process"/>
+    <text x="250" y="142" text-anchor="middle" class="text-white">🎯</text>
+    <text x="250" y="180" text-anchor="middle" class="text" font-weight="bold">Browser Launch</text>
+    <text x="250" y="195" text-anchor="middle" class="label">Playwright opens Chrome</text>
+    <text x="250" y="210" text-anchor="middle" class="label">Instance with recording context</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 400 160 L 450 160" class="arrow"/>
+
+  <!-- Step 2: JavaScript Bridge Injection -->
+  <g>
+    <rect x="450" y="100" width="350" height="120" class="box" rx="8"/>
+    <circle cx="650" cy="135" r="25" class="process"/>
+    <text x="650" y="142" text-anchor="middle" class="text-white">⚡</text>
+    <text x="650" y="180" text-anchor="middle" class="text" font-weight="bold">JavaScript Bridge</text>
+    <text x="650" y="195" text-anchor="middle" class="label">Inject bridge.js via expose_binding</text>
+    <text x="650" y="210" text-anchor="middle" class="label">Initialize __skillReport() binding</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 250 220 L 250 280" class="arrow"/>
+
+  <!-- Step 3: Event Capture (Main Component) -->
+  <g>
+    <rect x="50" y="280" width="900" height="200" class="highlight" rx="8"/>
+    <text x="500" y="310" text-anchor="middle" class="text" font-weight="bold">🎬 EVENT CAPTURE LOOP</text>
+
+    <!-- Sub-components -->
+    <rect x="70" y="330" width="200" height="130" class="data" rx="6"/>
+    <text x="170" y="355" text-anchor="middle" class="text" font-weight="bold">User Action</text>
+    <text x="170" y="375" text-anchor="middle" class="label">1. Click detected</text>
+    <text x="170" y="390" text-anchor="middle" class="label">2. Keypress captured</text>
+    <text x="170" y="405" text-anchor="middle" class="label">3. Navigation tracked</text>
+    <text x="170" y="420" text-anchor="middle" class="label">4. Scroll recorded</text>
+
+    <rect x="300" y="330" width="200" height="130" class="data" rx="6"/>
+    <text x="400" y="355" text-anchor="middle" class="text" font-weight="bold">DOM Analysis</text>
+    <text x="400" y="375" text-anchor="middle" class="label">Extract element info:</text>
+    <text x="400" y="390" text-anchor="middle" class="label">• Tag name</text>
+    <text x="400" y="405" text-anchor="middle" class="label">• Classes &amp; IDs</text>
+    <text x="400" y="420" text-anchor="middle" class="label">• Text content</text>
+
+    <rect x="530" y="330" width="200" height="130" class="data" rx="6"/>
+    <text x="630" y="355" text-anchor="middle" class="text" font-weight="bold">Selector Gen</text>
+    <text x="630" y="375" text-anchor="middle" class="label">Generate:</text>
+    <text x="630" y="390" text-anchor="middle" class="label">• CSS selector</text>
+    <text x="630" y="405" text-anchor="middle" class="label">• XPath</text>
+    <text x="630" y="420" text-anchor="middle" class="label">• Text-based</text>
+
+    <rect x="760" y="330" width="170" height="130" class="data" rx="6"/>
+    <text x="845" y="355" text-anchor="middle" class="text" font-weight="bold">Screenshot</text>
+    <text x="845" y="375" text-anchor="middle" class="label">Capture:</text>
+    <text x="845" y="390" text-anchor="middle" class="label">• Full page</text>
+    <text x="845" y="405" text-anchor="middle" class="label">• Element bbox</text>
+    <text x="845" y="420" text-anchor="middle" class="label">• JPEG @ 80Q</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 500 480 L 500 540" class="arrow"/>
+
+  <!-- Step 4: Thread-Safe Queue -->
+  <g>
+    <rect x="50" y="540" width="900" height="100" class="box" rx="8"/>
+    <circle cx="150" cy="590" r="20" class="process"/>
+    <text x="150" y="597" text-anchor="middle" class="text-white">🔄</text>
+    <text x="300" y="575" text-anchor="middle" class="text" font-weight="bold">Thread-Safe Event Queue (SimpleQueue)</text>
+    <text x="300" y="595" text-anchor="middle" class="label">Bridge thread (driver) → Event pump thread (async consumer)</text>
+    <text x="300" y="610" text-anchor="middle" class="label">Payload: { action, target, selectors, context, semantic, visual, page, timing }</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 500 640 L 500 700" class="arrow"/>
+
+  <!-- Step 5: Event Processing -->
+  <g>
+    <rect x="50" y="700" width="900" height="150" class="highlight" rx="8"/>
+    <text x="500" y="730" text-anchor="middle" class="text" font-weight="bold">📊 EVENT FINALIZATION</text>
+
+    <!-- Sub-components -->
+    <rect x="70" y="750" width="180" height="90" class="data" rx="6"/>
+    <text x="160" y="775" text-anchor="middle" class="text" font-weight="bold">Validate Schema</text>
+    <text x="160" y="795" text-anchor="middle" class="label">Check all required</text>
+    <text x="160" y="810" text-anchor="middle" class="label">fields present</text>
+
+    <rect x="280" y="750" width="180" height="90" class="data" rx="6"/>
+    <text x="370" y="775" text-anchor="middle" class="text" font-weight="bold">Generate Metadata</text>
+    <text x="370" y="795" text-anchor="middle" class="label">Sequence number</text>
+    <text x="370" y="810" text-anchor="middle" class="label">Timestamp</text>
+
+    <rect x="490" y="750" width="180" height="90" class="data" rx="6"/>
+    <text x="580" y="775" text-anchor="middle" class="text" font-weight="bold">Apply Policy</text>
+    <text x="580" y="795" text-anchor="middle" class="label">Resolve timing</text>
+    <text x="580" y="810" text-anchor="middle" class="label">rules from bundle</text>
+
+    <rect x="700" y="750" width="150" height="90" class="data" rx="6"/>
+    <text x="775" y="775" text-anchor="middle" class="text" font-weight="bold">Persist Event</text>
+    <text x="775" y="795" text-anchor="middle" class="label">Write to</text>
+    <text x="775" y="810" text-anchor="middle" class="label">events.jsonl</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 500 850 L 500 910" class="arrow"/>
+
+  <!-- Step 6: Recording Session Storage -->
+  <g>
+    <rect x="50" y="910" width="900" height="140" class="box" rx="8"/>
+    <circle cx="150" cy="965" r="20" class="process"/>
+    <text x="150" y="972" text-anchor="middle" class="text-white">💾</text>
+    <text x="500" y="945" text-anchor="middle" class="text" font-weight="bold">Recording Session Storage</text>
+
+    <text x="500" y="970" text-anchor="middle" class="label" font-size="12">
+      Location: {data_dir}/sessions/{session_id}/
+    </text>
+    <text x="500" y="990" text-anchor="middle" class="label" font-size="12">
+      • events.jsonl — All captured events (line-delimited JSON)
+    </text>
+    <text x="500" y="1010" text-anchor="middle" class="label" font-size="12">
+      • {seq}_full.jpg — Full page screenshot for each event
+    </text>
+    <text x="500" y="1030" text-anchor="middle" class="label" font-size="12">
+      • {seq}_element.jpg — Element bounding box snapshot
+    </text>
+  </g>
+
+  <!-- Key Features Box -->
+  <g>
+    <rect x="50" y="1070" width="900" height="110" class="box" stroke="#28a745" stroke-width="2" rx="8"/>
+    <text x="500" y="1095" text-anchor="middle" class="text" font-weight="bold" fill="#28a745">✅ KEY FEATURES</text>
+    <text x="70" y="1120" class="label">
+      • <tspan font-weight="bold">Real Browser:</tspan> Playwright Chrome, not simulation
+    </text>
+    <text x="70" y="1140" class="label">
+      • <tspan font-weight="bold">Complete Context:</tspan> Action + target + selectors + visual + page metadata
+    </text>
+    <text x="70" y="1160" class="label">
+      • <tspan font-weight="bold">Thread-Safe:</tspan> Non-blocking event capture from JavaScript bridge to Python async
+    </text>
+  </g>
+
+  <!-- Bottom Arrow to next phase -->
+  <path d="M 500 1200 L 500 1250" class="arrow" stroke-width="3"/>
+  <text x="500" y="1270" text-anchor="middle" class="label" font-weight="bold">↓ Next: Pipeline Processing</text>
+</svg>

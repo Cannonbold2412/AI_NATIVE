@@ -17,6 +17,7 @@ import {
   postApplyRecordingVisual,
   postClearStepVisual,
   postCompileUpdated,
+  postInsertStep,
   postReorder,
   postValidate,
 } from './api/workflowApi'
@@ -194,6 +195,29 @@ export function HumanEditPage() {
       if (index < sel) useEditorStore.getState().setSelectedStepIndex(sel - 1)
       else if (index === sel) useEditorStore.getState().setSelectedStepIndex(Math.min(sel, n - 1))
     })
+  }
+
+  const onAddAction = async (actionKind: string) => {
+    if (!skillId) return
+    const savedOk = await (stepEditorRef.current?.submitIfDirty() ?? Promise.resolve(true))
+    if (!savedOk) {
+      toast.error('Could not save the open step before adding an action.')
+      return
+    }
+    const currentSteps = q.data?.steps ?? []
+    const insertAfter = selected === null ? (currentSteps.length > 0 ? currentSteps.length - 1 : null) : selected
+    try {
+      const res = await postInsertStep(skillId, {
+        action_kind: actionKind,
+        insert_after: insertAfter,
+      })
+      onWorkflowUpdated(res.workflow)
+      const nextIndex = insertAfter === null ? res.workflow.steps.length - 1 : insertAfter + 1
+      useEditorStore.getState().setSelectedStepIndex(nextIndex)
+      toast.success('Action added')
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not add action'))
+    }
   }
 
   /** Re-runs compile from recorded session JSON — replaces the skill package and wipes hand-edited patches. */
@@ -641,6 +665,7 @@ export function HumanEditPage() {
           version={version}
           onReorder={onReorder}
           onDelete={onDelete}
+          onAddAction={(actionKind) => void onAddAction(actionKind)}
           recordingShotDragActive={recordingShotDragActive}
           onDroppedRecordingScreenshot={(stepIndex, eventIndex) =>
             void onDroppedRecordingScreenshot(stepIndex, eventIndex)

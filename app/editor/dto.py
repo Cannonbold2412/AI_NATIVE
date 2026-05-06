@@ -31,6 +31,7 @@ class StepEditorDTO(BaseModel):
     action_type: str = ""
     intent: str = ""
     final_intent: str = ""
+    url: str = ""
     target: dict[str, Any] = Field(default_factory=dict)
     selectors: dict[str, Any] = Field(default_factory=dict)
     anchors_signals: list[dict[str, Any]] = Field(default_factory=list)
@@ -38,12 +39,19 @@ class StepEditorDTO(BaseModel):
     validation: dict[str, Any] = Field(default_factory=dict)
     recovery: dict[str, Any] = Field(default_factory=dict)
     value: Any = None
+    scroll_mode: str | None = None
+    scroll_selector: str | None = None
     scroll_amount: int | None = None
     input_binding: str | None = None
     screenshot: StepScreenshotDTO = Field(default_factory=StepScreenshotDTO)
     editable_fields: dict[str, bool] = Field(default_factory=dict)
     flags: StepFlags = Field(default_factory=StepFlags)
     parameter_bindings: list[dict[str, Any]] = Field(default_factory=list)
+    check_kind: str | None = None
+    check_pattern: str | None = None
+    check_threshold: float | None = None
+    check_selector: str | None = None
+    check_text: str | None = None
 
 
 class SuggestionItem(BaseModel):

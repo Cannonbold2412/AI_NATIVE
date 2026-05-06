@@ -1,0 +1,406 @@
+{
+  "system": {
+    "name": "Conxa: AI-Driven Workflow Automation Platform",
+    "version": "1.0",
+    "description": "Records real user workflows → cleans & enriches events via LLM → humans refine → compiles to executable skills → self-heals when UI changes",
+    "core_principle": "Transform unstructured screen recordings into structured, self-healing automation skills using multi-stage LLM enrichment"
+  },
+
+  "pipeline": {
+    "stages": [
+      {
+        "number": 1,
+        "name": "Recording (Capture)",
+        "description": "Browser automation captures user interactions",
+        "inputs": ["User actions in browser"],
+        "outputs": ["Raw events (events.jsonl)"],
+        "technology": "Playwright + JavaScript bridge",
+        "key_files": ["app/recorder/session.py", "app/recorder/bridge.js"]
+      },
+      {
+        "number": 2,
+        "name": "Pipeline Processing",
+        "description": "Normalize, clean, deduplicate events",
+        "substages": [
+          {"name": "Validation", "task": "Schema check, type validation"},
+          {"name": "Cleaning", "task": "Normalize text, deduplicate classes"},
+          {"name": "Deduplication", "task": "Merge consecutive scroll events"},
+          {"name": "Semantic Enrichment", "task": "LLM extracts intent, normalizes text"},
+          {"name": "Scroll Annotation", "task": "Calculate scroll delta between events"},
+          {"name": "Metadata Addition", "task": "Add pipeline version, checksums"}
+        ],
+        "key_files": ["app/pipeline/run.py", "app/pipeline/normalize.py"]
+      },
+      {
+        "number": 3,
+        "name": "LLM Enrichment",
+        "description": "Claude API extracts semantic meaning and intent",
+        "llm_calls": [
+          {
+            "name": "Semantic Enrichment",
+            "input": "Raw event (text, element context, page info)",
+            "output": "Intent ontology label + confidence score",
+            "timeout_ms": 2000,
+            "model": "claude-opus-4.7 or equivalent"
+          }
+        ],
+        "key_files": ["app/llm/semantic_llm.py"]
+      },
+      {
+        "number": 4,
+        "name": "Human Editing",
+        "description": "Review and refine structured workflow in UI",
+        "editing_capabilities": [
+          "Change action type (click → type)",
+          "Modify selectors (CSS, XPath)",
+          "Adjust timing (wait_before, wait_after)",
+          "Add validation rules",
+          "Correct LLM-generated intent"
+        ],
+        "key_files": ["frontend/src/components/StepEditorPanel.tsx"]
+      },
+      {
+        "number": 5,
+        "name": "Workflow Compilation",
+        "description": "Convert events to executable actions with validation",
+        "compilation_steps": [
+          {"step": "Action Extraction", "task": "Convert events to Action objects"},
+          {"step": "Selector Scoring", "task": "Rank selectors by stability (0.0-1.0)"},
+          {"step": "Intent Validation", "task": "Semantic consistency check"},
+          {"step": "Dependency Resolution", "task": "Topological sort of actions"},
+          {"step": "Validation Planning", "task": "Generate success criteria per action"}
+        ],
+        "key_files": ["app/compiler/action_semantics.py", "app/compiler/selector_score.py"]
+      },
+      {
+        "number": 6,
+        "name": "Skill Package Generation",
+        "description": "Bundle compiled skill with execution code and recovery metadata",
+        "package_contents": [
+          "execution.json - Compiled action steps",
+          "recovery.json - 4-layer recovery metadata",
+          "manifest.json - Skill metadata + configuration",
+          "input.json - Parameter definitions",
+          "README.md - Human-readable description"
+        ],
+        "key_files": ["app/services/skill_pack_builder.py"]
+      },
+      {
+        "number": 7,
+        "name": "Execution & Self-Healing",
+        "description": "Execute skill with automatic recovery on failures",
+        "execution_flow": "Load skill → Launch browser → Execute each step → Validate → [On failure: 4-layer recovery] → Continue or fail",
+        "recovery_layers": 4,
+        "combined_recovery_success_rate": 0.95
+      }
+    ]
+  },
+
+  "data_structures": {
+    "raw_event": {
+      "description": "Single user interaction captured by browser",
+      "fields": {
+        "action": {"type": "object", "content": "click, type, navigate, scroll"},
+        "target": {"type": "object", "content": "DOM element info: tag, text, classes, attributes"},
+        "selectors": {"type": "object", "content": "CSS, XPath, text-based selectors"},
+        "semantic": {"type": "object", "content": "normalized_text, llm_intent (from LLM), confidence"},
+        "visual": {"type": "object", "content": "full_screenshot path, element_snapshot, bbox, viewport"},
+        "page": {"type": "object", "content": "url, title"},
+        "timing": {"type": "object", "content": "wait_before_ms, action_timeout_ms, wait_after_ms"}
+      }
+    },
+
+    "compiled_action": {
+      "description": "Executable action after compilation and recovery metadata assembly",
+      "fields": {
+        "id": {"type": "string", "example": "step_1"},
+        "action": {"type": "string", "enum": ["click", "fill", "type", "navigate", "scroll", "check"]},
+        "selector": {"type": "string", "description": "Primary selector (best scoring)"},
+        "selector_confidence": {"type": "number", "range": [0, 1]},
+        "selectors_fallback": {"type": "array", "description": "Alternative selectors as L1 recovery"},
+        "validation": {"type": "object", "description": "Success criteria (url_contains, element_visible, text_present)"},
+        "wait_after_ms": {"type": "number"}
+      }
+    },
+
+    "recovery_entry": {
+      "description": "Recovery metadata for a single action (generated from compiled action)",
+      "fields": {
+        "step_id": {"type": "integer", "description": "Position in execution sequence"},
+        "intent": {"type": "string", "description": "Semantic intent slug (submit_form, fill_email, etc)"},
+        "target": {
+          "text": {"type": "string", "description": "Original element text"},
+          "role": {"type": "string", "description": "Element role (button, input, link)"}
+        },
+        "selector_context": {
+          "primary": {"type": "string", "description": "L1: Best CSS selector"},
+          "alternatives": {"type": "array", "description": "L1: Fallback selectors"}
+        },
+        "anchors": {
+          "type": "array",
+          "description": "L2: Text-based anchors with priority scoring",
+          "items": {"text": "string", "priority": "0.0-1.0"}
+        },
+        "fallback": {
+          "text_variants": {"type": "array", "description": "L3: Normalized text alternatives"},
+          "role": {"type": "string"}
+        },
+        "visual_ref": {"type": "string", "description": "L4: Reference to stored screenshot asset"},
+        "visual_metadata": {
+          "step_id": "integer",
+          "source": "stored_step_visual",
+          "available": "boolean"
+        },
+        "recovery_metadata": {
+          "mode": "tiered",
+          "action_type": "string",
+          "generated_by": "skill_pack_builder"
+        }
+      }
+    },
+
+    "compiled_skill": {
+      "description": "Complete executable workflow (skills.json)",
+      "fields": {
+        "name": "string - Skill identifier",
+        "steps": "array of compiled_action",
+        "parameters": "array of input definitions",
+        "description": "Human-readable description"
+      }
+    }
+  },
+
+  "recovery_system": {
+    "description": "4-layer tiered recovery mechanism for handling execution failures",
+    "retry_attempts": {
+      "element_actions": 2,
+      "navigate_check_actions": 3
+    },
+    "layers": [
+      {
+        "layer": 1,
+        "name": "Selector Context",
+        "description": "Try alternative CSS/XPath selectors",
+        "strategy": "Iterate through primary and alternative selectors from recovery_entry.selector_context",
+        "timeout_ms": 0,
+        "success_rate": "60-70%",
+        "timing": "Instant (synchronous DOM queries)"
+      },
+      {
+        "layer": 2,
+        "name": "Text Anchors",
+        "description": "Search using priority-scored text anchors",
+        "strategy": "Find elements matching texts in recovery_entry.anchors, sorted by priority",
+        "timeout_ms": 0,
+        "success_rate": "50-60%",
+        "timing": "Instant (DOM text search)",
+        "example": ["Submit" (priority 1.0), "Send" (priority 0.8), "Confirm" (priority 0.6)]
+      },
+      {
+        "layer": 3,
+        "name": "Text Fallback Variants",
+        "description": "Try normalized text alternatives and element role",
+        "strategy": "Search for elements using recovery_entry.fallback.text_variants and role hints",
+        "timeout_ms": 0,
+        "success_rate": "40-50%",
+        "timing": "Instant (normalized element search)",
+        "normalization": ["lowercase", "plural/singular variations", "role-based filtering"]
+      },
+      {
+        "layer": 4,
+        "name": "Vision Recovery",
+        "description": "Vision LLM analyzes screenshot to locate element",
+        "strategy": "Use vision model to detect interactive elements, score by intent match, return best candidate",
+        "timeout_ms": 120000,
+        "success_rate": "75-85%",
+        "timing": "Expensive multimodal inference",
+        "input": "Current screenshot + original intent + failed selectors",
+        "output": "Best-matching element selector or bounding box",
+        "model": "Claude Vision or equivalent"
+      }
+    ],
+    "execution_flow": "L1 → L2 → L3 → L4 sequentially until success or all layers exhausted",
+    "combined_success_rate": 0.95,
+    "notes": "Layers 1-3 combined handle ~80% of failures. Layer 4 catches remaining ~20%."
+  },
+
+  "selector_scoring": {
+    "description": "How selectors are ranked by stability during compilation",
+    "scoring_matrix": {
+      "ID_based": 0.95,
+      "Class_based": 0.75,
+      "Attribute_based": 0.70,
+      "XPath": 0.65,
+      "Text_based": 0.45
+    },
+    "strategy": "Highest-scoring selector becomes primary. Others become fallback alternatives.",
+    "key_insight": "ID-based selectors are most stable and rarely change across UI updates."
+  },
+
+  "llm_integration": {
+    "points": [
+      {
+        "stage": 3,
+        "name": "Semantic Enrichment",
+        "when": "During pipeline processing of raw events",
+        "input_format": "Element text + element type + page context",
+        "output_format": "Intent ontology label + confidence score (0.0-1.0)",
+        "example_input": {"element_text": "Submit", "element_type": "button", "context": "Login form"},
+        "example_output": {"intent": "submit_login_form", "confidence": 0.95}
+      },
+      {
+        "stage": 7,
+        "name": "Vision Recovery",
+        "when": "Execution fails and L1-L3 recovery attempts exhausted",
+        "input_format": "Screenshot bytes + original intent + failed selectors",
+        "output_format": "Detected element selector + bounding box + confidence",
+        "timeout_ms": 120000,
+        "expensive": true
+      }
+    ]
+  },
+
+  "intent_ontology": {
+    "description": "Standard set of semantic intents extracted by LLM",
+    "examples": [
+      "submit_form - Click on form submit button",
+      "fill_email_field - Type into email input",
+      "fill_password_field - Type into password input",
+      "navigate_to_page - Change URL",
+      "select_dropdown_option - Choose from dropdown",
+      "click_button - Generic button click",
+      "scroll_page - Scroll to reveal content",
+      "check_url_changed - Validate URL changed",
+      "check_element_visible - Validate element appeared"
+    ]
+  },
+
+  "validation_types": {
+    "url_contains": {"description": "Check URL contains substring", "example": "/dashboard"},
+    "element_visible": {"description": "Check element is present on page", "example": "[data-testid='menu']"},
+    "text_present": {"description": "Check specific text visible", "example": "Welcome, John"},
+    "element_hidden": {"description": "Check element disappeared", "example": ".loading-spinner"},
+    "element_enabled": {"description": "Check element is clickable", "example": "button:not(:disabled)"}
+  },
+
+  "timing_defaults": {
+    "click": {"wait_before_ms": 0, "timeout_ms": 5000, "wait_after_ms": 500},
+    "type": {"wait_before_ms": 0, "timeout_ms": 5000, "wait_after_ms": 300},
+    "navigate": {"wait_before_ms": 0, "timeout_ms": 10000, "wait_after_ms": 2000},
+    "scroll": {"wait_before_ms": 0, "timeout_ms": 3000, "wait_after_ms": 500},
+    "check": {"wait_before_ms": 0, "timeout_ms": 5000, "wait_after_ms": 500}
+  },
+
+  "api_endpoints": {
+    "legacy": [
+      "POST /recordings - Start recording",
+      "POST /recordings/{id}/compile - Compile workflow",
+      "POST /packages - Create skill package"
+    ],
+    "production_v1": [
+      "POST /api/v1/recordings - Record workflow",
+      "POST /api/v1/workflows - Workflow management",
+      "POST /api/v1/packages - Skill package CRUD",
+      "GET /api/v1/me - Current user (Clerk auth)",
+      "GET /api/v1/workspaces/current - User workspace",
+      "POST /api/v1/packages/bundles/{bundle}/publish - Publish to registry"
+    ]
+  },
+
+  "environment_variables": {
+    "backend_prefix": "SKILL_",
+    "critical_vars": {
+      "SKILL_LLM_API_KEY": "Claude API key",
+      "SKILL_LLM_VISION_TIMEOUT_MS": "Vision LLM timeout (default: 120000)",
+      "SKILL_LLM_TIMEOUT_MS": "Text LLM timeout (default: 2000)",
+      "SKILL_ENVIRONMENT": "local or production"
+    },
+    "frontend_vars": {
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "Clerk authentication key",
+      "API_ORIGIN": "Backend URL (e.g., http://localhost:8000)"
+    }
+  },
+
+  "key_files": {
+    "recording": {
+      "session": "app/recorder/session.py - Main recording coordinator",
+      "bridge": "app/recorder/bridge.js - JavaScript browser integration"
+    },
+    "pipeline": {
+      "orchestration": "app/pipeline/run.py",
+      "normalization": "app/pipeline/normalize.py",
+      "deduplication": "app/pipeline/dedupe.py",
+      "enrichment": "app/pipeline/enrich.py"
+    },
+    "llm": {
+      "semantic": "app/llm/semantic_llm.py - Intent extraction",
+      "vision": "app/llm/vision_llm.py - Vision-based recovery",
+      "recovery": "app/llm/recovery_llm.py - Failure recovery"
+    },
+    "compilation": {
+      "action_semantics": "app/compiler/action_semantics.py",
+      "selector_scoring": "app/compiler/selector_score.py",
+      "intent_validation": "app/compiler/intent_validation_rules.py"
+    },
+    "packaging": {
+      "builder": "app/services/skill_pack_builder.py - Skill package generation",
+      "policy": "app/policy/bundle.py - Bundling logic"
+    },
+    "frontend": {
+      "editor": "frontend/src/components/StepEditorPanel.tsx",
+      "workflow": "frontend/src/services/workflow.ts - API integration"
+    }
+  },
+
+  "performance_targets": {
+    "event_capture": "20-50 events per workflow",
+    "pipeline_processing": "<200ms per event",
+    "llm_enrichment_text": "<2s per event",
+    "llm_enrichment_vision": "30-120s per image",
+    "compilation": "<500ms",
+    "execution": "1-5s per step",
+    "recovery_l1_3_success": "~80% of failures",
+    "recovery_l4_success": "~15% additional (vision)",
+    "combined_recovery_success": "~95%"
+  },
+
+  "best_practices": {
+    "recording": [
+      "Record slowly, pause between actions",
+      "Use real test accounts",
+      "Include success paths only",
+      "Don't record error scenarios"
+    ],
+    "editing": [
+      "Review LLM intent suggestions",
+      "Add validation rules after key actions",
+      "Prefer ID/data attributes in selectors",
+      "Adjust timing for slow-loading pages"
+    ],
+    "packaging": [
+      "Document skill parameters clearly",
+      "Include examples in README",
+      "Test with different browsers/viewports",
+      "Never hardcode credentials"
+    ]
+  },
+
+  "troubleshooting": {
+    "event_capture_fails": "Check binding_errors in session status. Verify bridge.js loaded.",
+    "selector_not_found": "Use fallback selectors. Trigger recovery layers L1→L2→L3→L4.",
+    "llm_timeout": "Vision model slow (120s limit). Use structured selectors instead.",
+    "recovery_all_fail": "Workflow failed. Manual intervention needed. Re-record workflow."
+  },
+
+  "implementation_examples": {
+    "executing_a_skill": {
+      "python": "from skill_package.execute import SkillExecutor\nexecutor = SkillExecutor()\nresult = await executor.execute_skill('login_workflow', {'email': 'user@example.com', 'password': '***'})"
+    },
+    "recording_a_workflow": {
+      "api": "POST /api/v1/recordings\n{\"url\": \"https://example.com\", \"title\": \"Login Workflow\"}"
+    },
+    "compiling_workflow": {
+      "api": "POST /api/v1/packages\n{\"workflow_id\": \"...\", \"name\": \"login_skill\"}"
+    }
+  }
+}

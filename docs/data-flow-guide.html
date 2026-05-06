@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conxa: Data Flow & Transformations</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.05em;
+            opacity: 0.9;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .data-stage {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .stage-header {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stage-num {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 32px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 0.95em;
+        }
+
+        .data-table th {
+            background: #f0f2ff;
+            color: #333;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .data-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .data-table tr:hover {
+            background: #f9f9ff;
+        }
+
+        .field-name {
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .transformation {
+            background: #fff3cd;
+            border-left: 4px solid #ffb347;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 0.95em;
+        }
+
+        .before-after {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .before, .after {
+            padding: 15px;
+            border-radius: 8px;
+            background: #f5f5f5;
+        }
+
+        .before {
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .after {
+            border-left: 4px solid #28a745;
+        }
+
+        .before-title, .after-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+
+        .before-title {
+            color: #ff6b6b;
+        }
+
+        .after-title {
+            color: #28a745;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.4;
+            margin-top: 10px;
+        }
+
+        .json-key { color: #f92672; }
+        .json-string { color: #e6db74; }
+        .json-number { color: #ae81ff; }
+        .json-bool { color: #66d9ef; }
+
+        .arrow-down {
+            text-align: center;
+            font-size: 1.5em;
+            color: #667eea;
+            margin: 20px 0;
+        }
+
+        .info-box {
+            background: #d1ecf1;
+            border-left: 4px solid #0c5460;
+            padding: 15px;
+            border-radius: 8px;
+            color: #0c5460;
+            margin: 15px 0;
+        }
+
+        .warning-box {
+            background: #ffe6e6;
+            border-left: 4px solid #ff6b6b;
+            padding: 15px;
+            border-radius: 8px;
+            color: #cc0000;
+            margin: 15px 0;
+        }
+
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            border-radius: 8px;
+            color: #155724;
+            margin: 15px 0;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 5px 0;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        footer {
+            text-align: center;
+            color: #666;
+            margin-top: 40px;
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .list-item {
+            margin-left: 20px;
+            margin-bottom: 8px;
+        }
+
+        .list-item:before {
+            content: "→ ";
+            color: #667eea;
+            font-weight: bold;
+            margin-left: -20px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Data Flow & Transformations</h1>
+            <p class="subtitle">How raw events evolve through the Conxa pipeline</p>
+        </header>
+
+        <!-- Stage 1: Recording -->
+        <div class="section">
+            <div class="section-title">1️⃣ Recording: Raw Event Capture</div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">📹</span>
+                    Raw Event (Just Captured)
+                </div>
+
+                <p>When a user clicks a button, the JavaScript bridge captures this raw data:</p>
+
+                <div class="code-block">
+{
+  <span class="json-key">"action"</span>: {
+    <span class="json-key">"action"</span>: <span class="json-string">"click"</span>,
+    <span class="json-key">"button"</span>: <span class="json-string">"left"</span>,
+    <span class="json-key">"count"</span>: <span class="json-number">1</span>
+  },
+  <span class="json-key">"target"</span>: {
+    <span class="json-key">"tag"</span>: <span class="json-string">"button"</span>,
+    <span class="json-key">"inner_text"</span>: <span class="json-string">"  Submit   Form  "</span>,
+    <span class="json-key">"classes"</span>: [<span class="json-string">"btn"</span>, <span class="json-string">"btn-primary"</span>, <span class="json-string">"btn"</span>],
+    <span class="json-key">"attributes"</span>: { <span class="json-key">"id"</span>: <span class="json-string">"submit-btn"</span>, <span class="json-key">"type"</span>: <span class="json-string">"submit"</span> }
+  },
+  <span class="json-key">"selectors"</span>: {
+    <span class="json-key">"css"</span>: <span class="json-string">"button.btn.btn-primary"</span>,
+    <span class="json-key">"xpath"</span>: <span class="json-string">"//button[@id='submit-btn']"</span>,
+    <span class="json-key">"text_xpath"</span>: <span class="json-string">"//button[contains(text(), 'Submit')]"</span>
+  },
+  <span class="json-key">"semantic"</span>: {
+    <span class="json-key">"normalized_text"</span>: <span class="json-string">"Submit   Form"</span>,
+    <span class="json-key">"input_type"</span>: <span class="json-bool">null</span>
+  },
+  <span class="json-key">"visual"</span>: {
+    <span class="json-key">"full_screenshot"</span>: <span class="json-string">"sessions/xxx/1_full.jpg"</span>,
+    <span class="json-key">"bbox"</span>: { <span class="json-key">"x"</span>: <span class="json-number">100</span>, <span class="json-key">"y"</span>: <span class="json-number">200</span>, <span class="json-key">"w"</span>: <span class="json-number">80</span>, <span class="json-key">"h"</span>: <span class="json-number">40</span> }
+  }
+}
+                </div>
+
+                <div class="info-box">
+                    <strong>📌 Raw Event Size:</strong> ~50-100 KB per event (large due to full screenshots)
+                </div>
+            </div>
+        </div>
+
+        <!-- Stage 2: Pipeline Processing -->
+        <div class="section">
+            <div class="section-title">2️⃣ Pipeline Processing: Cleaning</div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">⚙️</span>
+                    Transformation 1: Text Normalization & Deduplication
+                </div>
+
+                <div class="transformation">
+                    <strong>Changes Applied:</strong>
+                    <div class="list-item">Collapse whitespace in text fields</div>
+                    <div class="list-item">Deduplicate CSS classes</div>
+                    <div class="list-item">Sort classes alphabetically</div>
+                    <div class="list-item">Normalize text to lowercase for semantic matching</div>
+                </div>
+
+                <div class="before-after">
+                    <div class="before">
+                        <div class="before-title">❌ BEFORE</div>
+                        <code style="font-size: 0.85em;">
+inner_text: "  Submit   Form  "<br>
+classes: ["btn", "btn-primary", "btn"]<br>
+normalized: "Submit   Form"
+                        </code>
+                    </div>
+                    <div class="after">
+                        <div class="after-title">✅ AFTER</div>
+                        <code style="font-size: 0.85em;">
+inner_text: "Submit Form"<br>
+classes: ["btn", "btn-primary"]<br>
+normalized: "submit form"
+                        </code>
+                    </div>
+                </div>
+            </div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">⚙️</span>
+                    Transformation 2: Selector Canonicalization
+                </div>
+
+                <div class="transformation">
+                    <strong>Changes Applied:</strong>
+                    <div class="list-item">Validate CSS selector syntax</div>
+                    <div class="list-item">Generate simplest CSS version</div>
+                    <div class="list-item">Verify XPath correctness</div>
+                    <div class="list-item">Compute selector specificity scores</div>
+                </div>
+
+                <div class="before-after">
+                    <div class="before">
+                        <div class="before-title">❌ BEFORE</div>
+                        <code style="font-size: 0.85em;">
+css: "button.btn.btn-primary"<br>
+xpath: "//button[@id='submit']"<br>
+text: "//button[contains()]"
+                        </code>
+                    </div>
+                    <div class="after">
+                        <div class="after-title">✅ AFTER</div>
+                        <code style="font-size: 0.85em;">
+css: "button#submit-btn"<br>
+xpath: "//button[@id='submit']"<br>
+text_xpath: "//*[text()='Submit']"
+                        </code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stage 3: LLM Enrichment -->
+        <div class="section">
+            <div class="section-title">3️⃣ LLM Enrichment: Semantic Understanding</div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">🧠</span>
+                    Transformation 3: Semantic Intent Extraction
+                </div>
+
+                <div class="transformation">
+                    <strong>LLM Input:</strong>
+                    <div class="list-item">Element text: "Submit Form"</div>
+                    <div class="list-item">Element type: "button"</div>
+                    <div class="list-item">Page context: "User Login Form"</div>
+                </div>
+
+                <div class="before-after">
+                    <div class="before">
+                        <div class="before-title">❌ BEFORE LLM</div>
+                        <code style="font-size: 0.85em;">
+semantic: {<br>
+&nbsp;&nbsp;normalized_text: "submit form",<br>
+&nbsp;&nbsp;llm_intent: null,<br>
+&nbsp;&nbsp;confidence: null<br>
+}
+                        </code>
+                    </div>
+                    <div class="after">
+                        <div class="after-title">✅ AFTER LLM</div>
+                        <code style="font-size: 0.85em;">
+semantic: {<br>
+&nbsp;&nbsp;normalized_text: "submit form",<br>
+&nbsp;&nbsp;llm_intent: "submit_login_form",<br>
+&nbsp;&nbsp;confidence: 0.98<br>
+}
+                        </code>
+                    </div>
+                </div>
+
+                <div class="metric-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Confidence Score</div>
+                        <div class="metric-value">0.98</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Intent Type</div>
+                        <div class="metric-value">Submit</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Model Used</div>
+                        <div class="metric-value">Claude</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Latency</div>
+                        <div class="metric-value">&lt;2s</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stage 4: Editing -->
+        <div class="section">
+            <div class="section-title">4️⃣ Human Editing: Refinement</div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">✏️</span>
+                    Transformation 4: Validation & Parameter Addition
+                </div>
+
+                <div class="transformation">
+                    <strong>Human Edits:</strong>
+                    <div class="list-item">Verify LLM intent matches actual action</div>
+                    <div class="list-item">Adjust selectors for better stability</div>
+                    <div class="list-item">Add validation rules (success criteria)</div>
+                    <div class="list-item">Fine-tune timing (wait_before, wait_after)</div>
+                </div>
+
+                <div class="before-after">
+                    <div class="before">
+                        <div class="before-title">❌ AUTO-GENERATED</div>
+                        <code style="font-size: 0.85em;">
+action: "click"<br>
+selector: "button.btn"<br>
+wait_after: 500ms<br>
+validation: null
+                        </code>
+                    </div>
+                    <div class="after">
+                        <div class="after-title">✅ HUMAN-EDITED</div>
+                        <code style="font-size: 0.85em;">
+action: "click"<br>
+selector: "button#submit"<br>
+wait_after: 2000ms<br>
+validation: {<br>
+&nbsp;&nbsp;url_contains: "/dashboard"<br>
+}
+                        </code>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <strong>💡 Why Editing Matters:</strong> Selectors based on IDs are more stable than class-based.
+                    Longer wait times accommodate slow networks.
+                    Validation rules catch failed actions early.
+                </div>
+            </div>
+        </div>
+
+        <!-- Stage 5: Compilation -->
+        <div class="section">
+            <div class="section-title">5️⃣ Compilation: Skill Generation</div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">🔧</span>
+                    Transformation 5: Action Extraction & Selector Ranking
+                </div>
+
+                <div class="transformation">
+                    <strong>Compiler Processes:</strong>
+                    <div class="list-item">Convert event to executable Action type</div>
+                    <div class="list-item">Score selectors by stability (0.0-1.0)</div>
+                    <div class="list-item">Rank best selector first, add fallbacks</div>
+                    <div class="list-item">Embed validation rules in step definition</div>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Selector Type</th>
+                            <th>Score</th>
+                            <th>Ranking</th>
+                            <th>Fallback?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="field-name">button#submit</span></td>
+                            <td>0.95</td>
+                            <td><strong>1st (Best)</strong></td>
+                            <td>Primary</td>
+                        </tr>
+                        <tr>
+                            <td><span class="field-name">button.btn-primary</span></td>
+                            <td>0.75</td>
+                            <td>2nd</td>
+                            <td>Fallback 1</td>
+                        </tr>
+                        <tr>
+                            <td><span class="field-name">//button[@type='submit']</span></td>
+                            <td>0.68</td>
+                            <td>3rd</td>
+                            <td>Fallback 2</td>
+                        </tr>
+                        <tr>
+                            <td><span class="field-name">//button[text()='Submit']</span></td>
+                            <td>0.45</td>
+                            <td>4th (Worst)</td>
+                            <td>Last Resort</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="code-block">
+<span class="json-key">"compiled_action"</span>: {
+  <span class="json-key">"id"</span>: <span class="json-string">"step_1"</span>,
+  <span class="json-key">"action"</span>: <span class="json-string">"click"</span>,
+  <span class="json-key">"selector"</span>: <span class="json-string">"button#submit"</span>,
+  <span class="json-key">"selector_confidence"</span>: <span class="json-number">0.95</span>,
+  <span class="json-key">"selectors_fallback"</span>: [
+    <span class="json-string">"button.btn-primary"</span>,
+    <span class="json-string">"//button[@type='submit']"</span>
+  ],
+  <span class="json-key">"validation"</span>: {
+    <span class="json-key">"success_criteria"</span>: [
+      { <span class="json-key">"type"</span>: <span class="json-string">"url_contains"</span>, <span class="json-key">"value"</span>: <span class="json-string">"/dashboard"</span> }
+    ]
+  },
+  <span class="json-key">"wait_after_ms"</span>: <span class="json-number">2000</span>
+}
+                </div>
+            </div>
+        </div>
+
+        <!-- Stage 6: Execution -->
+        <div class="section">
+            <div class="section-title">6️⃣ Execution: Runtime Transformation</div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">⚡</span>
+                    Transformation 6: Action Execution & Validation
+                </div>
+
+                <div class="transformation">
+                    <strong>At Runtime:</strong>
+                    <div class="list-item">Load skill from skills.json into memory</div>
+                    <div class="list-item">For each action, find element using best selector</div>
+                    <div class="list-item">If element not found, try fallbacks</div>
+                    <div class="list-item">Execute action (click, type, navigate, etc.)</div>
+                    <div class="list-item">Wait and check success criteria</div>
+                </div>
+
+                <div class="before-after">
+                    <div class="before">
+                        <div class="before-title">❌ EXECUTION ATTEMPT 1</div>
+                        <code style="font-size: 0.85em;">
+Selector: "button#submit"<br>
+Result: NOT FOUND<br>
+Status: Failed<br>
+→ Try Fallback 1
+                        </code>
+                    </div>
+                    <div class="after">
+                        <div class="after-title">✅ EXECUTION ATTEMPT 2</div>
+                        <code style="font-size: 0.85em;">
+Selector: "button.btn-primary"<br>
+Result: FOUND (1 match)<br>
+Action: Click<br>
+Status: Success ✓
+                        </code>
+                    </div>
+                </div>
+
+                <div class="success-box">
+                    <strong>Self-Healing in Action:</strong> When the primary selector fails, the system automatically
+                    tries fallback selectors without requiring manual intervention.
+                </div>
+            </div>
+
+            <div class="data-stage">
+                <div class="stage-header">
+                    <span class="stage-num">⚡</span>
+                    Recovery if All Selectors Fail
+                </div>
+
+                <div class="warning-box">
+                    <strong>⚠️ Failure Scenario:</strong> All selectors failed, element not found on page
+                </div>
+
+                <div class="metric-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Recovery Layer</div>
+                        <div class="metric-value">LLM</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Analysis Time</div>
+                        <div class="metric-value">&lt;2s</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Success Rate</div>
+                        <div class="metric-value">~70%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Fallback Layer</div>
+                        <div class="metric-value">Vision</div>
+                    </div>
+                </div>
+
+                <div class="code-block">
+<span class="json-key">"recovery_llm_input"</span>: {
+  <span class="json-key">"original_action"</span>: <span class="json-string">"click button#submit"</span>,
+  <span class="json-key">"failed_selectors"</span>: [<span class="json-string">"button#submit"</span>, <span class="json-string">"button.btn-primary"</span>],
+  <span class="json-key">"current_screenshot"</span>: &lt;screenshot_bytes&gt;,
+  <span class="json-key">"error"</span>: <span class="json-string">"No element found"</span>,
+  <span class="json-key">"semantic_intent"</span>: <span class="json-string">"submit_login_form"</span>
+}
+
+<span class="json-key">"recovery_llm_output"</span>: {
+  <span class="json-key">"new_selector"</span>: <span class="json-string">"button:nth-of-type(2)"</span>,
+  <span class="json-key">"reasoning"</span>: <span class="json-string">"Button moved to second position in button list"</span>,
+  <span class="json-key">"confidence"</span>: <span class="json-number">0.82</span>
+}
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="section">
+            <div class="section-title">📊 Data Transformation Summary</div>
+
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Input Size (per event)</div>
+                    <div class="metric-value">50-100 KB</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Processing Stages</div>
+                    <div class="metric-value">6</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">LLM Calls</div>
+                    <div class="metric-value">3 (semantic, validation, recovery)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Enrichment Points</div>
+                    <div class="metric-value">5</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Selectors per Step</div>
+                    <div class="metric-value">3-4</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Final Output</div>
+                    <div class="metric-value">3-5 KB</div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>💾 Data Compression:</strong> From 50KB raw event to ~4KB compiled action.
+                Screenshots stored separately for recovery.
+                Semantic enrichment adds only ~200 bytes per event.
+            </div>
+        </div>
+
+    </div>
+
+    <footer>
+        <p>Conxa: Complete Data Flow Documentation | Understanding Event Transformations v1.0</p>
+    </footer>
+</body>
+</html>

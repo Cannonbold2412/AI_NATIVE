@@ -1,10 +1,8 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
-import { FormProvider, useForm, useFormState } from 'react-hook-form'
+import { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react'
+import { FormProvider, useForm, useFormState, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import type { StepEditorDTO, WorkflowResponse } from '../types/workflow'
-import type { WaitNode } from '../types/waitValidation'
-import { patchStep } from '../api/workflowApi'
-import { ValidationEditor } from './ValidationEditor'
+import { patchStep, postUpdateVisualBbox } from '../api/workflowApi'
 import { ScreenshotViewer } from './ScreenshotViewer'
 import { useEditorStore } from '../store/editorStore'
 import { Button } from '@/components/ui/button'
@@ -14,158 +12,55 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { fieldSelectClass } from '@/lib/fieldStyles'
 import { cn } from '@/lib/utils'
-import { GripVertical, Trash2 } from 'lucide-react'
+import { BoxSelect, Info, Trash2 } from 'lucide-react'
 
 type FormValues = {
   intent: string
+  url: string
+  scroll_mode: 'scroll_only' | 'scroll_to_locate'
   scroll_amount: string
+  scroll_selector: string
   selectors: string[]
   value: string
   css: string
   aria: string
   text_based: string
   xpath: string
-  wait_validation_shape: 'single' | 'compound'
-  wait_tree: WaitNode
   anchors: string[]
-  strategies_selected: string[]
+  check_kind: string
+  check_pattern: string
+  check_threshold: string
+  check_selector: string
+  check_text: string
 }
-
-const RECOVERY_STRATEGY_OPTIONS = [
-  {
-    value: 'semantic match',
-    label: 'Match by meaning and intent',
-    help: 'Use the step intent and nearby text meaning to find the right element.',
-  },
-  {
-    value: 'position match',
-    label: 'Match by same position',
-    help: 'Use page/layout position when labels are unstable.',
-  },
-  {
-    value: 'visual match',
-    label: 'Match by visual look',
-    help: 'Use screenshot appearance and target region.',
-  },
-  {
-    value: 'role_match',
-    label: 'Match by role/type',
-    help: 'Use role/type hints such as button, dropdown, list, combobox.',
-  },
-  {
-    value: 'overlay_anchor',
-    label: 'Check overlay or modal context',
-    help: 'Useful for dialogs, popovers, drawers, and menus.',
-  },
-  {
-    value: 'url_state_match',
-    label: 'Use URL/state clues',
-    help: 'Verify page state or URL changes before retrying.',
-  },
-  {
-    value: 'intent_outcome_probe',
-    label: 'Probe expected outcome text',
-    help: 'Look for expected outcome tokens from the intent.',
-  },
-  {
-    value: 'scroll_anchor',
-    label: 'Use scroll anchor',
-    help: 'Retry around the same scroll position/context.',
-  },
-] as const
 
 const emptyForm: FormValues = {
   intent: '',
+  url: '',
+  scroll_mode: 'scroll_only',
   scroll_amount: '',
+  scroll_selector: '',
   selectors: [''],
   value: '',
   css: '',
   aria: '',
   text_based: '',
   xpath: '',
-  wait_validation_shape: 'single',
-  wait_tree: { kind: 'leaf', type: 'none', target: '', timeout: 5000 },
   anchors: [''],
-  strategies_selected: [],
+  check_kind: 'url',
+  check_pattern: '',
+  check_threshold: '0.9',
+  check_selector: '',
+  check_text: '',
 }
 
 const ANCHOR_RELATIONS = new Set(['target', 'inside', 'above', 'below', 'near'])
-
-function isGroupRecord(w: Record<string, unknown>): boolean {
-  const op = String(w.op || '').toLowerCase()
-  return (op === 'and' || op === 'or') && Array.isArray(w.conditions) && (w.conditions as unknown[]).length > 0
-}
-
-function parseWaitNode(w: Record<string, unknown>): WaitNode {
-  if (isGroupRecord(w)) {
-    const op = String(w.op || '').toLowerCase() === 'and' ? 'and' : 'or'
-    return {
-      kind: 'group',
-      op,
-      children: (w.conditions as unknown[]).map((c) => parseWaitNode(c as Record<string, unknown>)),
-    }
-  }
-  return {
-    kind: 'leaf',
-    type: String(w.type || 'none'),
-    target: String(w.target || ''),
-    timeout: Number(w.timeout ?? 5000),
-  }
-}
-
-function parseWaitForToForm(wfRaw: unknown): Pick<FormValues, 'wait_validation_shape' | 'wait_tree'> {
-  const wf = (wfRaw && typeof wfRaw === 'object' ? wfRaw : {}) as Record<string, unknown>
-  if (isGroupRecord(wf)) {
-    return { wait_validation_shape: 'compound', wait_tree: parseWaitNode(wf) }
-  }
-  return {
-    wait_validation_shape: 'single',
-    wait_tree: {
-      kind: 'leaf',
-      type: String(wf.type || 'none'),
-      target: String(wf.target || ''),
-      timeout: Number(wf.timeout ?? 5000),
-    },
-  }
-}
-
-function jsonFromWaitNode(n: WaitNode): Record<string, unknown> {
-  if (n.kind === 'leaf') {
-    return {
-      type: n.type,
-      target: (n.target || '').trim(),
-      timeout: Number(n.timeout) || 5000,
-    }
-  }
-  return {
-    op: n.op,
-    conditions: n.children.map(jsonFromWaitNode),
-  }
-}
-
-function firstLeafInTree(n: WaitNode): WaitNode {
-  if (n.kind === 'leaf') return n
-  for (const c of n.children) {
-    const f = firstLeafInTree(c)
-    if (f.kind === 'leaf') return f
-  }
-  return { kind: 'leaf', type: 'none', target: '', timeout: 5000 }
-}
-
-function buildWaitFor(values: FormValues): Record<string, unknown> {
-  const t = values.wait_tree
-  if (values.wait_validation_shape !== 'compound') {
-    if (t.kind === 'leaf') return jsonFromWaitNode(t)
-    return jsonFromWaitNode(firstLeafInTree(t))
-  }
-  if (t.kind === 'group') return jsonFromWaitNode(t)
-  return { op: 'or', conditions: [jsonFromWaitNode(t)] }
-}
+const URL_CHECK_KINDS = new Set(['url', 'url_exact', 'url_must_be'])
+const EXACT_URL_CHECK_KINDS = new Set(['url_exact', 'url_must_be'])
 
 function defaultsFromStep(step: StepEditorDTO): FormValues {
   const tgt = step.target as { primary_selector?: string; fallback_selectors?: string[] }
   const sel = step.selectors as { css?: string; aria?: string; text_based?: string; xpath?: string }
-  const waitBits = parseWaitForToForm(step.validation.wait_for)
   const anc = (step.anchors_signals || [])
     .map((a) => {
       const o = a as Record<string, string>
@@ -175,10 +70,12 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
       return `${ANCHOR_RELATIONS.has(relation) ? relation : 'near'}:${element}`
     })
     .filter(Boolean)
-  const strat = ((step.recovery.strategies || []) as string[])
   return {
     intent: step.intent || step.final_intent,
+    url: step.url || '',
+    scroll_mode: step.scroll_mode === 'scroll_to_locate' ? 'scroll_to_locate' : 'scroll_only',
     scroll_amount: step.scroll_amount === null || step.scroll_amount === undefined ? '' : String(step.scroll_amount),
+    scroll_selector: String(step.scroll_selector || ''),
     selectors: [String(tgt.primary_selector || ''), ...(tgt.fallback_selectors || [])].filter(
       (selector, index, arr) => index === 0 || Boolean(selector) || arr.length === 1,
     ),
@@ -187,9 +84,12 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
     aria: String(sel.aria || ''),
     text_based: String(sel.text_based || ''),
     xpath: String(sel.xpath || ''),
-    ...waitBits,
     anchors: anc.length > 0 ? anc : [''],
-    strategies_selected: strat,
+    check_kind: String(step.check_kind || 'url'),
+    check_pattern: String(step.check_pattern || ''),
+    check_threshold: String(step.check_threshold ?? 0.9),
+    check_selector: String(step.check_selector || ''),
+    check_text: String(step.check_text || ''),
   }
 }
 
@@ -238,6 +138,37 @@ function humanizeAction(action: string): string {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
 }
 
+function visualBboxSummary(step: StepEditorDTO): {
+  usable: boolean
+  label: string
+  title: string
+} {
+  if (step.flags.is_scroll) {
+    return {
+      usable: false,
+      label: 'Scroll step: no target bbox',
+      title: 'Scroll steps use scroll position instead of a visual target rectangle.',
+    }
+  }
+  const bbox = step.screenshot.bbox || {}
+  const x = Number(bbox.x ?? 0)
+  const y = Number(bbox.y ?? 0)
+  const w = Number(bbox.w ?? 0)
+  const h = Number(bbox.h ?? 0)
+  if (w >= 2 && h >= 2) {
+    return {
+      usable: true,
+      label: `x ${Math.round(x)} | y ${Math.round(y)} | w ${Math.round(w)} | h ${Math.round(h)}`,
+      title: 'Saved in signals.visual.bbox and used by visual matching, LLM anchor refresh, and static confidence checks.',
+    }
+  }
+  return {
+    usable: false,
+    label: 'No usable visual bbox saved',
+    title: 'Draw a target region on the screenshot to save signals.visual.bbox for this action.',
+  }
+}
+
 function parseScrollAmount(raw: string): number {
   const trimmed = raw.trim()
   if (!trimmed) throw new Error('Scroll amount is required')
@@ -269,7 +200,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
     ref,
   ) {
   const methods = useForm<FormValues>({ defaultValues: emptyForm })
-  const [draggingRecoveryIndex, setDraggingRecoveryIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (step) methods.reset(defaultsFromStep(step))
@@ -279,24 +209,17 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
     async (b: { x: number; y: number; w: number; h: number }) => {
       if (!step || step.flags.is_scroll) return
       try {
-        const res = await patchStep(
+        const res = await postUpdateVisualBbox(
           skillId,
           step.step_index,
-          {
-            signals: {
-              visual: {
-                bbox: { x: b.x, y: b.y, w: b.w, h: b.h },
-              },
-            },
-          },
-          false,
+          { x: b.x, y: b.y, w: b.w, h: b.h },
         )
         onWorkflowUpdated(res.workflow)
         const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
         if (next) methods.reset(defaultsFromStep(next))
-        toast.success('Visual bbox saved')
+        toast.success('Visual bbox saved; anchors recomputed')
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Could not save visual bbox'
+        const msg = e instanceof Error ? e.message : 'Could not save visual bbox and recompute anchors'
         toast.error(msg)
         throw e
       }
@@ -310,14 +233,94 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
       const silent = options?.silentToast ?? false
       const editable = step.editable_fields
       const canEditField = (key: string) => editable[key] !== false
+      const isCheckStep = step.action_type === 'check'
+      const isNavigateStep = step.action_type.toLowerCase() === 'navigate'
+      if (isNavigateStep) {
+        const url = values.url.trim()
+        if (!/^https?:\/\//i.test(url)) {
+          const err = new Error('Navigate URL must start with http:// or https://')
+          methods.setError('url', { message: err.message })
+          if (!silent) toast.error(err.message)
+          throw err
+        }
+        const patch: Record<string, unknown> = {
+          intent: values.intent,
+          url,
+          action: {
+            action: 'navigate',
+            url,
+          },
+          validation: {
+            wait_for: { type: 'url_change', target: url, timeout: 15000 },
+            success_conditions: { url },
+          },
+        }
+        try {
+          const res = await patchStep(skillId, step.step_index, patch, false)
+          onWorkflowUpdated(res.workflow)
+          const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
+          if (next) methods.reset(defaultsFromStep(next))
+          if (!silent) toast.success('Step saved')
+          return
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Save failed'
+          methods.setError('root', { message: msg })
+          if (!silent) toast.error(msg)
+          throw e
+        }
+      }
+      if (isCheckStep) {
+        const patch: Record<string, unknown> = {
+          intent: values.intent,
+          check_kind: values.check_kind,
+        }
+        if (URL_CHECK_KINDS.has(values.check_kind)) {
+          patch.check_pattern = values.check_pattern
+          patch.signals = { anchors: [] }
+          patch.recovery = { anchors: [] }
+        }
+        else if (values.check_kind === 'snapshot') patch.check_threshold = Number(values.check_threshold)
+        else if (values.check_kind === 'selector') patch.check_selector = values.check_selector
+        else if (values.check_kind === 'text') patch.check_text = values.check_text
+        try {
+          const res = await patchStep(skillId, step.step_index, patch, false)
+          onWorkflowUpdated(res.workflow)
+          const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
+          if (next) methods.reset(defaultsFromStep(next))
+          if (!silent) toast.success('Step saved')
+          return
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Save failed'
+          methods.setError('root', { message: msg })
+          if (!silent) toast.error(msg)
+          throw e
+        }
+      }
       if (step.flags.is_scroll) {
-        const scrollAmount = parseScrollAmount(values.scroll_amount)
         const patch: Record<string, unknown> = {
           intent: values.intent,
           action: {
             action: 'scroll',
-            delta: scrollAmount,
           },
+        }
+        if (values.scroll_mode === 'scroll_to_locate') {
+          const selector = values.scroll_selector.trim()
+          if (!selector) {
+            const err = new Error('Scroll target selector is required')
+            methods.setError('scroll_selector', { message: err.message })
+            if (!silent) toast.error(err.message)
+            throw err
+          }
+          patch.action = {
+            action: 'scroll',
+            selector,
+          }
+        } else {
+          const scrollAmount = parseScrollAmount(values.scroll_amount)
+          patch.action = {
+            action: 'scroll',
+            delta: scrollAmount,
+          }
         }
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
@@ -338,7 +341,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         .filter(Boolean)
       const primarySelector = selectors[0] || ''
       const fallbackSelectors = selectors.slice(1)
-      const strategies = (values.strategies_selected || []).map((s) => s.trim()).filter(Boolean)
       const anchors = parseAnchorRows(values.anchors)
       const patch: Record<string, unknown> = {
         intent: values.intent,
@@ -354,12 +356,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
             xpath: values.xpath,
           },
           anchors,
-        },
-        validation: {
-          wait_for: buildWaitFor(values),
-        },
-        recovery: {
-          strategies,
         },
       }
       if (canEditField('value')) patch.value = values.value
@@ -403,6 +399,11 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
     [methods, persistStepValues, step],
   )
 
+  const selectors = useWatch({ control: methods.control, name: 'selectors' }) || ['']
+  const anchors = useWatch({ control: methods.control, name: 'anchors' }) || ['']
+  const checkKind = useWatch({ control: methods.control, name: 'check_kind' }) || 'url'
+  const scrollMode = useWatch({ control: methods.control, name: 'scroll_mode' }) || 'scroll_only'
+
   if (!step) {
     return (
       <div className="text-muted-foreground border-border/60 bg-card/25 supports-[backdrop-filter]:bg-card/15 flex min-h-0 min-w-0 items-center justify-center border-x p-4 text-sm backdrop-blur-sm">
@@ -413,48 +414,11 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
 
   const editable = step.editable_fields
   const canEdit = (key: string) => editable[key] !== false
+  const isCheckStep = step.action_type === 'check'
+  const isNavigateStep = step.action_type.toLowerCase() === 'navigate'
   const isScrollStep = step.flags.is_scroll
-  const selectors = methods.watch('selectors') || ['']
-  const anchors = methods.watch('anchors') || ['']
-  const selectedStrategies = methods.watch('strategies_selected') || []
-  const recoveryOptions = [
-    ...RECOVERY_STRATEGY_OPTIONS,
-    ...((step.recovery.strategies || []) as string[])
-      .filter((v) => !RECOVERY_STRATEGY_OPTIONS.some((o) => o.value === v))
-      .map((v) => ({ value: v, label: v, help: 'Existing strategy on this step.' })),
-  ]
-  const recoveryHelpByValue = new Map(recoveryOptions.map((opt) => [opt.value, opt.help]))
-
-  const addRecoveryStrategy = (value: string) => {
-    if (!canEdit('recovery_strategies')) return
-    if (!value) return
-    const current = methods.getValues('strategies_selected') || []
-    const existingIndex = current.indexOf(value)
-    if (existingIndex === 0) return
-    if (existingIndex > 0) {
-      const next = [value, ...current.filter((v) => v !== value)]
-      methods.setValue('strategies_selected', next, { shouldDirty: true })
-      return
-    }
-    methods.setValue('strategies_selected', [value, ...current], { shouldDirty: true })
-  }
-
-  const moveRecoveryStrategy = (from: number, to: number) => {
-    if (from === to || from < 0 || to < 0 || to >= selectedStrategies.length) return
-    const next = [...selectedStrategies]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    methods.setValue('strategies_selected', next, { shouldDirty: true })
-  }
-
-  const removeRecoveryStrategy = (value: string) => {
-    const current = methods.getValues('strategies_selected') || []
-    methods.setValue(
-      'strategies_selected',
-      current.filter((v) => v !== value),
-      { shouldDirty: true },
-    )
-  }
+  const showSelectorAndAnchorTools = !isScrollStep && !isNavigateStep && !(isCheckStep && URL_CHECK_KINDS.has(checkKind))
+  const bboxSummary = visualBboxSummary(step)
 
   const onSubmit = methods.handleSubmit(async (values) => {
     try {
@@ -476,6 +440,36 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         isScrollStep={step.flags.is_scroll}
         onSaveVisualBbox={!step.flags.is_scroll ? saveVisualBbox : undefined}
       />
+      <div
+        className={cn(
+          'border-border/60 bg-background/35 flex min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-xs',
+          bboxSummary.usable ? 'text-zinc-300' : 'text-zinc-500',
+        )}
+      >
+        <span
+          className={cn(
+            'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border',
+            bboxSummary.usable
+              ? 'border-sky-400/30 bg-sky-400/10 text-sky-300'
+              : 'border-white/10 bg-white/[0.03] text-zinc-500',
+          )}
+          aria-hidden
+        >
+          <BoxSelect className="size-3.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 font-medium text-zinc-300">Visual bbox</span>
+            <span className="inline-flex shrink-0 text-zinc-500 hover:text-zinc-400" title={bboxSummary.title}>
+              <Info className="size-3.5" aria-hidden />
+              <span className="sr-only">Visual bbox usage</span>
+            </span>
+          </div>
+          <p className="mt-0.5 min-w-0 font-mono text-[11px] leading-5 break-words text-zinc-400">
+            {bboxSummary.label}
+          </p>
+        </div>
+      </div>
       <FormProvider {...methods}>
         <DirtySync stepIndex={step.step_index} />
         <form onSubmit={onSubmit} className="space-y-2">
@@ -494,21 +488,125 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                   {...methods.register('intent')}
                 />
               </div>
-              {isScrollStep ? (
+              {isCheckStep ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label htmlFor="check_kind">Check type</Label>
+                    <select
+                      id="check_kind"
+                      className={fieldSelectClass}
+                      {...methods.register('check_kind')}
+                    >
+                      <option value="url">URL contains pattern</option>
+                      <option value="url_exact">URL must be</option>
+                      <option value="snapshot">Snapshot similarity (≥ threshold)</option>
+                      <option value="selector">Element present</option>
+                      <option value="text">Text appears on page</option>
+                    </select>
+                  </div>
+                  {URL_CHECK_KINDS.has(checkKind) && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="check_pattern">
+                        {EXACT_URL_CHECK_KINDS.has(checkKind) ? 'Expected URL' : 'URL pattern (substring)'}
+                      </Label>
+                      <Input
+                        id="check_pattern"
+                        type="text"
+                        placeholder={EXACT_URL_CHECK_KINDS.has(checkKind) ? 'https://example.com/dashboard' : 'e.g., /dashboard'}
+                        {...methods.register('check_pattern')}
+                      />
+                    </div>
+                  )}
+                  {checkKind === 'snapshot' && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="check_threshold">Similarity threshold (0.0 - 1.0)</Label>
+                      <Input
+                        id="check_threshold"
+                        type="number"
+                        step="0.05"
+                        min="0"
+                        max="1"
+                        defaultValue="0.9"
+                        {...methods.register('check_threshold')}
+                      />
+                      <p className="text-muted-foreground text-xs">Default: 0.9 (90% match)</p>
+                    </div>
+                  )}
+                  {checkKind === 'selector' && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="check_selector">CSS selector</Label>
+                      <Input
+                        id="check_selector"
+                        type="text"
+                        placeholder="e.g., .success-message"
+                        {...methods.register('check_selector')}
+                      />
+                    </div>
+                  )}
+                  {checkKind === 'text' && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="check_text">Expected text</Label>
+                      <Input
+                        id="check_text"
+                        type="text"
+                        placeholder="e.g., Success"
+                        {...methods.register('check_text')}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : null}
+              {isNavigateStep ? (
                 <div className="grid gap-2">
-                  <Label htmlFor="scroll_amount">Scroll amount</Label>
+                  <Label htmlFor="url">URL</Label>
                   <Input
-                    id="scroll_amount"
-                    type="number"
-                    inputMode="numeric"
-                    placeholder="150"
-                    disabled={!canEdit('intent')}
-                    {...methods.register('scroll_amount')}
+                    id="url"
+                    type="url"
+                    placeholder="https://example.com"
+                    disabled={!canEdit('url')}
+                    {...methods.register('url')}
                   />
-                  <p className="text-muted-foreground text-xs">Use a signed number. Positive scrolls down; negative scrolls up.</p>
+                  {methods.formState.errors.url ? (
+                    <p className="text-destructive text-xs">{methods.formState.errors.url.message}</p>
+                  ) : null}
                 </div>
               ) : null}
-              {!isScrollStep ? (
+              {isScrollStep ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label htmlFor="scroll_mode">Scroll mode</Label>
+                    <select id="scroll_mode" className={fieldSelectClass} {...methods.register('scroll_mode')}>
+                      <option value="scroll_only">Scroll only</option>
+                      <option value="scroll_to_locate">Scroll to locate</option>
+                    </select>
+                  </div>
+                  {scrollMode === 'scroll_to_locate' ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor="scroll_selector">Target selector</Label>
+                      <Input
+                        id="scroll_selector"
+                        type="text"
+                        placeholder="text=Load more"
+                        {...methods.register('scroll_selector')}
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid gap-2">
+                      <Label htmlFor="scroll_amount">Scroll amount</Label>
+                      <Input
+                        id="scroll_amount"
+                        type="number"
+                        inputMode="numeric"
+                        placeholder="150"
+                        disabled={!canEdit('intent')}
+                        {...methods.register('scroll_amount')}
+                      />
+                      <p className="text-muted-foreground text-xs">Use a signed number. Positive scrolls down; negative scrolls up.</p>
+                    </div>
+                  )}
+                </>
+              ) : null}
+              {!isScrollStep && !isCheckStep && !isNavigateStep ? (
                 <>
                   <div className="grid gap-2">
                     <div className="flex items-center justify-between gap-2">
@@ -568,7 +666,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
             </CardContent>
           </Card>
 
-          {!isScrollStep ? (
+          {showSelectorAndAnchorTools ? (
           <>
           <Card className="gap-2 py-3">
             <CardHeader className="p-2.5 pb-1">
@@ -609,7 +707,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
           <Card className="gap-2 py-3">
             <CardHeader className="p-2.5 pb-1">
               <CardTitle className="text-sm">Anchors</CardTitle>
-              <CardDescription className="text-xs">Use format `relation:element` such as `near:Sign in` or `above:Email`.</CardDescription>
+              <CardDescription className="text-xs">Use format `relation:element`; above/below describes the target relative to that anchor.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2.5 p-2.5 pt-0">
               <div className="flex items-center justify-between gap-2">
@@ -653,82 +751,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                     </Button>
                   </div>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <ValidationEditor />
-
-          <Card className="gap-2 py-3">
-            <CardHeader className="p-2.5 pb-1">
-              <CardTitle className="text-sm">Recovery (ordered)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1.5 p-2.5 pt-0">
-              <p className="text-muted-foreground text-xs">Choose from dropdown to add/move to top. Drag rows to reorder.</p>
-              <div className="grid gap-1.5">
-                <Label htmlFor="recovery_strategy_picker">Recovery strategy</Label>
-                <select
-                  id="recovery_strategy_picker"
-                  className={fieldSelectClass}
-                  disabled={!canEdit('recovery_strategies')}
-                  value=""
-                  onChange={(event) => {
-                    addRecoveryStrategy(event.target.value)
-                    event.currentTarget.value = ''
-                  }}
-                >
-                  <option value="">Select recovery strategy...</option>
-                  {recoveryOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5 pt-1">
-                {selectedStrategies.map((strategy, index) => (
-                  <div
-                    key={`${strategy}-${index}`}
-                    className={cn(
-                      'border-border bg-background/40 flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs',
-                      draggingRecoveryIndex === index && 'opacity-70',
-                    )}
-                    draggable={canEdit('recovery_strategies')}
-                    onDragStart={() => setDraggingRecoveryIndex(index)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => {
-                      if (draggingRecoveryIndex === null) return
-                      moveRecoveryStrategy(draggingRecoveryIndex, index)
-                      setDraggingRecoveryIndex(null)
-                    }}
-                    onDragEnd={() => setDraggingRecoveryIndex(null)}
-                  >
-                    <span className="text-muted-foreground shrink-0" aria-hidden>
-                      <GripVertical className="size-3.5" />
-                    </span>
-                    <span className="text-muted-foreground">{index + 1}.</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block break-words">{strategy}</span>
-                      <span className="text-muted-foreground block break-words text-[11px] leading-4">
-                        {recoveryHelpByValue.get(strategy) || 'Recovery strategy selected for this step.'}
-                      </span>
-                    </span>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      className="text-destructive hover:text-destructive h-7 w-7"
-                      disabled={!canEdit('recovery_strategies')}
-                      onClick={() => removeRecoveryStrategy(strategy)}
-                      aria-label={`Remove recovery strategy ${strategy}`}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                ))}
-                {selectedStrategies.length === 0 ? (
-                  <p className="text-muted-foreground text-xs">No recovery strategy selected.</p>
-                ) : null}
               </div>
             </CardContent>
           </Card>

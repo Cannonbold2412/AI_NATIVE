@@ -208,14 +208,14 @@ Relevant settings:
 | `pack_llm_model` | `SKILL_PACK_LLM_MODEL` | Model name |
 | `pack_llm_api_key` | `SKILL_PACK_LLM_API_KEY` | Single bearer key |
 | `pack_llm_api_keys` | `SKILL_PACK_LLM_API_KEYS` | Comma-separated rotating key pool |
-| `pack_llm_timeout_ms` | `SKILL_PACK_LLM_TIMEOUT_MS` | Request timeout, minimum enforced to 600000 ms |
+| `pack_llm_timeout_ms` | `SKILL_PACK_LLM_TIMEOUT_MS` | Request timeout, minimum enforced to 360000 ms |
 | `pack_llm_structure_temperature` | `SKILL_PACK_LLM_STRUCTURE_TEMPERATURE` | Structuring temperature |
 | `pack_llm_structure_max_tokens` | `SKILL_PACK_LLM_STRUCTURE_MAX_TOKENS` | Optional token cap |
 | `pack_llm_top_p` | `SKILL_PACK_LLM_TOP_P` | Optional top-p |
 
 Validation/clamping behavior in `Settings`:
 
-- `pack_llm_timeout_ms` is clamped to at least `600000`.
+- `pack_llm_timeout_ms` is clamped to at least `360000`.
 - `pack_llm_structure_temperature` is clamped into `[0.0, 2.0]`.
 - `pack_llm_top_p` is normalized to `None` unless it is within `(0.0, 1.0]`.
 - `pack_llm_structure_max_tokens` is normalized to `None` unless it is a positive integer.

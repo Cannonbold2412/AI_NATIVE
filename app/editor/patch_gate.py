@@ -44,6 +44,8 @@ def _merge_step_shell(step: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
         out["signals"] = signals
     if "value" in patch:
         out["value"] = patch["value"]
+    if "url" in patch and isinstance(patch["url"], str):
+        out["url"] = str(patch["url"]).strip()
     return out
 
 
@@ -68,6 +70,18 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
             raise ValueError("invalid_intent_slug")
 
     act = action_name(merged).lower()
+    if act == "navigate":
+        invalid_keys = sorted(set(patch) - {"intent", "action", "url", "validation", "recovery"})
+        if invalid_keys:
+            raise ValueError("navigate_step_allows_only_url_intent_validation_recovery")
+        action_patch = patch.get("action")
+        url = ""
+        if isinstance(action_patch, dict):
+            url = str(action_patch.get("url") or "").strip()
+        url = url or str(patch.get("url") or merged.get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            raise ValueError("navigate_url_must_be_http_url")
+        return
     if act == "scroll":
         invalid_keys = sorted(set(patch) - {"intent", "action"})
         if invalid_keys:
@@ -77,9 +91,14 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
             raise ValueError("scroll_action_patch_required")
         if str(action_patch.get("action") or "scroll").strip().lower() != "scroll":
             raise ValueError("scroll_action_kind_invalid")
-        delta = _coerce_scroll_delta(action_patch.get("delta"))
-        if abs(delta) > 20000:
-            raise ValueError("scroll_amount_out_of_range")
+        selector = str(action_patch.get("selector") or "").strip()
+        if selector:
+            if not selector_passes_filters(selector):
+                raise ValueError("scroll_selector_failed_quality_gates")
+        else:
+            delta = _coerce_scroll_delta(action_patch.get("delta"))
+            if abs(delta) > 20000:
+                raise ValueError("scroll_amount_out_of_range")
     if act != "scroll":
         eff = get_effective_intent_from_skill_step(merged) or str(merged.get("intent") or "").strip()
         if not eff.strip():

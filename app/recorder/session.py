@@ -62,7 +62,7 @@ class RecordingSession:
     """
 
     session_id: str
-    start_url: str
+    start_url: str = "about:blank"
     data_root: Path = field(default_factory=lambda: settings.data_dir)
     _playwright: Any = None
     _browser: Any = None
@@ -292,7 +292,7 @@ class SessionRegistry:
     def __init__(self) -> None:
         self._sessions: dict[str, RecordingSession] = {}
 
-    def create(self, start_url: str) -> RecordingSession:
+    def create(self, start_url: str = "about:blank") -> RecordingSession:
         sid = str(uuid.uuid4())
         sess = RecordingSession(session_id=sid, start_url=start_url)
         self._sessions[sid] = sess

@@ -229,14 +229,14 @@ function ScreenshotViewInner({
             />
             {overlayPct ? (
               <div
-                className="ring-primary/40 pointer-events-none absolute z-[2] border-2 border-primary/50"
+                className="pointer-events-none absolute z-[2] border-2 border-red-500/95 shadow-[0_0_0_1px_rgba(0,0,0,0.65),0_0_12px_rgba(239,68,68,0.45)]"
                 style={overlayPct}
                 title="Target region (visual match)"
               />
             ) : null}
             {previewDrawPct ? (
               <div
-                className="pointer-events-none absolute z-[3] border-2 border-sky-400/90 bg-sky-400/15 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.35)]"
+                className="pointer-events-none absolute z-[3] border-2 border-red-500/95 bg-red-500/15 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.45)]"
                 style={previewDrawPct}
               />
             ) : null}
@@ -278,7 +278,7 @@ function ScreenshotViewInner({
                   'h-7 gap-1 border-white/15 bg-black/35 px-2 text-[11px] font-medium backdrop-blur-sm hover:bg-black/45',
                   bboxToolUi.active && 'border-primary/40 bg-primary/25 text-primary-foreground hover:bg-primary/35',
                 )}
-                title="Draw a rectangle on the screenshot to set signals.visual bbox (CSS pixels)"
+                title="Draw a rectangle on the screenshot to save signals.visual bbox and recompute anchors"
                 aria-pressed={bboxToolUi.active}
                 onClick={() => bboxToolUi.onToggle()}
               >
@@ -335,7 +335,7 @@ function ScreenshotViewInner({
         <p className="text-muted-foreground border-border/60 border-t px-2 py-1.5 text-[11px] leading-snug">
           {bboxToolUi.saving
             ? 'Saving visual bbox…'
-            : 'Drag on the image to draw the target region. Release to save (min. a few pixels).'}
+            : 'Drag on the image to draw the target region. Release to save and recompute anchors.'}
         </p>
       ) : null}
 

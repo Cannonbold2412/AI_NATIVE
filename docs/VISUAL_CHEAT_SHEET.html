@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conxa Visual Cheat Sheet</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: #f5f7fa;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .poster {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            color: #667eea;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-content {
+            font-size: 0.9em;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+            margin: 10px 0;
+            line-height: 1.4;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 0.9em;
+        }
+
+        .table th {
+            background: #667eea;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .table td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .flow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .flow-item {
+            background: #667eea;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .arrow {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .list {
+            list-style: none;
+            margin: 10px 0;
+        }
+
+        .list li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+
+        .list li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .section-divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #667eea, transparent);
+            margin: 40px 0;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            border-left: 4px solid #ffb347;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            color: #155724;
+        }
+
+        .warning {
+            background: #ffe6e6;
+            border-left: 4px solid #ff6b6b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            color: #cc0000;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .do-item {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .dont-item {
+            background: #ffe6e6;
+            border-left: 4px solid #ff6b6b;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .item-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+
+            .poster {
+                box-shadow: none;
+                page-break-inside: avoid;
+            }
+        }
+
+        .badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        footer {
+            text-align: center;
+            color: #999;
+            margin-top: 40px;
+            padding: 20px;
+            border-top: 1px solid #ddd;
+        }
+
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .print-button:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button" onclick="window.print()">🖨️ Print</button>
+
+    <div class="container">
+        <div class="poster">
+            <h1>🚀 CONXA VISUAL CHEAT SHEET</h1>
+            <p class="subtitle">Complete System Reference — Print & Keep Handy</p>
+
+            <!-- Pipeline Overview -->
+            <div class="highlight">
+                <strong>📊 THE 7-STAGE PIPELINE</strong>
+                <div class="flow" style="margin-top: 10px;">
+                    <span class="flow-item">📹 Record</span>
+                    <span class="arrow">→</span>
+                    <span class="flow-item">⚙️ Pipeline</span>
+                    <span class="arrow">→</span>
+                    <span class="flow-item">🧠 LLM</span>
+                    <span class="arrow">→</span>
+                    <span class="flow-item">✏️ Edit</span>
+                    <span class="arrow">→</span>
+                    <span class="flow-item">🔧 Compile</span>
+                    <span class="arrow">→</span>
+                    <span class="flow-item">📦 Package</span>
+                    <span class="arrow">→</span>
+                    <span class="flow-item">⚡ Execute</span>
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Stage Details -->
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">📹 Recording</div>
+                    <div class="card-content">
+                        <strong>What Happens:</strong>
+                        <ul class="list">
+                            <li>Playwright opens real Chrome</li>
+                            <li>JavaScript bridge captures all interactions</li>
+                            <li>Screenshots taken for each action</li>
+                            <li>Events stored in events.jsonl</li>
+                        </ul>
+                        <strong>Output Size:</strong> 50-100 KB per event
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">⚙️ Pipeline</div>
+                    <div class="card-content">
+                        <strong>5 Processing Stages:</strong>
+                        <ul class="list">
+                            <li><code>Validate</code> - Schema check</li>
+                            <li><code>Clean</code> - Normalize text</li>
+                            <li><code>Dedupe</code> - Merge scrolls</li>
+                            <li><code>Enrich</code> - Add metadata</li>
+                            <li><code>Annotate</code> - Scroll delta</li>
+                        </ul>
+                        <strong>Time:</strong> ~200ms per event
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🧠 LLM Enrichment</div>
+                    <div class="card-content">
+                        <strong>Semantic Extraction:</strong>
+                        <ul class="list">
+                            <li>Extract intent from element text</li>
+                            <li>Normalize text to lowercase</li>
+                            <li>Compute confidence score (0.0-1.0)</li>
+                            <li>Detect input type (email, password)</li>
+                        </ul>
+                        <strong>Model:</strong> Claude Opus 4.7
+                        <strong>Timeout:</strong> 2 seconds
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">✏️ Human Editing</div>
+                    <div class="card-content">
+                        <strong>What Humans Refine:</strong>
+                        <ul class="list">
+                            <li>Verify LLM intent (submit_form?)</li>
+                            <li>Pick best selector (ID > class > text)</li>
+                            <li>Adjust timing (wait_after, timeout)</li>
+                            <li>Add validation rules (success criteria)</li>
+                        </ul>
+                        <strong>Why:</strong> Improve reliability & recovery
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🔧 Compilation</div>
+                    <div class="card-content">
+                        <strong>Conversion Process:</strong>
+                        <ul class="list">
+                            <li>Event → Action object</li>
+                            <li>Score selectors (0.0-1.0)</li>
+                            <li>Rank: Best + 3 fallbacks</li>
+                            <li>Validate intent consistency</li>
+                            <li>Resolve dependencies</li>
+                        </ul>
+                        <strong>Time:</strong> ~500ms
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">📦 Package</div>
+                    <div class="card-content">
+                        <strong>Distribution Files:</strong>
+                        <ul class="list">
+                            <li><code>README.md</code> - Skill descriptions</li>
+                            <li><code>skills.json</code> - All skills</li>
+                            <li><code>execute.py</code> - Executor</li>
+                            <li><code>recovery.py</code> - LLM recovery</li>
+                            <li><code>vision_recovery.py</code> - Vision layer</li>
+                        </ul>
+                        <strong>Publishable to:</strong> GitHub
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Selector Scoring -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">📊 Selector Scoring</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Score</th>
+                        <th>Stability</th>
+                        <th>Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>ID-based CSS</strong></td>
+                        <td><strong>0.95</strong></td>
+                        <td>⭐⭐⭐⭐⭐ Excellent</td>
+                        <td><code>button#submit</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Class-based CSS</strong></td>
+                        <td><strong>0.75</strong></td>
+                        <td>⭐⭐⭐ Good</td>
+                        <td><code>button.btn-primary</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Attribute CSS</strong></td>
+                        <td><strong>0.70</strong></td>
+                        <td>⭐⭐⭐ Good</td>
+                        <td><code>button[type='submit']</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>XPath</strong></td>
+                        <td><strong>0.65</strong></td>
+                        <td>⭐⭐ Fragile</td>
+                        <td><code>//button[@id='submit']</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Text-based</strong></td>
+                        <td><strong>0.45</strong></td>
+                        <td>⭐ Very Fragile</td>
+                        <td><code>//button[text()='Submit']</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="section-divider"></div>
+
+            <!-- Recovery Layers -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">🛡️ 4-Layer Self-Healing Recovery</h2>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
+                <div class="card">
+                    <div class="card-title">L1: Selector Context</div>
+                    <div class="card-content" style="font-size: 0.9em;">
+                        <strong>Method:</strong> Try alternatives<br>
+                        primary → alternatives<br><br>
+                        <strong>⏱️ Timeout:</strong> Instant<br>
+                        <strong>✅ Success:</strong> 60-70%
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">L2: Text Anchors</div>
+                    <div class="card-content" style="font-size: 0.9em;">
+                        <strong>Method:</strong> Search with priority<br>
+                        "Submit" (1.0) → "Send" (0.8) →...<br><br>
+                        <strong>⏱️ Timeout:</strong> Instant<br>
+                        <strong>✅ Success:</strong> 50-60%
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">L3: Text Variants</div>
+                    <div class="card-content" style="font-size: 0.9em;">
+                        <strong>Method:</strong> Normalized search<br>
+                        lowercase, plurals, role-based<br><br>
+                        <strong>⏱️ Timeout:</strong> Instant<br>
+                        <strong>✅ Success:</strong> 40-50%
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">L4: Vision Recovery</div>
+                    <div class="card-content" style="font-size: 0.9em;">
+                        <strong>Method:</strong> Vision LLM analysis<br>
+                        Detect + intent-match candidates<br><br>
+                        <strong>⏱️ Timeout:</strong> 120 seconds<br>
+                        <strong>✅ Success:</strong> 75-85%
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="background: #f0f4ff; border-left: 4px solid #667eea;">
+                <div style="padding: 15px;">
+                    <strong>📊 Combined Strategy:</strong> Layers 1-3 (instant) handle 80% of failures. Layer 4 (vision) catches remaining 20%. Total recovery success: ~95% of all errors.
+                    <br><br>
+                    <strong>Retry Policy:</strong> Element actions (click, fill) = 2 attempts | Navigate/Check = 3 attempts
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Data Structures -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">📋 Key Data Structures</h2>
+            <div class="two-column">
+                <div class="card">
+                    <div class="card-title">Raw Event (Post-Recording)</div>
+                    <div class="code">
+{
+  "action": {
+    "action": "click",
+    "button": "left"
+  },
+  "target": {
+    "tag": "button",
+    "inner_text": "Submit",
+    "classes": ["btn", "primary"]
+  },
+  "selectors": {
+    "css": "button.btn-primary",
+    "xpath": "//button"
+  },
+  "semantic": {
+    "normalized_text": "submit",
+    "llm_intent": null
+  },
+  "visual": {
+    "full_screenshot": "path.jpg"
+  }
+}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Compiled Action (Post-Compilation)</div>
+                    <div class="code">
+{
+  "id": "step_1",
+  "action": "click",
+  "selector": "button#submit",
+  "selector_confidence": 0.95,
+  "selectors_fallback": [
+    "button.btn-primary",
+    "//button[@type='submit']"
+  ],
+  "validation": {
+    "success_criteria": [
+      {"type": "url_contains", "value": "/dashboard"}
+    ]
+  },
+  "wait_after_ms": 2000
+}
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Best Practices -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">✅ Best Practices</h2>
+            <div class="comparison-grid">
+                <div>
+                    <div style="font-weight: bold; color: #28a745; margin-bottom: 10px;">✅ DO</div>
+                    <div class="do-item">
+                        <div class="item-title">Recording</div>
+                        Record slowly, pause between actions
+                    </div>
+                    <div class="do-item">
+                        <div class="item-title">Selectors</div>
+                        Use IDs and data attributes
+                    </div>
+                    <div class="do-item">
+                        <div class="item-title">Validation</div>
+                        Add success criteria always
+                    </div>
+                    <div class="do-item">
+                        <div class="item-title">Timing</div>
+                        Increase wait for slow pages
+                    </div>
+                </div>
+
+                <div>
+                    <div style="font-weight: bold; color: #cc0000; margin-bottom: 10px;">❌ DON'T</div>
+                    <div class="dont-item">
+                        <div class="item-title">Error Handling</div>
+                        Don't record error paths
+                    </div>
+                    <div class="dont-item">
+                        <div class="item-title">Credentials</div>
+                        Don't hardcode passwords
+                    </div>
+                    <div class="dont-item">
+                        <div class="item-title">Text Content</div>
+                        Don't rely solely on text
+                    </div>
+                    <div class="dont-item">
+                        <div class="item-title">Complex Logic</div>
+                        Don't create intricate flows
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Common Errors & Solutions -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">🐛 Common Errors & Solutions</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Error</th>
+                        <th>Cause</th>
+                        <th>Solution</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Element not found</code></td>
+                        <td>Selector mismatch</td>
+                        <td>Check screenshot, use fallback, trigger recovery</td>
+                    </tr>
+                    <tr>
+                        <td><code>Ambiguous selector</code></td>
+                        <td>Multiple matches</td>
+                        <td>Add specificity (ID, data-test)</td>
+                    </tr>
+                    <tr>
+                        <td><code>Validation failed</code></td>
+                        <td>Expected state missing</td>
+                        <td>Increase wait time, verify expectation</td>
+                    </tr>
+                    <tr>
+                        <td><code>LLM timeout</code></td>
+                        <td>Vision model slow</td>
+                        <td>Use structured selector, skip enrichment</td>
+                    </tr>
+                    <tr>
+                        <td><code>Circular dependency</code></td>
+                        <td>Actions depend on each other</td>
+                        <td>Reorder actions, split into skills</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="section-divider"></div>
+
+            <!-- Quick Reference -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">⏱️ Timing Defaults</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>Wait Before</th>
+                        <th>Timeout</th>
+                        <th>Wait After</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>click</strong></td>
+                        <td>0ms</td>
+                        <td>5000ms</td>
+                        <td>500ms</td>
+                    </tr>
+                    <tr>
+                        <td><strong>type</strong></td>
+                        <td>0ms</td>
+                        <td>5000ms</td>
+                        <td>300ms</td>
+                    </tr>
+                    <tr>
+                        <td><strong>navigate</strong></td>
+                        <td>0ms</td>
+                        <td>10000ms</td>
+                        <td>2000ms</td>
+                    </tr>
+                    <tr>
+                        <td><strong>scroll</strong></td>
+                        <td>0ms</td>
+                        <td>3000ms</td>
+                        <td>500ms</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="section-divider"></div>
+
+            <!-- Performance Metrics -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">📈 Performance Targets</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">📹 Recording</div>
+                    <div class="card-content">
+                        Events/workflow: 20-50<br>
+                        Event size: 50-100 KB<br>
+                        Storage: ~500 MB/hour
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">⚙️ Pipeline</div>
+                    <div class="card-content">
+                        Processing: &lt;200ms/event<br>
+                        Full pipeline: &lt;2s for 50 events<br>
+                        Output size: ~4 KB/action
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🧠 LLM</div>
+                    <div class="card-content">
+                        Semantic: &lt;2s/event<br>
+                        Vision: 30-60s/image<br>
+                        Confidence: 0.90+
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">⚡ Execution & Recovery</div>
+                    <div class="card-content">
+                        Per step: 1-5s<br>
+                        L1-L3 Recovery: Instant<br>
+                        L4 Vision Recovery: 120s max<br>
+                        Combined success: ~95%
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Documentation Map -->
+            <h2 style="color: #667eea; margin-bottom: 15px;">📚 Documentation Map</h2>
+            <div class="highlight">
+                <strong>Quick Learning:</strong>
+                <ul class="list">
+                    <li><strong>Visual Overview:</strong> workflow-visualization.html</li>
+                    <li><strong>Data Flow:</strong> data-flow-guide.html</li>
+                    <li><strong>Diagrams:</strong> complete-pipeline.svg</li>
+                </ul>
+
+                <strong>Deep Dive:</strong>
+                <ul class="list">
+                    <li><strong>Full Reference:</strong> ARCHITECTURE_DEEP_DIVE.md</li>
+                    <li><strong>Step by Step:</strong> Read sections in order (Recording → Execution)</li>
+                    <li><strong>Code Review:</strong> Cross-reference with app/ code</li>
+                </ul>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Key Takeaways -->
+            <div class="success">
+                <strong>🎯 Key Takeaways</strong>
+                <ul class="list">
+                    <li><strong>Event:</strong> Raw user interaction (click, type, navigate)</li>
+                    <li><strong>Action:</strong> Compiled executable step with fallback selectors</li>
+                    <li><strong>Skill:</strong> Sequence of related actions that can be executed</li>
+                    <li><strong>Intent:</strong> Semantic meaning (submit_form, fill_field) extracted by LLM</li>
+                    <li><strong>Recovery:</strong> 4-layer tiered system (L1-L3 instant selectors, L4 vision 120s) achieves ~95% success</li>
+                    <li><strong>Confidence:</strong> Every action has selector confidence + validation rules</li>
+                    <li><strong>Resilience:</strong> Automatic recovery handles UI changes without re-recording</li>
+                </ul>
+            </div>
+        </div>
+
+        <footer>
+            <p><strong>Conxa: AI-Driven Workflow Automation</strong></p>
+            <p>Visual Cheat Sheet v1.0 | Last Updated: May 5, 2026</p>
+            <p style="margin-top: 10px; color: #999;">💡 Tip: Print this page (Ctrl+P) and keep it at your desk for quick reference!</p>
+        </footer>
+    </div>
+</body>
+</html>

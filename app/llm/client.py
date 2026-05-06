@@ -154,6 +154,7 @@ def _openai_messages_for_task(task: str, payload: dict[str, Any]) -> list[dict[s
                     "primary_phrase (short string describing the highlighted control), "
                     "secondary (array of objects with keys element and relation only). "
                     "relation must be one of: inside, above, below, near. "
+                    "For above/below, relation is the highlighted target's position relative to the anchor. "
                     "No markdown, no extra keys."
                 ),
             },

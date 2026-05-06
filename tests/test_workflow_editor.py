@@ -89,14 +89,70 @@ class WorkflowEditorTests(unittest.TestCase):
         from app.editor.workflow_service import build_workflow_response
 
         doc = _minimal_skill_doc()
-        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="http://localhost:8000")
+        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="/api/v1")
         self.assertEqual(len(wf.steps), 1)
         self.assertIn("Click", wf.steps[0].human_readable_description)
-        self.assertTrue(wf.steps[0].screenshot.full_url.startswith("http://"))
+        self.assertTrue(wf.steps[0].screenshot.full_url.startswith("/api/v1/skills/"))
         self.assertEqual(
             wf.steps[0].anchors_signals,
             [{"element": "Submit", "relation": "near"}],
         )
+
+    def test_workflow_backfills_initial_navigate_step(self) -> None:
+        from app.editor.workflow_service import build_workflow_response, ensure_initial_navigation_step
+
+        doc = _minimal_skill_doc()
+        migrated, changed = ensure_initial_navigation_step(doc)
+        self.assertTrue(changed)
+        wf = build_workflow_response("skill_test_editor", migrated, asset_base_url="/api/v1")
+        self.assertEqual(wf.steps[0].action_type, "navigate")
+        self.assertEqual(wf.steps[0].url, "https://example.com")
+        self.assertIn("Go to https://example.com", wf.steps[0].human_readable_description)
+
+    def test_build_workflow_rewrites_legacy_image_path_with_source_session(self) -> None:
+        from app.editor.workflow_service import build_workflow_response
+
+        doc = _minimal_skill_doc()
+        doc["meta"]["source_session_id"] = "sess_123"
+        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="/api/v1")
+        full_url = wf.steps[0].screenshot.full_url or ""
+        self.assertIn("path=sessions%2Fsess_123%2Fimages%2Fevt_0001_full.jpg", full_url)
+
+    def test_url_check_workflow_does_not_surface_anchors(self) -> None:
+        from app.editor.workflow_service import build_workflow_response
+
+        doc = _minimal_skill_doc()
+        step = doc["skills"][0]["steps"][0]
+        step["action"] = {"action": "check"}
+        step["intent"] = "check_url_contains_dashboard"
+        step["check_kind"] = "url"
+        step["check_pattern"] = "/dashboard"
+        step["signals"]["anchors"] = [{"element": "Dashboard", "relation": "above"}]
+        step["recovery"]["anchors"] = [{"element": "Dashboard", "relation": "above"}]
+
+        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="/api/v1")
+        self.assertEqual(wf.steps[0].action_type, "check")
+        self.assertEqual(wf.steps[0].check_kind, "url")
+        self.assertEqual(wf.steps[0].anchors_signals, [])
+        self.assertEqual(wf.steps[0].anchors_recovery, [])
+
+    def test_url_exact_check_workflow_does_not_surface_anchors(self) -> None:
+        from app.editor.workflow_service import build_workflow_response
+
+        doc = _minimal_skill_doc()
+        step = doc["skills"][0]["steps"][0]
+        step["action"] = {"action": "check"}
+        step["intent"] = "check_url_must_be_dashboard"
+        step["check_kind"] = "url_exact"
+        step["check_pattern"] = "https://example.com/dashboard"
+        step["signals"]["anchors"] = [{"element": "Dashboard", "relation": "above"}]
+        step["recovery"]["anchors"] = [{"element": "Dashboard", "relation": "above"}]
+
+        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="/api/v1")
+        self.assertEqual(wf.steps[0].action_type, "check")
+        self.assertEqual(wf.steps[0].check_kind, "url_exact")
+        self.assertEqual(wf.steps[0].anchors_signals, [])
+        self.assertEqual(wf.steps[0].anchors_recovery, [])
 
     def test_workflow_click_description_prefers_parameterized_primary_selector(self) -> None:
         """Sidebar copy uses describe_step(); it must reflect {{var}} in primary_selector, not frozen DOM text."""
@@ -159,28 +215,31 @@ class WorkflowEditorTests(unittest.TestCase):
 
     def test_list_skills_endpoint(self) -> None:
         from app.main import app
+        from app.config import settings
         from app.storage import json_store
 
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp)
             p.mkdir(parents=True, exist_ok=True)
             with patch.object(json_store, "skills_dir", return_value=p):
-                client = TestClient(app)
-                r = client.get("/skills")
-                self.assertEqual(r.status_code, 200)
-                self.assertEqual(r.json().get("skills"), [])
-                (p / "skill_list_test.json").write_text(
-                    json.dumps(_minimal_skill_doc("skill_list_test")),
-                    encoding="utf-8",
-                )
-                r2 = client.get("/skills")
-                self.assertEqual(r2.status_code, 200)
-                rows = r2.json().get("skills") or []
-                self.assertEqual(len(rows), 1)
-                self.assertEqual(rows[0]["skill_id"], "skill_list_test")
+                with patch.object(settings, "auth_required", False):
+                    client = TestClient(app)
+                    r = client.get("/skills")
+                    self.assertEqual(r.status_code, 200)
+                    self.assertEqual(r.json().get("skills"), [])
+                    (p / "skill_list_test.json").write_text(
+                        json.dumps(_minimal_skill_doc("skill_list_test")),
+                        encoding="utf-8",
+                    )
+                    r2 = client.get("/skills")
+                    self.assertEqual(r2.status_code, 200)
+                    rows = r2.json().get("skills") or []
+                    self.assertEqual(len(rows), 1)
+                    self.assertEqual(rows[0]["skill_id"], "skill_list_test")
 
     def test_workflow_api_get_and_patch(self) -> None:
         from app.main import app
+        from app.config import settings
         from app.storage import json_store
 
         skill_id = "skill_workflow_api_test"
@@ -190,21 +249,40 @@ class WorkflowEditorTests(unittest.TestCase):
             p.mkdir(parents=True, exist_ok=True)
             with patch.object(json_store, "skills_dir", return_value=p):
                 (p / f"{skill_id}.json").write_text(json.dumps(doc), encoding="utf-8")
-                client = TestClient(app)
-                r = client.get(f"/skills/{skill_id}/workflow")
-                self.assertEqual(r.status_code, 200)
-                data = r.json()
-                self.assertEqual(data["skill_id"], skill_id)
-                self.assertEqual(len(data["steps"]), 1)
-                pr = client.patch(
-                    f"/skills/{skill_id}/steps/0",
-                    json={"patch": {"target": {"primary_selector": "#submit"}}, "assist_llm": False},
-                )
-                self.assertEqual(pr.status_code, 200)
-                self.assertEqual(pr.json()["meta"]["version"], 2)
+                with patch.object(settings, "auth_required", False):
+                    client = TestClient(app)
+                    r = client.get(f"/skills/{skill_id}/workflow")
+                    self.assertEqual(r.status_code, 200)
+                    data = r.json()
+                    self.assertEqual(data["skill_id"], skill_id)
+                    self.assertEqual(len(data["steps"]), 2)
+                    self.assertEqual(data["steps"][0]["action_type"], "navigate")
+                    self.assertEqual(data["steps"][0]["url"], "https://example.com")
+                    self.assertTrue(data["steps"][1]["screenshot"]["full_url"].startswith("/skills/"))
+
+                    r_api = client.get(f"/api/v1/skills/{skill_id}/workflow")
+                    self.assertEqual(r_api.status_code, 200)
+                    data_api = r_api.json()
+                    self.assertTrue(data_api["steps"][1]["screenshot"]["full_url"].startswith("/api/v1/skills/"))
+
+                    pr = client.patch(
+                        f"/skills/{skill_id}/steps/1",
+                        json={"patch": {"target": {"primary_selector": "#submit"}}, "assist_llm": False},
+                    )
+                    self.assertEqual(pr.status_code, 200)
+                    self.assertEqual(pr.json()["meta"]["version"], 3)
+
+                    add = client.post(
+                        f"/skills/{skill_id}/steps",
+                        json={"action_kind": "fill", "insert_after": 1},
+                    )
+                    self.assertEqual(add.status_code, 200)
+                    added = add.json()
+                    self.assertEqual(added["workflow"]["steps"][2]["action_type"], "fill")
+                    self.assertEqual(added["workflow"]["steps"][2]["value"], "")
 
     def test_reorder_and_delete(self) -> None:
-        from app.editor.workflow_service import delete_step_at, reorder_steps
+        from app.editor.workflow_service import delete_step_at, insert_step_after, reorder_steps
 
         doc = _minimal_skill_doc()
         s2 = dict(doc["skills"][0]["steps"][0])
@@ -215,6 +293,10 @@ class WorkflowEditorTests(unittest.TestCase):
         d = delete_step_at(r, 0)
         self.assertEqual(len(d["skills"][0]["steps"]), 1)
         self.assertEqual(d["skills"][0]["steps"][0]["intent"], "click_submit_button")
+        inserted = insert_step_after(d, "scroll", 0)
+        self.assertEqual(len(inserted["skills"][0]["steps"]), 2)
+        self.assertEqual(inserted["skills"][0]["steps"][1]["action"]["action"], "scroll")
+        self.assertEqual(inserted["skills"][0]["steps"][1]["action"]["delta"], 600)
 
     def test_replace_string_literals_in_skill_document(self) -> None:
         from app.editor.workflow_service import replace_string_literals_in_skill_document
@@ -235,6 +317,7 @@ class WorkflowEditorTests(unittest.TestCase):
 
     def test_workflow_replace_literals_api(self) -> None:
         from app.main import app
+        from app.config import settings
         from app.storage import json_store
 
         skill_id = "skill_replace_literals_test"
@@ -245,22 +328,23 @@ class WorkflowEditorTests(unittest.TestCase):
             p.mkdir(parents=True, exist_ok=True)
             with patch.object(json_store, "skills_dir", return_value=p):
                 (p / f"{skill_id}.json").write_text(json.dumps(doc), encoding="utf-8")
-                client = TestClient(app)
-                pr = client.post(
-                    f"/skills/{skill_id}/workflow:replace-literals",
-                    json={"find": "conxa-db", "replace_with": "{{db_name}}"},
-                )
-                self.assertEqual(pr.status_code, 200)
-                payload = pr.json()
-                self.assertEqual(payload["skill_id"], skill_id)
-                dumped = json.dumps(payload["workflow"])
-                self.assertNotIn("conxa-db", dumped)
-                self.assertIn("{{db_name}}", dumped)
+                with patch.object(settings, "auth_required", False):
+                    client = TestClient(app)
+                    pr = client.post(
+                        f"/skills/{skill_id}/workflow:replace-literals",
+                        json={"find": "conxa-db", "replace_with": "{{db_name}}"},
+                    )
+                    self.assertEqual(pr.status_code, 200)
+                    payload = pr.json()
+                    self.assertEqual(payload["skill_id"], skill_id)
+                    dumped = json.dumps(payload["workflow"])
+                    self.assertNotIn("conxa-db", dumped)
+                    self.assertIn("{{db_name}}", dumped)
 
-                r2 = client.get(f"/skills/{skill_id}/workflow")
-                self.assertEqual(r2.status_code, 200)
-                self.assertIn("{{db_name}}", json.dumps(r2.json()))
-                self.assertNotIn("conxa-db", json.dumps(r2.json()))
+                    r2 = client.get(f"/skills/{skill_id}/workflow")
+                    self.assertEqual(r2.status_code, 200)
+                    self.assertIn("{{db_name}}", json.dumps(r2.json()))
+                    self.assertNotIn("conxa-db", json.dumps(r2.json()))
 
     def test_clear_step_visual_strips_images_and_anchors(self) -> None:
         from app.editor.recording_visual import clear_step_visual_screenshots_or_raise
@@ -276,3 +360,36 @@ class WorkflowEditorTests(unittest.TestCase):
         self.assertNotIn("bbox", visual)
         self.assertEqual(sig_after["anchors"], [])
         self.assertGreater(int((cleared.get("meta") or {}).get("version", 0)), int((doc.get("meta") or {}).get("version", 0)))  # type: ignore[arg-type]
+
+    def test_update_visual_bbox_regenerates_anchors(self) -> None:
+        from app.editor.recording_visual import update_step_visual_bbox_and_regenerate_anchors_or_raise
+
+        doc = _minimal_skill_doc()
+        doc["meta"]["source_session_id"] = "sess_bbox"
+        step = doc["skills"][0]["steps"][0]
+        step["signals"]["visual"]["full_screenshot"] = "sessions/sess_bbox/images/evt_0001_full.jpg"
+        step["signals"]["anchors"] = [{"element": "Old", "relation": "near"}]
+        step["recovery"]["anchors"] = [{"element": "Old", "relation": "near"}]
+
+        fresh_anchors = [
+            {"element": "Submit order", "relation": "target"},
+            {"element": "Checkout", "relation": "near"},
+        ]
+        with patch(
+            "app.editor.recording_visual.generate_anchors_for_step_or_raise",
+            return_value=fresh_anchors,
+        ) as gen:
+            updated = update_step_visual_bbox_and_regenerate_anchors_or_raise(
+                doc,
+                0,
+                {"x": 12.2, "y": 20.8, "w": 80.1, "h": 24.9},
+            )
+
+        gen.assert_called_once()
+        ev_arg = gen.call_args.args[0]
+        self.assertEqual(ev_arg["visual"]["bbox"], {"x": 12, "y": 21, "w": 80, "h": 25})
+        updated_step = updated["skills"][0]["steps"][0]
+        self.assertEqual(updated_step["signals"]["visual"]["bbox"], {"x": 12, "y": 21, "w": 80, "h": 25})
+        self.assertEqual(updated_step["signals"]["anchors"], fresh_anchors)
+        self.assertEqual(updated_step["recovery"]["anchors"], fresh_anchors)
+        self.assertGreater(int(updated["meta"]["version"]), int(doc["meta"]["version"]))

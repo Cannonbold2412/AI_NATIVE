@@ -19,6 +19,7 @@ export type SkillPackInput = {
 export type SkillPackBuildResult = {
   name: string
   bundleSlug: string
+  workflowNames: string[]
   indexJson: string
   skillMd: string
   executionJson: string
@@ -102,10 +103,12 @@ function extractSteps(payload: unknown): Record<string, unknown>[] {
   if (Array.isArray(directSteps)) {
     return directSteps.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object')
   }
-  const skills = (payload as { skills?: unknown }).skills
-  if (!Array.isArray(skills)) return []
+  const container = ['skills', 'workflows', 'flows', 'scenarios', 'recordings']
+    .map((key) => (payload as Record<string, unknown>)[key])
+    .find(Array.isArray)
+  if (!Array.isArray(container)) return []
   const out: Record<string, unknown>[] = []
-  for (const skill of skills) {
+  for (const skill of container) {
     if (!skill || typeof skill !== 'object') continue
     const steps = (skill as { steps?: unknown }).steps
     if (!Array.isArray(steps)) continue
@@ -237,6 +240,7 @@ export async function buildSkillPackage(
   return {
     name: result.name,
     bundleSlug: result.bundle_slug ?? bundleName ?? 'default',
+    workflowNames: result.workflow_names ?? [result.name],
     indexJson: result.index_json,
     skillMd: result.skill_md,
     executionJson: result.execution_json,
@@ -269,6 +273,7 @@ export async function appendWorkflowToSkillPackage(
   return {
     name: result.name,
     bundleSlug: result.bundle_slug ?? bundleSlug,
+    workflowNames: result.workflow_names ?? [result.name],
     indexJson: result.index_json,
     skillMd: result.skill_md,
     executionJson: result.execution_json,

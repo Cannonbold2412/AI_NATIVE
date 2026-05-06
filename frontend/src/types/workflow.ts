@@ -22,6 +22,7 @@ export type StepEditorDTO = {
   action_type: string
   intent: string
   final_intent: string
+  url: string
   target: Record<string, unknown>
   selectors: Record<string, unknown>
   anchors_signals: Record<string, unknown>[]
@@ -32,12 +33,19 @@ export type StepEditorDTO = {
   }
   recovery: Record<string, unknown>
   value: unknown
+  scroll_mode: string | null
+  scroll_selector: string | null
   scroll_amount: number | null
   input_binding: string | null
   screenshot: StepScreenshotDTO
   editable_fields: Record<string, boolean>
   flags: StepFlags
   parameter_bindings: Record<string, unknown>[]
+  check_kind?: string
+  check_pattern?: string
+  check_threshold?: number
+  check_selector?: string
+  check_text?: string
 }
 
 export type SuggestionItem = {

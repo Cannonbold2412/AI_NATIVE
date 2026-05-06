@@ -126,9 +126,10 @@ class PhaseTests(unittest.TestCase):
         finally:
             shutil.rmtree(data_dir, ignore_errors=True)
         self.assertEqual(pkg.meta.id, "skill_test")
-        self.assertEqual(len(pkg.skills[0].steps), 1)
-        self.assertEqual(pkg.skills[0].steps[0].action, "click")
-        dumped = pkg.skills[0].steps[0].model_dump()
+        self.assertEqual(len(pkg.skills[0].steps), 2)
+        self.assertEqual(pkg.skills[0].steps[0].action, {"action": "navigate", "url": "https://example.com/app"})
+        self.assertEqual(pkg.skills[0].steps[1].action, "click")
+        dumped = pkg.skills[0].steps[1].model_dump()
         self.assertIn("signals", dumped)
         self.assertIn("decision_policy", dumped)
         self.assertIn("intent", dumped)
@@ -195,7 +196,7 @@ class PhaseTests(unittest.TestCase):
         finally:
             shutil.rmtree(data_dir, ignore_errors=True)
         doc = pkg.model_dump(mode="json")
-        step = doc["skills"][0]["steps"][0]
+        step = doc["skills"][0]["steps"][1]
         step["intent"] = ""
         rec = dict(step.get("recovery") or {})
         rec["intent"] = ""
@@ -210,9 +211,9 @@ class PhaseTests(unittest.TestCase):
             source="test",
         )
         with patch("app.compiler.patch.enrich_semantic", return_value=fake):
-            patched = apply_step_patch(doc, 0, {"target": {"primary_selector": "#go"}})
+            patched = apply_step_patch(doc, 1, {"target": {"primary_selector": "#go"}})
 
-        out_rec = patched["skills"][0]["steps"][0]["recovery"]
+        out_rec = patched["skills"][0]["steps"][1]["recovery"]
         self.assertEqual(out_rec.get("intent"), "navigate_to_checkout")
         self.assertEqual(out_rec.get("final_intent"), "navigate_to_checkout")
         self.assertIn("url_state_match", out_rec.get("strategies") or [])
@@ -744,6 +745,46 @@ class PhaseTests(unittest.TestCase):
                 self.assertEqual(ctx.exception.reason, "vision_llm_empty_response")
         finally:
             shutil.rmtree(data_dir, ignore_errors=True)
+
+    def test_anchor_vision_prompt_defines_relation_direction_target_relative_to_anchor(self) -> None:
+        from app.llm import anchor_vision_llm
+        from app.llm.anchor_vision_llm import generate_anchors_for_step_or_raise
+        from app.policy.bundle import get_policy_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            Image.new("RGB", (100, 80), "white").save(root / "images" / "a.jpg")
+            with (
+                patch.object(settings, "data_dir", root),
+                patch.object(settings, "llm_enabled", True),
+                patch.object(settings, "llm_anchor_vision", True),
+                patch.object(settings, "llm_endpoint", "http://llm.test"),
+                patch("app.llm.anchor_vision_llm.supports_multimodal_chat", return_value=True),
+                patch(
+                    "app.llm.anchor_vision_llm.call_llm",
+                    return_value={"primary_phrase": "email field", "secondary": []},
+                ) as call,
+            ):
+                generate_anchors_for_step_or_raise(
+                    {
+                        "visual": {
+                            "full_screenshot": "images/a.jpg",
+                            "bbox": {"x": 1, "y": 1, "w": 30, "h": 20},
+                            "viewport": "100x80",
+                        }
+                    },
+                    session_root=root,
+                    final_intent="enter_email",
+                    policy=get_policy_bundle().data,
+                    step_index=0,
+                )
+
+        payload = call.call_args.args[1]
+        user_text = str(payload.get("user_text") or "")
+        self.assertIn("Relation direction is TARGET relative to ANCHOR", user_text)
+        self.assertIn('"element":"email label","relation":"below"', user_text)
+        self.assertIn('"element":"password input","relation":"above"', user_text)
 
 
 if __name__ == "__main__":

@@ -74,7 +74,7 @@ def preprocess_skill_pack_declarations(value: Any) -> Any:
     return root
 
 
-def preprocess_plugin_json(plugin_json: dict) -> dict:
+def preprocess_plugin_json(plugin_json: dict | None) -> dict | None:
     """Return a normalized plugin JSON copy with redundant aliases removed.
 
     Keeps semantic workflow fields intact while collapsing screenshot aliases to
@@ -84,7 +84,7 @@ def preprocess_plugin_json(plugin_json: dict) -> dict:
     if plugin_json is None or plugin_json == {}:
         return plugin_json
     if not isinstance(plugin_json, dict):
-        return plugin_json
+        return None
 
     def _json_size_bytes(value: Any) -> int:
         """Return the compact UTF-8 JSON size for logging."""
@@ -544,4 +544,84 @@ def _collect_visual_assets(payload: Any) -> dict[str, bytes]:
             continue
         suffix, content = asset
         out[f"Image_{index}{suffix}"] = content
+    return out
+
+
+def _selector_text_from_step(step: dict[str, Any]) -> str:
+    """Extract normalized selector text for matching (handles multiple selector formats)."""
+    selector = step.get("selector")
+    if isinstance(selector, str):
+        return selector.lower().strip()
+    if isinstance(selector, dict):
+        return str(selector.get("selector") or selector.get("primary") or "").lower().strip()
+    return ""
+
+
+def _selector_similarity(a: str, b: str) -> float:
+    """Simple similarity: exact match=1, substring match=0.5, otherwise 0."""
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    if a in b or b in a:
+        return 0.5
+    return 0.0
+
+
+def collect_visual_assets_for_structured_steps(
+    structured_steps: list[dict[str, Any]], payload: Any
+) -> dict[str, bytes]:
+    """Map screenshots from raw steps to LLM-structured steps by selector similarity.
+
+    Falls back to index-based matching if selectors are unavailable.
+    Returns {"Image_1.jpg": bytes, ...} indexed by structured step number (1-based).
+    """
+    session_id = _source_session_id(payload)
+    if not session_id:
+        return {}
+
+    out: dict[str, bytes] = {}
+    raw_steps = list(_extract_steps(payload))
+    if not raw_steps:
+        return {}
+
+    launch_rel = _launch_visual_asset_path(session_id)
+    if launch_rel:
+        launch_asset = _read_visual_asset_bytes(launch_rel)
+        if launch_asset is not None:
+            suffix, content = launch_asset
+            out[f"Image_0{suffix}"] = content
+
+    for struct_index, struct_step in enumerate(structured_steps, start=1):
+        struct_selector = _selector_text_from_step(struct_step)
+
+        best_raw_index: int | None = None
+        best_score = 0.0
+
+        if struct_selector:
+            for raw_index, raw_step in enumerate(raw_steps, start=1):
+                raw_selector = _selector_text_from_step(raw_step)
+                score = _selector_similarity(struct_selector, raw_selector)
+                if score > best_score:
+                    best_score = score
+                    best_raw_index = raw_index
+
+        if best_raw_index is None and struct_index <= len(raw_steps):
+            best_raw_index = struct_index
+
+        if best_raw_index is None:
+            continue
+
+        raw_step = raw_steps[best_raw_index - 1]
+        rel = _step_visual_asset_path(raw_step, session_id)
+        if not rel:
+            continue
+
+        asset = _read_visual_asset_bytes(rel)
+        if asset is None:
+            continue
+
+        suffix, content = asset
+        out[f"Image_{struct_index}{suffix}"] = content
+
     return out

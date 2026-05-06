@@ -48,16 +48,14 @@ function metricPreviewValue(value: unknown) {
 }
 
 const workflowNotes = [
-  'Launch a headed browser from the target URL.',
-  'Close the browser when the capture is complete.',
-  'Open the compiled package directly in Human edit.',
+  'Click "Start recording" to launch a headed browser.',
+  'Navigate to your desired URL and record your workflow.',
+  'Close the browser when done; it compiles automatically.',
 ]
 
 export function HomePage() {
   const router = useRouter()
   const {
-    startUrl,
-    setStartUrl,
     skillTitle,
     setSkillTitle,
     flowStatus,
@@ -117,20 +115,7 @@ export function HomePage() {
             </CardHeader>
 
             <CardContent className="grid gap-4 pt-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="grid gap-1.5">
-                  <Label className="text-zinc-200" htmlFor="startUrl">
-                    Start URL
-                  </Label>
-                  <Input
-                    id="startUrl"
-                    type="url"
-                    placeholder="https://example.com"
-                    value={startUrl}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setStartUrl(e.target.value)}
-                    className="h-10 border-white/10 bg-black/20 text-zinc-100 placeholder:text-zinc-500"
-                  />
-                </div>
+              <div className="grid gap-3">
                 <div className="grid gap-1.5">
                   <Label className="text-zinc-200" htmlFor="skillName">
                     Skill Name
@@ -150,7 +135,7 @@ export function HomePage() {
                 <Button
                   type="button"
                   size="lg"
-                  disabled={isRecording || isCompiling || !startUrl.trim() || !skillTitle.trim()}
+                  disabled={isRecording || isCompiling || !skillTitle.trim()}
                   onClick={() => void startFlow()}
                   className="h-10 min-w-44 bg-white text-black hover:bg-zinc-200"
                 >

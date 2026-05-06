@@ -48,6 +48,7 @@ class DecisionPolicy(BaseModel):
 class SkillStep(BaseModel):
     action: str | dict[str, Any]
     intent: str = ""
+    url: str = ""
     target: dict[str, Any] = Field(default_factory=dict)
     signals: dict[str, Any] = Field(default_factory=dict)
     state: dict[str, Any] = Field(default_factory=dict)

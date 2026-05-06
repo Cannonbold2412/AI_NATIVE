@@ -30,7 +30,7 @@ GENERIC_INTENTS = {"interact", "provide_input", "perform_action"}
 
 
 class StartRecordBody(BaseModel):
-    start_url: HttpUrl = Field(..., description="Initial navigation target for the headed recorder.")
+    start_url: HttpUrl | None = Field(None, description="Optional initial navigation target for the headed recorder. If omitted, browser opens to a blank page.")
 
 
 class CompileBody(BaseModel):
@@ -110,7 +110,8 @@ def health() -> dict[str, str]:
 @router.post("/record")
 async def start_record(body: StartRecordBody) -> dict[str, Any]:
     """Start a headed Chromium session with in-page multi-signal capture."""
-    sess = registry.create(str(body.start_url))
+    start_url = str(body.start_url) if body.start_url else "about:blank"
+    sess = registry.create(start_url)
     metrics.inc("recordings_started")
     try:
         await sess.start()
@@ -129,7 +130,7 @@ async def start_record(body: StartRecordBody) -> dict[str, Any]:
     except Exception:
         registry.pop(sess.session_id)
         raise
-    return {"session_id": sess.session_id, "start_url": str(body.start_url)}
+    return {"session_id": sess.session_id}
 
 
 @router.get("/record/{session_id}/events")

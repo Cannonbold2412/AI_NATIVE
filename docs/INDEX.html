@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conxa Documentation Index</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .breadcrumb {
+            font-size: 0.9em;
+            color: #999;
+        }
+
+        .docs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .doc-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-top: 4px solid #667eea;
+        }
+
+        .doc-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+
+        .doc-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .doc-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .doc-description {
+            color: #666;
+            font-size: 0.95em;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .doc-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            color: #999;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .doc-link {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            margin-top: 15px;
+            transition: background 0.3s ease;
+            font-weight: 500;
+        }
+
+        .doc-link:hover {
+            background: #764ba2;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .flow-chart {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .flow-text {
+            text-align: center;
+            color: #333;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+
+        .arrow {
+            text-align: center;
+            color: #667eea;
+            font-size: 1.5em;
+            margin: 10px 0;
+        }
+
+        .learning-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .learning-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .learning-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .learning-step {
+            padding: 10px 0;
+            color: #666;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        .learning-step:last-child {
+            border-bottom: none;
+        }
+
+        .step-num {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .step-text {
+            display: inline;
+            color: #333;
+        }
+
+        .step-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            margin-left: 5px;
+        }
+
+        .step-link:hover {
+            text-decoration: underline;
+        }
+
+        footer {
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+        }
+
+        .footer-links {
+            margin-bottom: 15px;
+        }
+
+        .footer-link {
+            display: inline-block;
+            margin: 0 15px;
+            color: white;
+            text-decoration: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .footer-link:hover {
+            opacity: 0.8;
+        }
+
+        @media (max-width: 768px) {
+            .learning-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .doc-card {
+                padding: 20px;
+            }
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .feature-list li {
+            padding: 5px 0;
+            color: #666;
+        }
+
+        .feature-list li:before {
+            content: "✓ ";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>📚 Conxa Documentation</h1>
+            <p class="subtitle">Complete technical reference for the AI-driven workflow automation platform</p>
+            <p class="breadcrumb">Master → Docs → Index</p>
+        </header>
+
+        <!-- Main Documentation Files -->
+        <div class="section">
+            <h2 class="section-title">📖 Main Documentation Files</h2>
+
+            <div class="docs-grid">
+                <!-- ARCHITECTURE_DEEP_DIVE.md -->
+                <div class="doc-card">
+                    <div class="doc-icon">📖</div>
+                    <div class="doc-title">Architecture Deep Dive</div>
+                    <div class="doc-description">
+                        Complete written reference covering the entire Conxa system from recording through skill package generation.
+                    </div>
+                    <div class="feature-list">
+                        <li>System overview & design patterns</li>
+                        <li>7 stages of the pipeline</li>
+                        <li>LLM integration & enrichment</li>
+                        <li>Error handling & recovery</li>
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📄 Markdown</div>
+                        <div class="meta-item">~5,000 words</div>
+                        <div class="meta-item">20 min read</div>
+                    </div>
+                    <a href="../ARCHITECTURE_DEEP_DIVE.md" class="doc-link">📖 Read Full Documentation</a>
+                </div>
+
+                <!-- QUICK_REFERENCE.md -->
+                <div class="doc-card">
+                    <div class="doc-icon">⚡</div>
+                    <div class="doc-title">Quick Reference</div>
+                    <div class="doc-description">
+                        Concise cheat sheet with essential concepts, code examples, and troubleshooting tips.
+                    </div>
+                    <div class="feature-list">
+                        <li>7-stage pipeline visualization</li>
+                        <li>Key concepts & definitions</li>
+                        <li>Common workflows</li>
+                        <li>Pro tips & debugging</li>
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📄 Markdown</div>
+                        <div class="meta-item">~2,500 words</div>
+                        <div class="meta-item">5 min read</div>
+                    </div>
+                    <a href="QUICK_REFERENCE.md" class="doc-link">⚡ Quick Reference</a>
+                </div>
+
+                <!-- workflow-visualization.html -->
+                <div class="doc-card">
+                    <div class="doc-icon">🎨</div>
+                    <div class="doc-title">Interactive Pipeline Visualizer</div>
+                    <div class="doc-description">
+                        Interactive HTML guide with animated tabs showing each stage of the pipeline with detailed explanations and code examples.
+                    </div>
+                    <div class="feature-list">
+                        <li>8 tabbed sections (recording → recovery)</li>
+                        <li>Animated flow diagrams</li>
+                        <li>Live code examples</li>
+                        <li>Clickable navigation</li>
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">🌐 Interactive HTML</div>
+                        <div class="meta-item">8 sections</div>
+                        <div class="meta-item">Browser-based</div>
+                    </div>
+                    <a href="workflow-visualization.html" class="doc-link">🎨 Open Visualizer</a>
+                </div>
+
+                <!-- data-flow-guide.html -->
+                <div class="doc-card">
+                    <div class="doc-icon">📊</div>
+                    <div class="doc-title">Data Flow & Transformations</div>
+                    <div class="doc-description">
+                        Visual guide showing how data structures evolve through each stage with before/after examples.
+                    </div>
+                    <div class="feature-list">
+                        <li>Raw event → compiled action</li>
+                        <li>Before/after comparisons</li>
+                        <li>Data metrics & sizes</li>
+                        <li>Transformation rules</li>
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">🌐 Interactive HTML</div>
+                        <div class="meta-item">6 stages</div>
+                        <div class="meta-item">Tables & code blocks</div>
+                    </div>
+                    <a href="data-flow-guide.html" class="doc-link">📊 View Data Flow</a>
+                </div>
+
+                <!-- README.md -->
+                <div class="doc-card">
+                    <div class="doc-icon">📍</div>
+                    <div class="doc-title">Documentation Guide</div>
+                    <div class="doc-description">
+                        Navigation guide for all documentation files with quick reference for finding specific topics.
+                    </div>
+                    <div class="feature-list">
+                        <li>File-by-file overview</li>
+                        <li>Topic index & search</li>
+                        <li>Learning paths</li>
+                        <li>Code locations</li>
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📄 Markdown</div>
+                        <div class="meta-item">Comprehensive index</div>
+                        <div class="meta-item">Quick navigation</div>
+                    </div>
+                    <a href="README.md" class="doc-link">📍 View Guide</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- SVG Diagrams -->
+        <div class="section">
+            <h2 class="section-title">🎯 Visual Diagrams (SVG)</h2>
+
+            <div class="docs-grid">
+                <div class="doc-card">
+                    <div class="doc-icon">📹</div>
+                    <div class="doc-title">Recording Flow</div>
+                    <div class="doc-description">
+                        Step-by-step visualization of the recording phase showing browser automation, event capture, and session storage.
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📊 SVG Diagram</div>
+                        <div class="meta-item">6 components</div>
+                    </div>
+                    <a href="recorder-flow.svg" class="doc-link">📹 View Diagram</a>
+                </div>
+
+                <div class="doc-card">
+                    <div class="doc-icon">🧠</div>
+                    <div class="doc-title">LLM Processing</div>
+                    <div class="doc-description">
+                        Detailed flow of semantic enrichment showing LLM inputs, processing, and integration into events.
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📊 SVG Diagram</div>
+                        <div class="meta-item">3 phases</div>
+                    </div>
+                    <a href="llm-processing.svg" class="doc-link">🧠 View Diagram</a>
+                </div>
+
+                <div class="doc-card">
+                    <div class="doc-icon">🔧</div>
+                    <div class="doc-title">Compilation & Execution</div>
+                    <div class="doc-description">
+                        Complete flow from skill compilation through execution with both recovery layers (LLM + Vision).
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📊 SVG Diagram</div>
+                        <div class="meta-item">3 phases</div>
+                    </div>
+                    <a href="compilation-execution.svg" class="doc-link">🔧 View Diagram</a>
+                </div>
+
+                <div class="doc-card">
+                    <div class="doc-icon">🚀</div>
+                    <div class="doc-title">Complete Pipeline</div>
+                    <div class="doc-description">
+                        End-to-end visualization of all 7 stages from recording through package generation and execution.
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📊 SVG Diagram</div>
+                        <div class="meta-item">7 stages</div>
+                    </div>
+                    <a href="complete-pipeline.svg" class="doc-link">🚀 View Diagram</a>
+                </div>
+
+                <!-- NEW: LLM System Understanding -->
+                <div class="doc-card" style="border-top-color: #4CAF50;">
+                    <div class="doc-icon">🤖</div>
+                    <div class="doc-title">LLM System Understanding</div>
+                    <div class="doc-description">
+                        Complete guide for LLM agents and developers. Structured explanation of the 4-layer recovery system, data transformations, and LLM integration points.
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📖 Markdown</div>
+                        <div class="meta-item">LLM-optimized</div>
+                        <div class="meta-item">4-layer recovery</div>
+                    </div>
+                    <a href="LLM_SYSTEM_UNDERSTANDING.md" class="doc-link">🧠 Read Guide</a>
+                </div>
+
+                <!-- NEW: System Reference JSON -->
+                <div class="doc-card" style="border-top-color: #2196F3;">
+                    <div class="doc-icon">📋</div>
+                    <div class="doc-title">System Reference (JSON)</div>
+                    <div class="doc-description">
+                        Structured JSON schema documenting entire system: pipeline stages, data structures, recovery layers, API endpoints, timeouts, and best practices.
+                    </div>
+                    <div class="doc-meta">
+                        <div class="meta-item">📊 JSON Schema</div>
+                        <div class="meta-item">Machine-parseable</div>
+                        <div class="meta-item">Complete reference</div>
+                    </div>
+                    <a href="SYSTEM_REFERENCE_FOR_LLM.json" class="doc-link">📐 View Schema</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pipeline Overview -->
+        <div class="section">
+            <h2 class="section-title">🔄 The 7-Stage Pipeline</h2>
+
+            <div class="flow-chart">
+                <div class="flow-text">📹 Stage 1: Recording</div>
+                <div class="flow-text" style="color: #999;">User records workflow via browser</div>
+                <div class="arrow">↓</div>
+
+                <div class="flow-text">⚙️ Stage 2: Pipeline Processing</div>
+                <div class="flow-text" style="color: #999;">Validate, clean, dedupe, enrich events</div>
+                <div class="arrow">↓</div>
+
+                <div class="flow-text">🧠 Stage 3: LLM Enrichment</div>
+                <div class="flow-text" style="color: #999;">Extract semantic intent & meaning</div>
+                <div class="arrow">↓</div>
+
+                <div class="flow-text">✏️ Stage 4: Human Editing</div>
+                <div class="flow-text" style="color: #999;">Refine selectors, timing, validation</div>
+                <div class="arrow">↓</div>
+
+                <div class="flow-text">🔧 Stage 5: Compilation</div>
+                <div class="flow-text" style="color: #999;">Convert events to executable actions</div>
+                <div class="arrow">↓</div>
+
+                <div class="flow-text">📦 Stage 6: Package Generation</div>
+                <div class="flow-text" style="color: #999;">Create distributable skill package</div>
+                <div class="arrow">↓</div>
+
+                <div class="flow-text">⚡ Stage 7: Execution</div>
+                <div class="flow-text" style="color: #999;">Execute with self-healing recovery</div>
+            </div>
+        </div>
+
+        <!-- Learning Paths -->
+        <div class="section">
+            <h2 class="section-title">🎓 Learning Paths</h2>
+
+            <div class="learning-grid">
+                <div class="learning-card">
+                    <div class="learning-title">👶 Beginner</div>
+                    <div class="learning-step">
+                        <span class="step-num">1</span>
+                        <span class="step-text">Start with <a href="workflow-visualization.html" class="step-link">Interactive Visualizer</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">2</span>
+                        <span class="step-text">View <a href="complete-pipeline.svg" class="step-link">Complete Pipeline</a> diagram</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">3</span>
+                        <span class="step-text">Read <a href="QUICK_REFERENCE.md" class="step-link">Quick Reference</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">4</span>
+                        <span class="step-text">Explore <a href="../ARCHITECTURE_DEEP_DIVE.md" class="step-link">System Overview section</a></span>
+                    </div>
+                </div>
+
+                <div class="learning-card">
+                    <div class="learning-title">🚀 Intermediate</div>
+                    <div class="learning-step">
+                        <span class="step-num">1</span>
+                        <span class="step-text">Deep dive into <a href="../ARCHITECTURE_DEEP_DIVE.md" class="step-link">Recording & Pipeline sections</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">2</span>
+                        <span class="step-text">Study <a href="recorder-flow.svg" class="step-link">Recording</a> and <a href="llm-processing.svg" class="step-link">LLM diagrams</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">3</span>
+                        <span class="step-text">Review <a href="data-flow-guide.html" class="step-link">Data Flow transformations</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">4</span>
+                        <span class="step-text">Check actual code in app/recorder/ and app/pipeline/</span>
+                    </div>
+                </div>
+
+                <div class="learning-card">
+                    <div class="learning-title">🔬 Advanced</div>
+                    <div class="learning-step">
+                        <span class="step-num">1</span>
+                        <span class="step-text">Master entire <a href="../ARCHITECTURE_DEEP_DIVE.md" class="step-link">Architecture Deep Dive</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">2</span>
+                        <span class="step-text">Study all SVG diagrams and understand connections</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">3</span>
+                        <span class="step-text">Trace code through app/compiler/, app/llm/, app/policy/</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">4</span>
+                        <span class="step-text">Implement feature or debug issue using all resources</span>
+                    </div>
+                </div>
+
+                <div class="learning-card">
+                    <div class="learning-title">🎯 By Topic</div>
+                    <div class="learning-step">
+                        <span class="step-num">📹</span>
+                        <span class="step-text"><a href="recorder-flow.svg" class="step-link">Recording</a> → Read recording section</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">🧠</span>
+                        <span class="step-text"><a href="llm-processing.svg" class="step-link">LLM</a> → View LLM tab in visualizer</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">🔧</span>
+                        <span class="step-text"><a href="compilation-execution.svg" class="step-link">Compilation</a> → Check deep dive</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-num">🛡️</span>
+                        <span class="step-text"><a href="workflow-visualization.html" class="step-link">Recovery</a> → Recovery layers tab</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Navigation -->
+        <div class="section">
+            <h2 class="section-title">🔍 Quick Navigation</h2>
+
+            <div class="learning-grid">
+                <div class="learning-card">
+                    <div class="learning-title">✏️ "How do I...?"</div>
+                    <div class="learning-step">
+                        <span class="step-text">Record a workflow? → <a href="workflow-visualization.html" class="step-link">Recording tab</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text">Edit events? → <a href="workflow-visualization.html" class="step-link">Editing tab</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text">Compile to skill? → <a href="compilation-execution.svg" class="step-link">Compilation diagram</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text">Troubleshoot? → <a href="QUICK_REFERENCE.md" class="step-link">Debugging section</a></span>
+                    </div>
+                </div>
+
+                <div class="learning-card">
+                    <div class="learning-title">📍 Key Concepts</div>
+                    <div class="learning-step">
+                        <span class="step-text">Event structure → <a href="data-flow-guide.html" class="step-link">Data Flow guide</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text">Intent & semantics → <a href="llm-processing.svg" class="step-link">LLM Processing</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text">Selector scoring → <a href="QUICK_REFERENCE.md" class="step-link">Quick ref</a></span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text">Recovery layers → <a href="workflow-visualization.html" class="step-link">Recovery tab</a></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Code References -->
+        <div class="section">
+            <h2 class="section-title">💻 Code Locations</h2>
+
+            <div class="learning-grid">
+                <div class="learning-card">
+                    <div class="learning-title">🎬 Recording</div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/recorder/session.py</code> - Main session</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/recorder/bridge.js</code> - JS bridge</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/recorder/visual.py</code> - Screenshots</span>
+                    </div>
+                </div>
+
+                <div class="learning-card">
+                    <div class="learning-title">⚙️ Pipeline</div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/pipeline/run.py</code> - Orchestration</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/pipeline/enrich.py</code> - Enrichment</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/pipeline/dedupe.py</code> - Deduplication</span>
+                    </div>
+                </div>
+
+                <div class="learning-card">
+                    <div class="learning-title">🧠 LLM Integration</div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/llm/semantic_llm.py</code> - Enrichment</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/llm/vision_llm.py</code> - Vision</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/llm/recovery_llm.py</code> - Recovery</span>
+                    </div>
+                </div>
+
+                <div class="learning-card">
+                    <div class="learning-title">🔧 Compilation</div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/compiler/action_semantics.py</code> - Actions</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/compiler/selector_score.py</code> - Scoring</span>
+                    </div>
+                    <div class="learning-step">
+                        <span class="step-text"><code style="background: #f0f0f0; padding: 2px 6px;">app/compiler/intent_validation_rules.py</code> - Validation</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <div class="footer-links">
+                <a href="README.md" class="footer-link">📍 Documentation Guide</a>
+                <a href="../ARCHITECTURE_DEEP_DIVE.md" class="footer-link">📖 Full Architecture</a>
+                <a href="QUICK_REFERENCE.md" class="footer-link">⚡ Quick Reference</a>
+            </div>
+            <p>Conxa: AI-Driven Workflow Automation | Complete Technical Documentation</p>
+            <p style="font-size: 0.9em; margin-top: 10px; opacity: 0.8;">Last Updated: May 5, 2026</p>
+        </footer>
+    </div>
+</body>
+</html>

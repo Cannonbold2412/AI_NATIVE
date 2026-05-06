@@ -18,7 +18,6 @@ type Options = {
  */
 export function useRecordingSession(options?: Options) {
   const onCompileSuccess = options?.onCompileSuccess
-  const [startUrl, setStartUrl] = useState('')
   const [skillTitle, setSkillTitle] = useState('')
   const [flowStatus, setFlowStatus] = useState('Idle')
   const [logLines, setLogLines] = useState<string[]>([])
@@ -81,11 +80,6 @@ export function useRecordingSession(options?: Options) {
   )
 
   const startFlow = useCallback(async () => {
-    if (!startUrl.trim()) {
-      setFlowStatus('Start URL is required.')
-      toast.error('Start URL is required')
-      return
-    }
     if (!skillTitle.trim()) {
       setFlowStatus('Skill Name is required.')
       toast.error('Skill Name is required')
@@ -98,10 +92,10 @@ export function useRecordingSession(options?: Options) {
     lastEventCount.current = 0
     setFlowStatus('Starting browser recorder...')
     try {
-      const start = await postStartRecording(startUrl.trim())
+      const start = await postStartRecording()
       setSessionId(start.session_id)
       setIsRecording(true)
-      setFlowStatus('Browser opened. When done, close the browser; capture will compile automatically.')
+      setFlowStatus('Browser opened. Navigate to your desired URL, then close the browser when done to compile.')
       appendLog(`recording_started: session=${start.session_id}`)
       toast.success('Recording started')
     } catch (err) {
@@ -110,7 +104,7 @@ export function useRecordingSession(options?: Options) {
       appendLog(`start_error: ${msg}`)
       toast.error(msg)
     }
-  }, [appendLog, isCompiling, isRecording, skillTitle, startUrl, stopPolling])
+  }, [appendLog, isCompiling, isRecording, skillTitle, stopPolling])
 
   useEffect(() => {
     if (!isRecording || !sessionId) return
@@ -153,8 +147,6 @@ export function useRecordingSession(options?: Options) {
   }, [refreshMetrics])
 
   return {
-    startUrl,
-    setStartUrl,
     skillTitle,
     setSkillTitle,
     flowStatus,

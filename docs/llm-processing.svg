@@ -1,0 +1,213 @@
+<svg viewBox="0 0 1000 1400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .title { font-size: 24px; font-weight: bold; fill: #333; }
+      .subtitle { font-size: 14px; fill: #666; }
+      .box { fill: #fff; stroke: #667eea; stroke-width: 2; }
+      .process { fill: #667eea; stroke: #333; stroke-width: 2; }
+      .data { fill: #e6f2ff; stroke: #667eea; stroke-width: 2; }
+      .llm { fill: #ffeaa7; stroke: #fdcb6e; stroke-width: 2; }
+      .response { fill: #a9e5ba; stroke: #27ae60; stroke-width: 2; }
+      .text { font-size: 13px; fill: #333; font-family: Arial; }
+      .label { font-size: 12px; fill: #666; font-family: Arial; }
+      .text-white { font-size: 12px; fill: #fff; font-weight: bold; font-family: Arial; }
+      .arrow { stroke: #667eea; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-yellow { stroke: #fdcb6e; stroke-width: 2; fill: none; marker-end: url(#arrowhead-yellow); stroke-dasharray: 5,5; }
+      .arrow-green { stroke: #27ae60; stroke-width: 2; fill: none; marker-end: url(#arrowhead-green); }
+      .code { font-family: 'Courier New'; font-size: 11px; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#667eea"/>
+    </marker>
+    <marker id="arrowhead-yellow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#fdcb6e"/>
+    </marker>
+    <marker id="arrowhead-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#27ae60"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" class="title">🧠 LLM ENRICHMENT &amp; SEMANTIC PROCESSING</text>
+  <text x="500" y="60" text-anchor="middle" class="subtitle">How Raw Events Get Semantic Meaning</text>
+
+  <!-- Input Section -->
+  <g>
+    <text x="500" y="110" text-anchor="middle" class="text" font-weight="bold" font-size="15">PHASE 1: INPUT PREPARATION</text>
+
+    <!-- Event Input -->
+    <rect x="50" y="130" width="420" height="180" class="data" rx="8"/>
+    <text x="260" y="160" text-anchor="middle" class="text" font-weight="bold">Raw Event Data</text>
+
+    <text x="70" y="185" class="code">
+      <tspan x="70">action: "click"</tspan>
+      <tspan x="70" y="205">target.inner_text: "Submit Form"</tspan>
+      <tspan x="70" y="225">target.tag: "button"</tspan>
+      <tspan x="70" y="245">target.classes: ["btn", "primary"]</tspan>
+      <tspan x="70" y="265">page.title: "User Login"</tspan>
+      <tspan x="70" y="285">page.url: "example.com/login"</tspan>
+    </text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 470 220 L 530 220" class="arrow"/>
+
+  <!-- LLM Input Construction -->
+  <g>
+    <rect x="530" y="130" width="420" height="180" class="llm" rx="8"/>
+    <text x="740" y="160" text-anchor="middle" class="text" font-weight="bold">LLM Input Construction</text>
+
+    <text x="550" y="185" class="code">
+      <tspan x="550">SemanticLLMInput {</tspan>
+      <tspan x="550" y="205">  raw_text: "Submit Form"</tspan>
+      <tspan x="550" y="225">  element_type: "button"</tspan>
+      <tspan x="550" y="245">  context: "User Login"</tspan>
+      <tspan x="550" y="265">}</tspan>
+    </text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 500 310 L 500 370" class="arrow-yellow"/>
+  <text x="520" y="345" class="label" font-weight="bold">Claude API Call</text>
+
+  <!-- LLM Processing -->
+  <g>
+    <rect x="50" y="370" width="900" height="180" class="llm" rx="8" stroke="#fdcb6e" stroke-width="3"/>
+    <text x="500" y="400" text-anchor="middle" class="text" font-weight="bold" font-size="16">🤖 LARGE LANGUAGE MODEL (Claude Opus 4.7)</text>
+
+    <rect x="70" y="420" width="280" height="110" class="box" rx="6"/>
+    <text x="210" y="445" text-anchor="middle" class="text" font-weight="bold">System Prompt</text>
+    <text x="90" y="465" class="label">
+      <tspan x="90">You are an intent</tspan>
+      <tspan x="90" y="480">classifier. Extract</tspan>
+      <tspan x="90" y="495">semantic intent from</tspan>
+      <tspan x="90" y="510">UI element context.</tspan>
+    </text>
+
+    <rect x="360" y="420" width="280" height="110" class="box" rx="6"/>
+    <text x="500" y="445" text-anchor="middle" class="text" font-weight="bold">User Query</text>
+    <text x="380" y="465" class="label">
+      <tspan x="380">Element: "Submit Form"</tspan>
+      <tspan x="380" y="480">Type: button</tspan>
+      <tspan x="380" y="495">Page: "User Login"</tspan>
+      <tspan x="380" y="510">Determine intent.</tspan>
+    </text>
+
+    <rect x="650" y="420" width="250" height="110" class="box" rx="6"/>
+    <text x="775" y="445" text-anchor="middle" class="text" font-weight="bold">Model Parameters</text>
+    <text x="670" y="465" class="label">
+      <tspan x="670">temperature: 0.0</tspan>
+      <tspan x="670" y="480">max_tokens: 500</tspan>
+      <tspan x="670" y="495">timeout: 2000ms</tspan>
+    </text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 500 550 L 500 610" class="arrow-green"/>
+  <text x="520" y="585" class="label" font-weight="bold">LLM Response</text>
+
+  <!-- LLM Response -->
+  <g>
+    <rect x="50" y="610" width="900" height="150" class="response" rx="8"/>
+    <text x="500" y="640" text-anchor="middle" class="text" font-weight="bold" font-size="16">✅ LLM OUTPUT</text>
+
+    <rect x="70" y="660" width="420" height="90" class="box" rx="6"/>
+    <text x="280" y="680" text-anchor="middle" class="text" font-weight="bold">Semantic Output</text>
+    <text x="90" y="700" class="code">
+      <tspan x="90">intent: "submit_login_form"</tspan>
+      <tspan x="90" y="720">normalized_text: "submit form"</tspan>
+      <tspan x="90" y="740">confidence: 0.98</tspan>
+    </text>
+
+    <rect x="500" y="660" width="400" height="90" class="box" rx="6"/>
+    <text x="700" y="680" text-anchor="middle" class="text" font-weight="bold">Fallback Detection</text>
+    <text x="520" y="700" class="code">
+      <tspan x="520">input_type: null</tspan>
+      <tspan x="520" y="720">role: "button"</tspan>
+      <tspan x="520" y="740">validation_needed: true</tspan>
+    </text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 500 760 L 500 820" class="arrow"/>
+
+  <!-- Integration Section -->
+  <g>
+    <text x="500" y="820" text-anchor="middle" class="text" font-weight="bold" font-size="15">PHASE 2: INTEGRATION INTO EVENT</text>
+
+    <rect x="50" y="840" width="900" height="160" class="data" rx="8"/>
+    <text x="500" y="870" text-anchor="middle" class="text" font-weight="bold">Event with LLM Enrichment</text>
+
+    <text x="70" y="895" class="code">
+      <tspan x="70">{</tspan>
+      <tspan x="70" y="915">  "action": { "action": "click", ... },</tspan>
+      <tspan x="70" y="935">  "semantic": {</tspan>
+      <tspan x="70" y="955">    "normalized_text": "submit form",</tspan>
+      <tspan x="70" y="975">    "llm_intent": "submit_login_form",      <tspan fill="#27ae60">// ← FROM LLM</tspan></tspan>
+      <tspan x="70" y="995">    "confidence": 0.98                    <tspan fill="#27ae60">// ← LLM CONFIDENCE</tspan></tspan>
+      <tspan x="70" y="1015">  },</tspan>
+      <tspan x="70" y="1035">  ...rest of event</tspan>
+      <tspan x="70" y="1055">}</tspan>
+    </text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M 500 1000 L 500 1060" class="arrow"/>
+
+  <!-- Downstream Usage -->
+  <g>
+    <text x="500" y="1080" text-anchor="middle" class="text" font-weight="bold" font-size="15">PHASE 3: DOWNSTREAM USAGE</text>
+
+    <rect x="50" y="1100" width="200" height="120" class="box" rx="8"/>
+    <text x="150" y="1125" text-anchor="middle" class="text" font-weight="bold">Intent Validation</text>
+    <text x="70" y="1145" class="label">
+      <tspan x="70">Check semantic</tspan>
+      <tspan x="70" y="1160">consistency:</tspan>
+      <tspan x="70" y="1175">click + submit = ✅</tspan>
+    </text>
+
+    <rect x="275" y="1100" width="200" height="120" class="box" rx="8"/>
+    <text x="375" y="1125" text-anchor="middle" class="text" font-weight="bold">Action Selection</text>
+    <text x="295" y="1145" class="label">
+      <tspan x="295">Map intent to</tspan>
+      <tspan x="295" y="1160">action parameters:</tspan>
+      <tspan x="295" y="1175">timeout, wait times</tspan>
+    </text>
+
+    <rect x="500" y="1100" width="200" height="120" class="box" rx="8"/>
+    <text x="600" y="1125" text-anchor="middle" class="text" font-weight="bold">Selector Scoring</text>
+    <text x="520" y="1145" class="label">
+      <tspan x="520">Use intent for</tspan>
+      <tspan x="520" y="1160">selector ranking:</tspan>
+      <tspan x="520" y="1175">ID > class > text</tspan>
+    </text>
+
+    <rect x="725" y="1100" width="225" height="120" class="box" rx="8"/>
+    <text x="837" y="1125" text-anchor="middle" class="text" font-weight="bold">Compilation</text>
+    <text x="745" y="1145" class="label">
+      <tspan x="745">Include LLM intent</tspan>
+      <tspan x="745" y="1160">in compiled skill,</tspan>
+      <tspan x="745" y="1175">inform recovery.</tspan>
+    </text>
+  </g>
+
+  <!-- Bottom Info Box -->
+  <g>
+    <rect x="50" y="1250" width="900" height="120" class="box" stroke="#ff6b6b" stroke-width="2" rx="8"/>
+    <text x="500" y="1280" text-anchor="middle" class="text" font-weight="bold" fill="#ff6b6b">⚠️ ERROR HANDLING</text>
+
+    <text x="70" y="1305" class="label">
+      <tspan font-weight="bold">If LLM timeout (2 sec):</tspan> Use fallback selectors (CSS/XPath) without semantic enrichment
+    </text>
+    <text x="70" y="1325" class="label">
+      <tspan font-weight="bold">If LLM fails:</tspan> Continue with basic element detection, no semantic intent
+    </text>
+    <text x="70" y="1345" class="label">
+      <tspan font-weight="bold">If low confidence (&lt;0.7):</tspan> Flag event for human review in editor UI
+    </text>
+  </g>
+
+  <!-- Arrow to next -->
+  <path d="M 500 1370 L 500 1410" class="arrow" stroke-width="3"/>
+  <text x="500" y="1430" text-anchor="middle" class="label" font-weight="bold">↓ Next: Human Editing &amp; Review</text>
+</svg>

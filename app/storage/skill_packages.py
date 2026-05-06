@@ -29,7 +29,10 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from app.services.skill_pack_build_log import skill_pack_log_append
+from app.services.skill_pack_build_log import (
+    skill_pack_log_append,
+    skill_pack_text_metrics,
+)
 from app.storage.skill_package_formatters import (
     format_auth_json_text,
     format_credentials_example_json_text,
@@ -110,6 +113,13 @@ RESERVED_BUNDLE_SLUGS = frozenset(
 
 _CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 _NON_WORD = re.compile(r"[^a-zA-Z0-9]+")
+_BUNDLE_INDEX_FILENAMES = ("README.md",)
+_EXECUTION_RUNTIME_FILES = {
+    "executor.js": _EXECUTOR_JS,
+    "recovery.js": _RECOVERY_JS,
+    "tracker.js": _TRACKER_JS,
+    "validator.js": _VALIDATOR_JS,
+}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Bundle helpers
@@ -194,13 +204,7 @@ def _slug_from_folder_name(folder_name: str) -> str | None:
 def _write_execution_runtime_files(bundle_root: Path) -> None:
     execution_dir = bundle_root / "execution"
     execution_dir.mkdir(parents=True, exist_ok=True)
-    runtime_files = {
-        "executor.js": _EXECUTOR_JS,
-        "recovery.js": _RECOVERY_JS,
-        "tracker.js": _TRACKER_JS,
-        "validator.js": _VALIDATOR_JS,
-    }
-    for filename, content in runtime_files.items():
+    for filename, content in _EXECUTION_RUNTIME_FILES.items():
         (execution_dir / filename).write_text(content, encoding="utf-8")
     (bundle_root / "package.json").write_text(_PACKAGE_JSON, encoding="utf-8")
 
@@ -312,13 +316,24 @@ def _workflow_manifest_summary(path: Path) -> dict[str, str] | None:
 
 
 def _workflow_package_dirs(bundle_root: Path) -> list[Path]:
-    by_name: dict[str, Path] = {}
+    return [path for path, _summary in _workflow_package_entries(bundle_root)]
+
+
+def _workflow_package_entries(bundle_root: Path) -> list[tuple[Path, dict[str, str]]]:
+    by_name: dict[str, tuple[Path, dict[str, str]]] = {}
     skills_parent = bundle_root / SKILLS_SUBDIR
     if skills_parent.is_dir():
         for path in skills_parent.iterdir():
-            if path.is_dir() and _workflow_manifest_summary(path) is not None:
-                by_name[path.name] = path
+            if not path.is_dir():
+                continue
+            summary = _workflow_manifest_summary(path)
+            if summary is not None:
+                by_name[path.name] = (path, summary)
     return [by_name[key] for key in sorted(by_name)]
+
+
+def _workflow_summaries(bundle_root: Path) -> list[dict[str, str]]:
+    return [summary for _path, summary in _workflow_package_entries(bundle_root)]
 
 
 def _all_inputs_for_bundle(bundle_root: Path) -> list[dict[str, str]]:
@@ -339,7 +354,7 @@ def _all_inputs_for_bundle(bundle_root: Path) -> list[dict[str, str]]:
 
 
 def _write_bundle_index(bundle_root: Path, bundle_slug: str) -> None:
-    skills = [s for p in _workflow_package_dirs(bundle_root) if (s := _workflow_manifest_summary(p)) is not None]
+    skills = _workflow_summaries(bundle_root)
     (bundle_root / f"{_sanitize_segment(bundle_slug)}.json").write_text(
         format_plugin_index_json(bundle_slug, skills), encoding="utf-8"
     )
@@ -359,7 +374,7 @@ def _write_bundle_index(bundle_root: Path, bundle_slug: str) -> None:
 
 
 def _write_bundle_orchestration(bundle_root: Path, bundle_slug: str) -> None:
-    skills = [s for p in _workflow_package_dirs(bundle_root) if (s := _workflow_manifest_summary(p)) is not None]
+    skills = _workflow_summaries(bundle_root)
     skill_names = [s["name"] for s in skills]
     plugin_name = _sanitize_segment(bundle_slug).replace("_", " ").title()
     orch_dir = bundle_root / "orchestration"
@@ -447,7 +462,7 @@ def _log_written_text_file(path: str, content: str, started_at: float) -> None:
         {
             "kind": "file_written",
             "path": path,
-            "bytes": len(content.encode("utf-8")),
+            **skill_pack_text_metrics(content),
             "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
     )
@@ -464,11 +479,19 @@ def _log_written_binary_file(path: str, content: bytes, started_at: float) -> No
     )
 
 
+def _write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _remove_file_if_present(path: Path) -> None:
+    if path.is_file():
+        path.unlink()
+
+
 def _remove_obsolete_workflow_files(workflow_dir: Path) -> None:
     for filename in OBSOLETE_WORKFLOW_FILENAMES:
-        stale_file = workflow_dir / filename
-        if stale_file.is_file():
-            stale_file.unlink()
+        _remove_file_if_present(workflow_dir / filename)
 
 
 def _write_workflow_text_files(
@@ -481,9 +504,8 @@ def _write_workflow_text_files(
         if content is None:
             continue
         destination = workflow_dir / filename
-        destination.parent.mkdir(parents=True, exist_ok=True)
         started_at = time.perf_counter()
-        destination.write_text(content, encoding="utf-8")
+        _write_text(destination, content)
         _log_written_text_file(f"{log_prefix}/{filename}", content, started_at)
 
 
@@ -539,9 +561,8 @@ def _write_extra_bundle_files(
         except ValueError:
             continue
 
-        destination.parent.mkdir(parents=True, exist_ok=True)
         started_at = time.perf_counter()
-        destination.write_text(content, encoding="utf-8")
+        _write_text(destination, content)
         _log_written_text_file(f"{log_prefix}/{safe_relative_path}", content, started_at)
 
 
@@ -565,6 +586,10 @@ def _refresh_bundle_artifacts(bundle_slug: str, bundle_root: Path, bundle_posix:
             "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
     )
+
+
+def _refresh_bundle_artifacts_for_slug(bundle_slug: str, bundle_root: Path) -> None:
+    _refresh_bundle_artifacts(bundle_slug, bundle_root, skill_package_root_posix(bundle_slug))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -601,24 +626,24 @@ def _write_skill_package_files_core(
     visual_assets: dict[str, bytes] | None = None,
     extra_bundle_files: dict[str, str] | None = None,
 ) -> Path:
-    ensure_bundle_scaffold(bundle_slug)
+    bundle_root = ensure_bundle_scaffold(bundle_slug)
     workflow_name = _sanitize_segment(workflow_slug)
+    if not workflow_name:
+        raise ValueError("Invalid workflow folder name.")
     bundle_posix = skill_package_root_posix(bundle_slug)
-    workflow_dir = skill_package_dir(bundle_slug, workflow_name)
+    workflow_dir = bundle_root / SKILLS_SUBDIR / workflow_name
     workflow_dir.mkdir(parents=True, exist_ok=True)
 
     visuals_dir = workflow_dir / "visuals"
     visuals_dir.mkdir(parents=True, exist_ok=True)
     (workflow_dir / "tests").mkdir(parents=True, exist_ok=True)
-    bundle_root = bundle_root_dir(bundle_slug)
-    assert bundle_root is not None
 
     workflow_log_prefix = f"{bundle_posix}/skills/{workflow_name}"
     _remove_obsolete_workflow_files(workflow_dir)
     _write_workflow_text_files(workflow_dir, files, log_prefix=workflow_log_prefix)
     _write_workflow_visual_assets(visuals_dir, visual_assets, log_prefix=workflow_log_prefix)
     _write_extra_bundle_files(bundle_root, extra_bundle_files, log_prefix=bundle_posix)
-    _refresh_bundle_artifacts(bundle_slug, bundle_root, bundle_posix)
+    _refresh_bundle_artifacts_for_slug(bundle_slug, bundle_root)
     return workflow_dir
 
 
@@ -676,10 +701,7 @@ def _workflow_folder_display_label(package_dir: Path, workflow_slug: str) -> str
 
 
 def _bundle_has_workflows(bundle_root: Path) -> bool:
-    skills_parent = bundle_root / SKILLS_SUBDIR
-    if skills_parent.is_dir():
-        return any(p.is_dir() and _workflow_manifest_summary(p) is not None for p in skills_parent.iterdir())
-    return False
+    return bool(_workflow_package_entries(bundle_root))
 
 
 def _bundle_runtime_file_keys(bundle_slug: str) -> list[str]:
@@ -695,7 +717,7 @@ def _read_text_file_if_present(path: Path) -> str | None:
 def _read_bundle_runtime_files(bundle_root: Path, bundle_slug: str) -> dict[str, str]:
     files: dict[str, str] = {}
 
-    for filename in (f"{_sanitize_segment(bundle_slug)}.json", "README.md"):
+    for filename in (f"{_sanitize_segment(bundle_slug)}.json", *_BUNDLE_INDEX_FILENAMES):
         content = _read_text_file_if_present(bundle_root / filename)
         if content is not None:
             files[filename] = content
@@ -728,6 +750,39 @@ def _read_workflow_text_files(workflow_dir: Path, *, prefix: str = "") -> dict[s
     return files
 
 
+def _workflow_present_files(workflow_dir: Path) -> list[str]:
+    return [filename for filename in WORKFLOW_FILENAMES if (workflow_dir / filename).is_file()]
+
+
+def _workflow_extra_file_keys(bundle_root: Path, workflow_slug: str) -> list[str]:
+    workflow_dir = bundle_root / SKILLS_SUBDIR / workflow_slug
+    return [
+        f"{SKILLS_SUBDIR}/{workflow_slug}/{extra}"
+        for extra in ("SKILL.md", "tests/test-cases.json")
+        if (workflow_dir / extra).is_file()
+    ]
+
+
+def _workflow_listing_metadata(workflow_dir: Path) -> dict[str, object]:
+    workflow_slug = workflow_dir.name
+    return {
+        "workflow_slug": workflow_slug,
+        "display_label": _workflow_folder_display_label(workflow_dir, workflow_slug),
+        "modified_at": workflow_dir.stat().st_mtime,
+        "files": _workflow_present_files(workflow_dir),
+    }
+
+
+def _bundle_file_keys(bundle_root: Path, bundle_slug: str, workflows_meta: list[dict[str, object]]) -> list[str]:
+    file_keys = _bundle_runtime_file_keys(bundle_slug)
+    for workflow_meta in workflows_meta:
+        workflow_slug = str(workflow_meta["workflow_slug"])
+        for filename in workflow_meta["files"]:  # type: ignore[arg-type]
+            file_keys.append(f"{SKILLS_SUBDIR}/{workflow_slug}/{filename}")
+        file_keys.extend(_workflow_extra_file_keys(bundle_root, workflow_slug))
+    return file_keys
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # List / read (API-facing)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -743,40 +798,19 @@ def list_skill_bundle_summaries() -> list[dict[str, object]]:
         slug = _slug_from_folder_name(path.name)
         if slug is None:
             continue
-        if not _bundle_has_workflows(path):
+        workflow_entries = _workflow_package_entries(path)
+        if not workflow_entries:
             continue
-        workflow_paths = _workflow_package_dirs(path)
-        if not workflow_paths:
-            continue
+        workflow_paths = [workflow_path for workflow_path, _summary in workflow_entries]
         workflow_paths.sort(key=lambda wp: wp.stat().st_mtime_ns, reverse=True)
         max_mtime = max(wp.stat().st_mtime for wp in workflow_paths)
-        workflows_meta: list[dict[str, object]] = []
-        for wp in workflow_paths:
-            wf_name = wp.name
-            label = _workflow_folder_display_label(wp, wf_name)
-            present_files = [fn for fn in WORKFLOW_FILENAMES if (wp / fn).is_file()]
-            workflows_meta.append(
-                {
-                    "workflow_slug": wf_name,
-                    "display_label": label,
-                    "modified_at": wp.stat().st_mtime,
-                    "files": present_files,
-                }
-            )
-        file_keys = _bundle_runtime_file_keys(slug)
-        for wm in workflows_meta:
-            wf = str(wm["workflow_slug"])
-            for fn in wm["files"]:  # type: ignore[arg-type]
-                file_keys.append(f"{SKILLS_SUBDIR}/{wf}/{fn}")
-            for extra in ("SKILL.md", "tests/test-cases.json"):
-                if (path / SKILLS_SUBDIR / wf / extra.replace("/", "/")).is_file():
-                    file_keys.append(f"{SKILLS_SUBDIR}/{wf}/{extra}")
+        workflows_meta = [_workflow_listing_metadata(wp) for wp in workflow_paths]
         out.append(
             {
                 "package_name": slug,
                 "modified_at": max_mtime,
                 "workflows": workflows_meta,
-                "files": file_keys,
+                "files": _bundle_file_keys(path, slug, workflows_meta),
             }
         )
     out.sort(key=lambda row: float(row["modified_at"]), reverse=True)
@@ -856,6 +890,9 @@ def rename_skill_package_bundle(old_slug: str, new_slug: str) -> None:
     if new_root.exists():
         raise ValueError(f'A skill package named "{new}" already exists.')
     old_root.rename(new_root)
+    _remove_file_if_present(new_root / f"{old}.json")
+    with _bundle_write_lock(new):
+        _refresh_bundle_artifacts_for_slug(new, new_root)
 
 
 def delete_skill_package_workflow(bundle_slug: str, workflow_slug: str) -> bool:
@@ -866,7 +903,7 @@ def delete_skill_package_workflow(bundle_slug: str, workflow_slug: str) -> bool:
     root = bundle_root_dir(bundle_slug)
     if root and root.is_dir():
         with _bundle_write_lock(bundle_slug):
-            _write_bundle_index(root, bundle_slug)
+            _refresh_bundle_artifacts_for_slug(bundle_slug, root)
     return True
 
 
@@ -900,4 +937,4 @@ def rename_skill_package_workflow(bundle_slug: str, old_workflow: str, new_workf
     root = bundle_root_dir(bundle_slug)
     if root:
         with _bundle_write_lock(bundle_slug):
-            _write_bundle_index(root, bundle_slug)
+            _refresh_bundle_artifacts_for_slug(bundle_slug, root)

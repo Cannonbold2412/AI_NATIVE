@@ -479,8 +479,6 @@ export function SkillPackBuilderPage() {
         `[${shortTimeNow()}] Starting bundle "${bundleSlug}" — ${selectedSkillIds.length} workflow folder(s)`,
       ]
       setTerminalLines(lines)
-      const built: string[] = []
-      let last: SkillPackBuildResult | null = null
       lines.push(`[${shortTimeNow()}] Fetching ${selectedSkillIds.length} workflow(s) in parallel…`)
       setTerminalLines([...lines])
       const fetched = await Promise.all(
@@ -495,32 +493,31 @@ export function SkillPackBuilderPage() {
           `[${shortTimeNow()}] (${index + 1}/${fetched.length}) Loaded "${skill?.title ?? skillId}" (${JSON.stringify(workflow).length} chars)`,
         )
       }
+      const bundlePayload = {
+        title: bundleSlug,
+        skills: fetched.map(({ workflow, skill, skillId }) => ({
+          title: skill?.title ?? skillId,
+          ...(workflow && typeof workflow === 'object' && !Array.isArray(workflow)
+            ? (workflow as Record<string, unknown>)
+            : { steps: Array.isArray(workflow) ? workflow : [] }),
+        })),
+      }
       lines.push(
-        `[${shortTimeNow()}] Streaming POST /skill-pack/build/stream — ${fetched.length} workflow(s) sequentially (live log lines; bundle index still locked per bundle)`,
+        `[${shortTimeNow()}] Streaming POST /skill-pack/build/stream — ${fetched.length} workflow(s) in parallel (single bundle build; bundle index locked during disk writes)`,
       )
       setTerminalLines([...lines])
-      for (const { workflow, index, skill, skillId } of fetched) {
-        const wfStarted = Date.now()
-        setTerminalLines((prev) => [
-          ...prev,
-          `[${shortTimeNow()}] (${index + 1}/${fetched.length}) Stream build: "${skill?.title ?? skillId}"`,
-        ])
-        const next = await buildSkillPackage(JSON.stringify(workflow), undefined, bundleSlug, {
-          onLog: (row) => setTerminalLines((p) => [...p, formatSkillPackLogLine(row)]),
-        })
-        setTerminalLines((prev) => [
-          ...prev,
-          `[${shortTimeNow()}] Workflow folder "${next.name}" finished in ${formatDurationMs(Date.now() - wfStarted)}`,
-        ])
-        built.push(next.name)
-        last = next
-      }
-      if (!last) {
+      const result = await buildSkillPackage(JSON.stringify(bundlePayload), undefined, bundleSlug, {
+        onLog: (row) => setTerminalLines((p) => [...p, formatSkillPackLogLine(row)]),
+      })
+      const built = result.workflowNames.length > 0 ? result.workflowNames : [result.name]
+      if (built.length === 0) {
         throw new Error('No workflows were selected for bundle generation.')
       }
-      lines.push(`[${shortTimeNow()}] All workflows done in ${formatDurationMs(Date.now() - runStarted)}`)
-      setTerminalLines([...lines])
-      setResult(last)
+      setTerminalLines((prev) => [
+        ...prev,
+        `[${shortTimeNow()}] All workflows done in ${formatDurationMs(Date.now() - runStarted)}`,
+      ])
+      setResult(result)
       setCreatedWorkflowNames(built)
       toast.success(`${built.length} workflow folder(s) generated under output/skill_package/${bundleSlug}/workflows/.`)
     } catch (err) {

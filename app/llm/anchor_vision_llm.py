@@ -210,6 +210,16 @@ def generate_anchors_for_step_or_raise(
         "Describe what the target is in one short, human-friendly phrase (primary_phrase). "
         "Add up to three secondary anchors: section, parent, or nearby labeled controls — "
         "each with relation inside, above, below, or near.\n"
+        "Relation direction is TARGET relative to ANCHOR:\n"
+        "- above means the highlighted target is above the anchor text/control.\n"
+        "- below means the highlighted target is below the anchor text/control.\n"
+        "- inside means the highlighted target is inside the named section/parent.\n"
+        "- near means close by without a clear vertical relation.\n"
+        "Examples: if the highlighted target is below an Email label, return "
+        '{"element":"email label","relation":"below"}. '
+        "If the highlighted target is above a Password input or Sign in button, return "
+        '{"element":"password input","relation":"above"} or '
+        '{"element":"sign in button","relation":"above"}.\n'
         "Avoid DOM jargon (no div/container/element-only). Return JSON only."
     )
 
@@ -251,3 +261,92 @@ def generate_anchors_for_step_or_raise(
     _write_cache(cache)
     return finalized
 
+
+def generate_anchors_from_image_bytes(
+    image_bytes: bytes,
+    intent: str,
+    step_index: int,
+    *,
+    policy: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Generate vision anchors from raw image bytes (no session_root or bbox needed).
+
+    Returns [] on any failure so callers can fall back to keyword anchors.
+    """
+    if not settings.llm_enabled or not settings.llm_anchor_vision:
+        return []
+    if not str(settings.llm_endpoint or "").strip():
+        return []
+    if not supports_multimodal_chat():
+        return []
+
+    pol: dict[str, Any] = policy if isinstance(policy, dict) else get_policy_bundle().data
+    vcfg = _vision_cfg(pol)
+    if not bool(vcfg.get("enabled", True)):
+        return []
+
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as _im:
+            bw, bh = int(_im.size[0]), int(_im.size[1])
+    except Exception:
+        return []
+
+    image_b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+    prompt_ver = str(vcfg.get("prompt_version", "1"))
+    cache_key = hashlib.sha256(
+        json.dumps(
+            {
+                "h": hashlib.sha256(image_bytes).hexdigest(),
+                "intent": intent,
+                "pv": prompt_ver,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+    cache = _read_cache()
+    if cache_key in cache:
+        entry = cache[cache_key]
+        if isinstance(entry, dict) and entry.get("anchors"):
+            return [dict(a) for a in entry["anchors"]]
+
+    user_text = (
+        "Look at this UI screenshot. Identify the most prominent interactive element.\n\n"
+        f"Image size (pixels): {bw}x{bh}.\n"
+        f"User intent hint (snake_case): {intent or 'unknown'}\n\n"
+        "Describe the target element in one short, human-friendly phrase (primary_phrase). "
+        "Add up to three secondary anchors: section, parent, or nearby labeled controls — "
+        "each with relation inside, above, below, or near.\n"
+        "Relation direction is TARGET relative to ANCHOR:\n"
+        "- above means the target is above the anchor text/control.\n"
+        "- below means the target is below the anchor text/control.\n"
+        "- inside means the target is inside the named section/parent.\n"
+        "- near means close by without a clear vertical relation.\n"
+        "Avoid DOM jargon (no div/container/element-only). Return JSON only."
+    )
+
+    payload = {
+        "model": settings.llm_vision_model or None,
+        "user_text": user_text,
+        "image_base64": image_b64,
+        "image_mime": "image/jpeg",
+    }
+    data = call_llm("anchor_vision", payload, settings.llm_vision_timeout_ms)
+    if not isinstance(data, dict):
+        return []
+
+    primary = str(data.get("primary_phrase") or data.get("primary") or "").strip()
+    sec_raw = data.get("secondary")
+    if not isinstance(sec_raw, list):
+        sec_raw = []
+
+    try:
+        finalized = finalize_vision_anchors(primary, sec_raw, pol)
+    except Exception:
+        return []
+
+    if finalized:
+        cache[cache_key] = {"anchors": finalized}
+        _write_cache(cache)
+    return finalized

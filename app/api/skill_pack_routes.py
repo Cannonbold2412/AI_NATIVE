@@ -56,7 +56,9 @@ async def _skill_pack_build_sse_events(
     def realtime_sink(entry: dict[str, Any]) -> None:
         q.put(("log", entry))
 
+    result_sent = False
     def runner() -> None:
+        nonlocal result_sent
         try:
             out = build_skill_package(
                 json_text,
@@ -65,10 +67,16 @@ async def _skill_pack_build_sse_events(
                 realtime_sink=realtime_sink,
             )
             q.put(("ok", out))
+            result_sent = True
         except SkillPackBuildUserError as exc:
             q.put(("fail", {"message": str(exc), "build_log": exc.build_log}))
+            result_sent = True
         except Exception as exc:  # noqa: BLE001
             q.put(("fail", {"message": str(exc), "build_log": []}))
+            result_sent = True
+        finally:
+            if not result_sent:
+                q.put(("fail", {"message": "Build interrupted unexpectedly", "build_log": []}))
 
     asyncio.get_running_loop().run_in_executor(None, runner)
 
@@ -97,7 +105,9 @@ async def _skill_pack_append_sse_events(
     def realtime_sink(entry: dict[str, Any]) -> None:
         q.put(("log", entry))
 
+    result_sent = False
     def runner() -> None:
+        nonlocal result_sent
         try:
             out = append_workflow_to_skill_package(
                 bundle_slug,
@@ -106,10 +116,16 @@ async def _skill_pack_append_sse_events(
                 realtime_sink=realtime_sink,
             )
             q.put(("ok", out))
+            result_sent = True
         except SkillPackBuildUserError as exc:
             q.put(("fail", {"message": str(exc), "build_log": exc.build_log}))
+            result_sent = True
         except Exception as exc:  # noqa: BLE001
             q.put(("fail", {"message": str(exc), "build_log": []}))
+            result_sent = True
+        finally:
+            if not result_sent:
+                q.put(("fail", {"message": "Build interrupted unexpectedly", "build_log": []}))
 
     asyncio.get_running_loop().run_in_executor(None, runner)
 
@@ -128,10 +144,10 @@ async def _skill_pack_append_sse_events(
 
 
 class SkillPackBuildBody(BaseModel):
-    json_text: str = Field(..., min_length=2)
-    package_name: str | None = None
+    json_text: str = Field(..., min_length=2, max_length=50_000_000)
+    package_name: str | None = Field(default=None, max_length=128)
     """Optional workflow folder slug inside the bundle."""
-    bundle_name: str = Field(default="default")
+    bundle_name: str = Field(default="default", max_length=128)
     """Named skill package under output/skill_package/<bundle_name>/ (POST /skill-pack/build only)."""
 
 

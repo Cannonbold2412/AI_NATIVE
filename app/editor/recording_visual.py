@@ -203,6 +203,106 @@ def apply_recording_event_visual_to_step_or_raise(
     return doc
 
 
+def update_step_visual_bbox_and_regenerate_anchors_or_raise(
+    document: dict[str, Any],
+    step_index: int,
+    bbox: dict[str, Any],
+    *,
+    policy_bundle: PolicyBundle | None = None,
+) -> dict[str, Any]:
+    """Update ``signals.visual.bbox`` and regenerate vision-backed anchors for the current screenshot."""
+    bundle = policy_bundle or get_policy_bundle()
+    policy = bundle.data
+
+    try:
+        next_bbox = {
+            "x": int(round(float(bbox.get("x") or 0))),
+            "y": int(round(float(bbox.get("y") or 0))),
+            "w": int(round(float(bbox.get("w") or 0))),
+            "h": int(round(float(bbox.get("h") or 0))),
+        }
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid_visual_bbox") from exc
+    if next_bbox["w"] < 2 or next_bbox["h"] < 2:
+        raise ValueError("visual_bbox_too_small")
+
+    meta = document.get("meta") if isinstance(document.get("meta"), dict) else {}
+    session_id = str(meta.get("source_session_id") or "").strip()
+    if not session_id:
+        raise ValueError("no_source_session_id")
+
+    doc = dict(document)
+    skills = list(doc.get("skills") or [])
+    if not skills:
+        raise ValueError("no_skills_block")
+    block = dict(skills[0])
+    steps = list(block.get("steps") or [])
+    if step_index < 0 or step_index >= len(steps):
+        raise ValueError("step_index_out_of_range")
+
+    step = dict(steps[step_index])
+    if action_name(step).lower() == "scroll":
+        raise ValueError("cannot_update_visual_bbox_on_scroll_step")
+
+    signals = dict(step.get("signals") or {})
+    visual_prev = signals.get("visual") if isinstance(signals.get("visual"), dict) else {}
+    visual = dict(visual_prev)
+    raw_full = visual.get("full_screenshot")
+    if not isinstance(raw_full, str) or not raw_full.strip():
+        raise ValueError("step_missing_full_screenshot")
+
+    from app.compiler.intent_access import get_effective_intent_from_skill_step
+
+    intent = get_effective_intent_from_skill_step(step) or str(step.get("intent") or "").strip()
+    if not intent.strip():
+        raise ValueError("intent_required_for_visual_bbox")
+
+    visual["bbox"] = next_bbox
+    session_root = (settings.data_dir / "sessions" / session_id).resolve()
+    ev_llm = {"visual": dict(visual)}
+    anchors = generate_anchors_for_step_or_raise(
+        ev_llm,
+        session_root=session_root,
+        final_intent=intent,
+        policy=policy,
+        step_index=step_index,
+    )
+    anchors = rank_merged_anchors(anchors, _ev_rank_stub_from_step(step), intent, policy)
+
+    signals["visual"] = visual
+    signals["anchors"] = list(anchors)
+    step["signals"] = signals
+
+    recovery = dict(step.get("recovery") or {})
+    recovery["anchors"] = list(anchors)
+    recovery["intent"] = intent
+    recovery["final_intent"] = intent
+    wf = (step.get("validation") or {}).get("wait_for") or {}
+    recovery = merge_recovery_strategies_for_wait_shape(
+        recovery,
+        dict(wf) if isinstance(wf, dict) else {},
+        policy,
+    )
+    step["recovery"] = recovery
+
+    proto_base = dict(step.get("confidence_protocol") or _default_confidence_protocol(bundle))
+    step["confidence_protocol"] = _merge_compile_warnings(
+        proto_base,
+        skill_step_for_destructive_check(step),
+        anchors,
+        policy,
+    )
+
+    steps[step_index] = step
+    block["steps"] = steps
+    skills[0] = block
+    doc["skills"] = skills
+    meta2 = dict(doc.get("meta") or {})
+    meta2["version"] = int(meta2.get("version", 1)) + 1
+    doc["meta"] = meta2
+    return doc
+
+
 def clear_step_visual_screenshots_or_raise(
     document: dict[str, Any],
     step_index: int,

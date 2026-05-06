@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-ActionKind = Literal["click", "type", "scroll", "select"]
+ActionKind = Literal["click", "type", "scroll", "select", "check"]
 
 
 class ActionMeta(BaseModel):
