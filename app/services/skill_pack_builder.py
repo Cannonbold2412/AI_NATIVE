@@ -32,6 +32,31 @@ from app.config import settings
 from app.llm.pack_llm_keys import configured_pack_keys, next_pack_api_key
 from app.services.skill_pack_build_log import skill_pack_build_log_scope, skill_pack_log_append
 from app.services.skill_pack.payload import collect_visual_assets_for_structured_steps
+from app.services.skill_pack.models import RawWorkflow, CompiledWorkflow, PersistedWorkflow
+from app.services.skill_pack.common import (
+    _VAR_PATTERN,
+    _HYPHEN_COLLAPSE_RE,
+    _CAMEL_BOUNDARY,
+    _NON_WORD,
+    _TEXT_SELECTOR_RE,
+    _INPUT_NAME_RE,
+    _STEP_LIST_KEYS,
+    _STEP_CONTAINER_KEYS,
+    _METADATA_KEYS,
+    _TITLE_KEYS,
+    _INPUT_CONTAINER_KEYS,
+    _INPUT_DECLARATION_KEYS,
+    _INPUT_NAME_KEYS,
+    _STEP_VISUAL_KEYS,
+    _STEP_SCREENSHOT_URL_KEYS,
+    _ALLOWED_STRUCTURED_TYPES,
+    _GENERIC_SELECTORS,
+    _GENERIC_LABELS,
+    _SENSITIVE_HINTS,
+    _LOGIN_TEXT,
+    _DESTRUCTIVE_TEXT,
+    _RECOVERY_VISUAL_SUFFIXES,
+)
 from app.storage.skill_packages import (
     SKILLS_SUBDIR,
     VISUAL_IMAGE_SUFFIXES,
@@ -63,68 +88,6 @@ class SkillPackBuildUserError(ValueError):
     def __init__(self, message: str, build_log: list[dict[str, Any]]) -> None:
         super().__init__(message)
         self.build_log = build_log
-
-
-@dataclass(frozen=True)
-class RawWorkflow:
-    """One workflow recording extracted from a raw package payload."""
-
-    title: str
-    payload: Any
-    steps: list[dict[str, Any]]
-
-
-@dataclass
-class CompiledWorkflow:
-    """In-memory artifacts for one workflow before it is written to disk."""
-
-    name: str
-    execution_json: str
-    recovery_json: str
-    inputs_json: str
-    manifest_json: str
-    skill_md: str
-    inputs: list[dict[str, Any]]
-    step_count: int
-    visual_assets: dict[str, bytes]
-    used_llm: bool = True
-    warnings: list[str] = field(default_factory=list)
-
-    @property
-    def input_count(self) -> int:
-        return len(self.inputs)
-
-
-@dataclass
-class PersistedWorkflow:
-    """API-facing summary for a workflow already written to bundle storage."""
-
-    name: str
-    bundle_slug: str
-    index_json: str
-    execution_json: str
-    recovery_json: str
-    inputs_json: str
-    manifest_json: str
-    input_count: int
-    step_count: int
-    used_llm: bool
-    warnings: list[str] = field(default_factory=list)
-
-    def to_response_dict(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "bundle_slug": self.bundle_slug,
-            "index_json": self.index_json,
-            "execution_json": self.execution_json,
-            "recovery_json": self.recovery_json,
-            "inputs_json": self.inputs_json,
-            "manifest_json": self.manifest_json,
-            "input_count": self.input_count,
-            "step_count": self.step_count,
-            "used_llm": self.used_llm,
-            "warnings": list(self.warnings),
-        }
 
 
 _PACK_LLM_TRANSIENT_HTTP = frozenset({502, 503, 504})
@@ -190,31 +153,8 @@ Output JSON ONLY:
 }
 """
 
-_VAR_PATTERN = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
-_HYPHEN_COLLAPSE_RE = re.compile(r"-+")
-_CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
-_NON_WORD = re.compile(r"[^a-zA-Z0-9]+")
-_TEXT_SELECTOR_RE = re.compile(r"^\s*text\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|(.+?))\s*$", re.IGNORECASE)
-_INPUT_NAME_RE = re.compile(r"input\s*\[\s*name\s*=\s*['\"]?([^'\"\]]+)['\"]?\s*\]", re.IGNORECASE)
-
-_STEP_LIST_KEYS = ("steps", "actions", "events", "recorded_events", "interactions", "workflow_steps")
-_STEP_CONTAINER_KEYS = ("skills", "workflows", "flows", "scenarios", "recordings")
-_METADATA_KEYS = ("meta", "package_meta", "metadata", "package", "workflow", "recording", "session")
-_TITLE_KEYS = ("title", "name", "id", "slug", "workflow_name", "workflowName")
-_INPUT_CONTAINER_KEYS = ("inputs", "parameters", "params", "variables")
-_INPUT_DECLARATION_KEYS = frozenset(_INPUT_CONTAINER_KEYS)
-_INPUT_NAME_KEYS = ("name", "id", "key", "label", "input_name", "inputName", "field", "binding")
-_STEP_VISUAL_KEYS = ("full_screenshot", "scroll_screenshot", "element_snapshot")
-_STEP_SCREENSHOT_URL_KEYS = ("full_url", "scroll_url", "element_url")
-
 _ALLOWED_STRUCTURED_TYPES = {"navigate", "fill", "click", "scroll"}
 _ALLOWED_EXECUTION_TYPES = {"navigate", "fill", "click", "assert_visible", "scroll"}
-_GENERIC_SELECTORS = {"input", "button", "textarea", "select"}
-_GENERIC_LABELS = {"input", "button", "textarea", "select"}
-_SENSITIVE_HINTS = ("password", "passcode", "passwd", "secret", "token", "api_key", "apikey", "private_key", "credential", "auth", "otp", "pin")
-_LOGIN_TEXT = ("sign in", "signin", "log in", "login")
-_DESTRUCTIVE_TEXT = ("delete", "remove", "destroy", "drop", "archive", "reset", "disable", "revoke")
-_RECOVERY_VISUAL_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 
 
 def _parse_json_text(json_text: str) -> Any:
@@ -1091,11 +1031,6 @@ def compile_execution(structured_steps: dict[str, Any] | list[dict[str, Any]]) -
     return plan
 
 
-def generateExecutionPlan(steps: Any) -> list[dict[str, Any]]:
-    """Backward-compatible alias for callers that already pass structured steps."""
-
-    structured = _validate_structured_output(steps) if isinstance(steps, dict) and "goal" in steps else steps
-    return compile_execution(structured)
 
 
 def generate_execution_plan(payload: Any, inputs: list[dict[str, Any]] | None = None) -> tuple[str, list[dict[str, Any]]]:
@@ -1341,11 +1276,6 @@ def generate_recovery(
     return {"steps": entries}
 
 
-def generateRecoveryMap(steps: Any) -> dict[str, Any]:
-    return generate_recovery(steps)
-
-
-generate_recovery_map = generateRecoveryMap
 
 
 def _iter_declared_input_names(payload: Any) -> Iterable[str]:

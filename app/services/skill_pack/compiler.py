@@ -276,17 +276,6 @@ def compile_execution(
     return plan
 
 
-def generateExecutionPlan(steps: Any) -> list[dict[str, Any]]:
-    """Backward-compatible alias for callers that already pass structured steps."""
-
-    structured = (
-        _validate_structured_output(steps)
-        if isinstance(steps, dict) and "goal" in steps
-        else steps
-    )
-    return compile_execution(structured)
-
-
 def _selector_target(step: dict[str, Any]) -> dict[str, str]:
     selector = str(step.get("selector") or "")
     text = _selector_text(selector)
@@ -569,13 +558,6 @@ def generate_recovery(
         entries.append(_build_recovery_entry(step, index, visuals_dir))
     _validate_recovery_entries(compiled, entries, visuals_dir)
     return {"steps": entries}
-
-
-def generateRecoveryMap(steps: Any) -> dict[str, Any]:
-    return generate_recovery(steps)
-
-
-generate_recovery_map = generateRecoveryMap
 
 
 def _iter_declared_input_names(payload: Any) -> Iterable[str]:

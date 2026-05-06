@@ -275,10 +275,10 @@ class SkillPackBuilderTests(unittest.TestCase):
             compile_execution({"goal": "Bad", "steps": [{"type": "wait", "selector": "text=Done"}]})
 
     def test_generate_recovery_uses_structured_steps(self) -> None:
-        from app.services.skill_pack_builder import generateRecoveryMap, generate_recovery_map
+        from app.services.skill_pack.compiler import generate_recovery
 
-        recovery = generate_recovery_map(_structured_workflow())
-        self.assertEqual(generateRecoveryMap(_structured_workflow()), recovery)
+        recovery = generate_recovery(_structured_workflow())
+        self.assertEqual(generate_recovery(_structured_workflow()), recovery)
         self.assertEqual([step["step_id"] for step in recovery["steps"]], [2, 3, 4, 5, 6])
 
         delete_entry = next(step for step in recovery["steps"] if step["step_id"] == 6)
