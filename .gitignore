@@ -1,12 +1,19 @@
-# Python
+# Python caches and build output
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tox/
+.nox/
+.ipynb_checkpoints/
 .coverage
+.coverage.*
 htmlcov/
+build/
+dist/
+*.egg-info/
 
 # Virtual environments
 .venv/
@@ -30,20 +37,29 @@ tmp/
 graphify-out/
 AI_NATIVE/
 
-# Frontend dependencies and build output
+# JavaScript dependencies and build output
 node_modules/
 frontend/node_modules/
+.next/
 frontend/.next/
+frontend/.next*/
 frontend/out/
 frontend/dist/
 frontend/build/
+.turbo/
 frontend/.turbo/
 frontend/.vercel/
 frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
 frontend/*.log
 
 # Generated package dependencies
 output/**/node_modules/
+output/**/.next/
+output/**/dist/
+output/**/build/
+output/**/.turbo/
+output/**/package-lock.json
 output/**/.package-lock.json
 
 # Logs
@@ -53,6 +69,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 vite.*.log
+debug.log*
 
 # OS and editor files
 .DS_Store
