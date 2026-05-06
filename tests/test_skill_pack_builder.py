@@ -341,7 +341,7 @@ class SkillPackBuilderTests(unittest.TestCase):
 
     def test_build_skill_package_writes_skill_files_in_new_layout(self) -> None:
         from app.services.skill_pack_builder import build_skill_package
-        from app.storage.skill_packages import bundle_root_dir, skill_package_dir
+        from app.storage.skill_packages import bundle_root_dir
 
         with _temporary_skill_package_root():
             with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
@@ -350,6 +350,7 @@ class SkillPackBuilderTests(unittest.TestCase):
             wf_name = package["name"]
             br = bundle_root_dir("render")
             self.assertIsNotNone(br)
+            assert br is not None
             # Per-skill SKILL.md under skills/{wf}/SKILL.md
             skill_md_path = br / "skills" / wf_name / "SKILL.md"
             self.assertTrue(skill_md_path.is_file())
@@ -400,8 +401,14 @@ class SkillPackBuilderTests(unittest.TestCase):
                 index_by_name["delete_web_service"]["manifest"],
                 "skills/delete_web_service/manifest.json",
             )
-            self.assertIn("SKILL.md", read_skill_package_files("default", first["name"]))
-            self.assertNotIn("skill.md", read_skill_package_files("default", second["name"]))
+            first_files = read_skill_package_files("default", first["name"])
+            self.assertIsNotNone(first_files)
+            if first_files:
+                self.assertIn("SKILL.md", first_files)
+            second_files = read_skill_package_files("default", second["name"])
+            self.assertIsNotNone(second_files)
+            if second_files:
+                self.assertNotIn("skill.md", second_files)
 
     def test_append_workflow_creates_new_folder_and_keeps_existing_files_unchanged(self) -> None:
         from app.services.skill_pack_builder import append_workflow_to_skill_package, build_skill_package
@@ -509,6 +516,39 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertIn(b'"event":"log"', blob)
         self.assertIn(b'"event":"done"', blob)
         self.assertIn(b'"name":', blob)
+
+    def test_unlocked_skill_package_writer_can_run_inside_bundle_lock(self) -> None:
+        from app.storage.skill_packages import (
+            _bundle_write_lock,
+            write_skill_package_files_unlocked,
+        )
+
+        manifest = {
+            "name": "inside_lock",
+            "description": "test",
+            "version": "1.0.0",
+            "entry": {
+                "execution": "./execution.json",
+                "recovery": "./recovery.json",
+                "input": "./input.json",
+            },
+        }
+
+        with _temporary_skill_package_root():
+            with _bundle_write_lock("inside_lock_bundle"):
+                workflow_dir = write_skill_package_files_unlocked(
+                    "inside_lock_bundle",
+                    "inside_lock",
+                    {
+                        "execution.json": "[]",
+                        "recovery.json": "{}",
+                        "input.json": "{}",
+                        "manifest.json": json.dumps(manifest),
+                    },
+                )
+
+            self.assertTrue((workflow_dir / "manifest.json").is_file())
+            self.assertTrue((workflow_dir.parent.parent / "inside_lock_bundle.json").is_file())
 
     def test_skill_pack_append_stream_emits_log_and_done_sse(self) -> None:
         from app.main import app

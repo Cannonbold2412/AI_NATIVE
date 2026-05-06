@@ -8,6 +8,7 @@ from urllib import error, request
 from urllib.parse import urlparse, urlunparse
 
 from app.config import settings
+from app.llm.pack_llm_config import resolved_pack_llm_config
 from app.llm.pack_llm_keys import next_pack_api_key
 
 _SYSTEM_PROMPT = (
@@ -55,8 +56,9 @@ def _extract_message_content(payload: dict[str, Any]) -> str:
 def generate_skill_markdown_with_llm(summary: dict[str, Any]) -> str | None:
     if not settings.pack_llm_enabled:
         return None
-    endpoint = str(settings.pack_llm_endpoint or "").strip()
-    model = str(settings.pack_llm_model or "").strip()
+    llm_config = resolved_pack_llm_config()
+    endpoint = llm_config.endpoint
+    model = llm_config.model
     if not endpoint or not model:
         return None
 

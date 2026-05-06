@@ -27,7 +27,6 @@ credentials.json
 # Local app data and generated artifacts
 data/
 tmp/
-obsidian_vault/
 graphify-out/
 AI_NATIVE/
 

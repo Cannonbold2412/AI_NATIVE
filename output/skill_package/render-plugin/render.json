@@ -1,0 +1,20 @@
+{
+  "plugin": "render",
+  "version": "1.0.0",
+  "skills": [
+    {
+      "name": "delete_database",
+      "description": "Delete a database on Render dashboard",
+      "manifest": "skills/delete_database/manifest.json",
+      "execution": "skills/delete_database/execution.json",
+      "input": "skills/delete_database/input.json"
+    },
+    {
+      "name": "login_in_render",
+      "description": "Log in to Render dashboard",
+      "manifest": "skills/login_in_render/manifest.json",
+      "execution": "skills/login_in_render/execution.json",
+      "input": "skills/login_in_render/input.json"
+    }
+  ]
+}

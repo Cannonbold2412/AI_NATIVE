@@ -32,7 +32,7 @@ function parseArgs() {
 
 async function trySelector(page, selector, timeout) {
   try {
-    await page.locator(selector).waitFor({ state: "attached", timeout: timeout || 5000 });
+    await page.locator(selector).waitFor({ state: "visible", timeout: timeout || 5000 });
     return true;
   } catch (_) {
     return false;
@@ -40,23 +40,28 @@ async function trySelector(page, selector, timeout) {
 }
 
 async function applyRecovery(page, ctx) {
-  let plan;
-  try {
-    plan = await recovery.runRecovery(ctx);
-  } catch (_) {
-    return null;
-  }
-  const candidates = [];
-  if (plan && plan.strategy === "selector_fallback" && Array.isArray(plan.candidates)) {
-    candidates.push(...plan.candidates);
-  } else if (plan && plan.strategy === "anchor_fallback" && Array.isArray(plan.anchors)) {
-    const sorted = plan.anchors.slice().sort((a, b) => b.priority - a.priority);
-    for (const anchor of sorted) {
-      candidates.push(`text=${JSON.stringify(anchor.text)}`);
+  for (const layer of [1, 2, 3, 4]) {
+    let plan;
+    try {
+      plan = await recovery.runLayer(layer, ctx);
+    } catch (_) {
+      continue;
     }
-  }
-  for (const sel of candidates) {
-    if (await trySelector(page, sel, 3000)) return sel;
+    if (!plan) continue;
+
+    const candidates = [];
+    if (plan.strategy === "selector_fallback" && Array.isArray(plan.candidates)) {
+      candidates.push(...plan.candidates);
+    } else if (plan.strategy === "anchor_fallback" && Array.isArray(plan.anchors)) {
+      const sorted = plan.anchors.slice().sort((a, b) => b.priority - a.priority);
+      for (const anchor of sorted) {
+        candidates.push(`text=${JSON.stringify(anchor.text)}`);
+      }
+    }
+
+    for (const sel of candidates) {
+      if (await trySelector(page, sel, 3000)) return sel;
+    }
   }
   return null;
 }
@@ -113,6 +118,10 @@ async function runScroll(page, step, inputs) {
 
 async function performAction(page, step, inputs, selector) {
   const type = step.type;
+  if (type === "wait") {
+    await new Promise((resolve) => setTimeout(resolve, Number(step.ms) || 1000));
+    return;
+  }
   if (type === "navigate") {
     const url = interpolate(step.url || "", inputs);
     await page.goto(url, { timeout: 15000, waitUntil: "domcontentloaded" });
@@ -128,20 +137,20 @@ async function performAction(page, step, inputs, selector) {
   }
   if (type === "fill" || type === "type") {
     const value = interpolate(step.value || "", inputs);
-    await page.locator(selector).first().fill(value, { timeout: 5000 });
+    await page.locator(selector).first().fill(value, { timeout: 15000 });
     return;
   }
   if (type === "click") {
-    await page.locator(selector).first().click({ timeout: 5000 });
+    await page.locator(selector).first().click({ timeout: 15000 });
     return;
   }
   if (type === "select") {
     const value = interpolate(step.value || "", inputs);
-    await page.locator(selector).first().selectOption(value, { timeout: 5000 });
+    await page.locator(selector).first().selectOption(value, { timeout: 15000 });
     return;
   }
   if (type === "focus") {
-    await page.locator(selector).first().focus({ timeout: 5000 });
+    await page.locator(selector).first().focus({ timeout: 15000 });
     return;
   }
   throw new Error(`Unknown step type: ${type}`);
@@ -168,13 +177,17 @@ async function dispatchStep(page, step, inputs, skill, stepIdx) {
         if (RECOVERY_ACTION_TYPES.has(type)) {
           const alt = await applyRecovery(page, { skill, step: stepIdx, error: String(err), page });
           if (alt) {
-            await performAction(page, step, inputs, alt);
-            row.status = "recovered"; row.recovered_via = alt;
-            lastError = null;
-            break;
+            try {
+              await performAction(page, step, inputs, alt);
+              row.status = "recovered"; row.recovered_via = alt;
+              lastError = null;
+              break;
+            } catch (recoveryErr) {
+              lastError = recoveryErr;
+            }
           }
         }
-        if (attempt === attempts) throw err;
+        if (attempt === attempts) throw lastError;
       }
     }
     if (lastError) throw lastError;
@@ -203,19 +216,25 @@ async function runSingleSkill(skill, inputs, resultPath, headless) {
 
   const steps = JSON.parse(fs.readFileSync(executionPath, "utf8"));
   const { chromium } = require("playwright");
-  const browser = await chromium.launch({ headless });
+  const browser = await chromium.launch({ headless, slowMo: 100 });
   const context = await browser.newContext();
   const page = await context.newPage();
+
+  const STEP_DELAY_MS = Number(process.env.STEP_DELAY_MS) || 1200;
 
   const rows = [];
   console.log(`[executor] skill=${skill} steps=${steps.length}`);
 
   for (let i = 0; i < steps.length; i++) {
     const stepIdx = i + 1;
-    process.stdout.write(`[executor] step ${stepIdx}/${steps.length} type=${steps[i].type} ... `);
+    const stepType = steps[i].type;
+    process.stdout.write(`[executor] step ${stepIdx}/${steps.length} type=${stepType} ... `);
     const row = await dispatchStep(page, steps[i], inputs, skill, stepIdx);
     rows.push(row);
     console.log(row.status + (row.recovered_via ? ` (via ${row.recovered_via})` : ""));
+    if (stepType !== "wait") {
+      await new Promise((resolve) => setTimeout(resolve, STEP_DELAY_MS));
+    }
   }
 
   try { await browser.close(); } catch (_) {}
@@ -249,7 +268,7 @@ async function main() {
     }
 
     const resultPath = args.result ? path.resolve(args.result) : path.join(__dirname, "..", "EXECUTION_PLAN_RESULT.json");
-    const headless = args.headless !== "0";
+    const headless = args.headless === "1";
     const planResults = [];
     let anyFailed = false;
 
@@ -288,7 +307,7 @@ async function main() {
     ? path.resolve(args.result)
     : path.join(__dirname, "..", "EXECUTION_RESULT.json");
 
-  const headless = args.headless !== "0";
+  const headless = args.headless === "1";
 
   const { passed } = await runSingleSkill(skill, inputs, resultPath, headless);
   process.exit(passed ? 0 : 1);
@@ -466,17 +485,6 @@ async function captureScreenshotBase64(page) {
   }
 }
 
-function responseText(data) {
-  if (typeof data.output_text === "string") return data.output_text;
-  const chunks = [];
-  for (const item of Array.isArray(data.output) ? data.output : []) {
-    for (const part of Array.isArray(item.content) ? item.content : []) {
-      if (typeof part.text === "string") chunks.push(part.text);
-    }
-  }
-  return chunks.join("\\n");
-}
-
 function parseLlmSelectors(text) {
   if (!text) return [];
   const match = text.match(/\\{[\\s\\S]*\\}/);
@@ -490,7 +498,7 @@ function parseLlmSelectors(text) {
 }
 
 async function runLlmIntentRecovery(ctx, entry) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.SKILL_LLM_API_KEY;
   if (!apiKey || !ctx || !ctx.page) return null;
 
   const [domResult, screenshotResult] = await Promise.allSettled([
@@ -509,30 +517,32 @@ async function runLlmIntentRecovery(ctx, entry) {
     `Current DOM summary: ${dom}`,
   ].join("\\n\\n");
 
-  const content = [{ type: "input_text", text: prompt }];
+  const content = [{ type: "text", text: prompt }];
   if (screenshot) {
-    content.push({ type: "input_image", image_url: `data:image/jpeg;base64,${screenshot}` });
+    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: screenshot } });
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Number(process.env.CONXA_LLM_RECOVERY_TIMEOUT_MS) || 8000);
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-        input: [{ role: "user", content }],
-        temperature: 0,
-        max_output_tokens: 200,
+        model: process.env.ANTHROPIC_RECOVERY_MODEL || "claude-haiku-4-5-20251001",
+        max_tokens: 200,
+        messages: [{ role: "user", content }],
       }),
       signal: controller.signal,
     });
     if (!response.ok) return null;
-    const selectors = parseLlmSelectors(responseText(await response.json()));
+    const data = await response.json();
+    const text = data.content && data.content[0] ? data.content[0].text || "" : "";
+    const selectors = parseLlmSelectors(text);
     if (!selectors.length) return null;
     return {
       layer: 3,

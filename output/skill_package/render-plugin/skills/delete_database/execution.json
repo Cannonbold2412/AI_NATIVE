@@ -1,0 +1,55 @@
+[
+  {
+    "type": "navigate",
+    "url": "https://dashboard.render.com/login"
+  },
+  {
+    "type": "fill",
+    "selector": "input[name=\"email\"]",
+    "value": "{{user_email}}"
+  },
+  {
+    "type": "fill",
+    "selector": "input[name=\"password\"]",
+    "value": "{{user_password}}"
+  },
+  {
+    "type": "click",
+    "selector": "text=\"Sign in\""
+  },
+  {
+    "type": "check",
+    "kind": "url",
+    "pattern": "dashboard.render.com"
+  },
+  {
+    "type": "click",
+    "selector": "text=\"{{db_name}}\""
+  },
+  {
+    "type": "scroll",
+    "delta_y": 2824.0
+  },
+  {
+    "type": "click",
+    "selector": "text=\"Delete Database\""
+  },
+  {
+    "type": "fill",
+    "selector": "input[name=\"sudoCommand\"]",
+    "value": "sudo delete database {{db_name}}"
+  },
+  {
+    "type": "wait",
+    "ms": 3000
+  },
+  {
+    "type": "click",
+    "selector": "text=\"Delete Database\""
+  },
+  {
+    "type": "check",
+    "kind": "url",
+    "pattern": "dashboard.render.com"
+  }
+]

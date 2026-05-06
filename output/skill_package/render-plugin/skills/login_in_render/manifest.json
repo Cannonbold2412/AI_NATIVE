@@ -1,0 +1,25 @@
+{
+  "name": "login_in_render",
+  "description": "Log in to Render dashboard",
+  "version": "1.0.0",
+  "entry": {
+    "execution": "./execution.json",
+    "recovery": "./recovery.json",
+    "input": "./input.json"
+  },
+  "execution_mode": "deterministic",
+  "recovery_mode": "tiered",
+  "vision_enabled": true,
+  "llm_required": false,
+  "inputs": [
+    {
+      "name": "user_email",
+      "type": "string"
+    },
+    {
+      "name": "user_password",
+      "type": "string",
+      "sensitive": true
+    }
+  ]
+}

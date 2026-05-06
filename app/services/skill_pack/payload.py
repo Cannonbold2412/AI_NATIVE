@@ -574,7 +574,7 @@ def collect_visual_assets_for_structured_steps(
     """Map screenshots from raw steps to LLM-structured steps by selector similarity.
 
     Falls back to index-based matching if selectors are unavailable.
-    Returns {"Image_1.jpg": bytes, ...} indexed by structured step number (1-based).
+    Returns {"step_1_intent_name.jpg": bytes, ...} named by step index + intent.
     """
     session_id = _source_session_id(payload)
     if not session_id:
@@ -590,7 +590,7 @@ def collect_visual_assets_for_structured_steps(
         launch_asset = _read_visual_asset_bytes(launch_rel)
         if launch_asset is not None:
             suffix, content = launch_asset
-            out[f"Image_0{suffix}"] = content
+            out[f"step_0_launch{suffix}"] = content
 
     for struct_index, struct_step in enumerate(structured_steps, start=1):
         struct_selector = _selector_text_from_step(struct_step)
@@ -622,6 +622,8 @@ def collect_visual_assets_for_structured_steps(
             continue
 
         suffix, content = asset
-        out[f"Image_{struct_index}{suffix}"] = content
+        intent = str(struct_step.get("intent") or "").strip().lower().replace(" ", "_") or f"step_{struct_index}"
+        safe_intent = "".join(c if c.isalnum() or c == "_" else "_" for c in intent)[:50]
+        out[f"step_{struct_index}_{safe_intent}{suffix}"] = content
 
     return out

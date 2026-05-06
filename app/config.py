@@ -37,11 +37,23 @@ class Settings(BaseSettings):
     llm_vision_model: str = "google/gemma-4-31b-it"
     llm_debug: bool = False
     pack_llm_enabled: bool = True
+    # Selects named Skill Pack Builder provider settings below. Supported: nvidia, gemini.
+    # If empty, the legacy SKILL_PACK_LLM_ENDPOINT / MODEL / API_KEY(S) values are used directly.
+    pack_llm_provider: str = ""
     pack_llm_endpoint: str = ""
     pack_llm_api_key: str = ""
     # Comma-separated keys; successive pack LLM calls rotate (thread-safe), same pattern as SKILL_LLM_API_KEYS in app/llm/client.py.
     pack_llm_api_keys: str = ""
     pack_llm_model: str = ""
+    pack_llm_nvidia_endpoint: str = "https://integrate.api.nvidia.com/v1"
+    pack_llm_nvidia_api_key: str = ""
+    pack_llm_nvidia_api_keys: str = ""
+    pack_llm_nvidia_model: str = "z-ai/glm-5.1"
+    pack_llm_gemini_endpoint: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    pack_llm_gemini_api_key: str = ""
+    pack_llm_gemini_api_keys: str = ""
+    pack_llm_gemini_model: str = "gemini-2.5-flash"
+    pack_llm_max_attempts: int = 1
     # Skill structuring often needs several minutes; low values cause client TimeoutError before the
     # gateway can respond (debug logs: 120s capped runs vs ~300s gateway behavior on integrate.api.nvidia.com).
     pack_llm_timeout_ms: int = 600000
@@ -51,6 +63,7 @@ class Settings(BaseSettings):
     pack_llm_markdown_temperature: float = 0.15
     pack_llm_markdown_max_tokens: int = 8000
     pack_llm_top_p: float | None = None
+    pack_recovery_vision_enabled: bool = False
     # Directory name at project root for generated bundles (default skill_package). Overrides .skill_bundle_root after UI rename.
     package_bundle_root: str = "skill_package"
     environment: str = "local"
@@ -125,6 +138,21 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             timeout = 600000
         return max(600000, timeout)
+
+    @field_validator("pack_llm_provider", mode="before")
+    @classmethod
+    def _normalize_pack_provider(cls, value: object) -> str:
+        provider = str(value or "").strip().lower()
+        return provider if provider in {"", "nvidia", "gemini"} else ""
+
+    @field_validator("pack_llm_max_attempts", mode="before")
+    @classmethod
+    def _normalize_pack_max_attempts(cls, value: object) -> int:
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            return 1
+        return max(1, min(n, 10))
 
     @field_validator("pack_llm_structure_temperature", mode="before")
     @classmethod

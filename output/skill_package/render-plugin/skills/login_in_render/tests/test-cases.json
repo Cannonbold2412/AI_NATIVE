@@ -1,0 +1,13 @@
+[
+  {
+    "id": "case-1",
+    "description": "Basic happy path",
+    "inputs": {
+      "user_email": "example_user_email",
+      "user_password": "example_user_password"
+    },
+    "expected": {
+      "success": true
+    }
+  }
+]

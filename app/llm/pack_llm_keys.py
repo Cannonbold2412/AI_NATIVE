@@ -5,17 +5,36 @@ from __future__ import annotations
 import threading
 
 from app.config import settings
+from app.llm.pack_llm_config import selected_pack_provider
 
 _PACK_KEY_IDX = 0
 _PACK_KEY_LOCK = threading.Lock()
 
 
 def configured_pack_keys() -> list[str]:
-    csv_keys = [item.strip() for item in str(settings.pack_llm_api_keys or "").split(",") if item.strip()]
-    if csv_keys:
-        return csv_keys
-    single = str(settings.pack_llm_api_key or "").strip()
-    return [single] if single else []
+    provider = selected_pack_provider()
+    candidates: list[str] = []
+    if provider == "gemini":
+        candidates.extend([settings.pack_llm_gemini_api_keys, settings.pack_llm_gemini_api_key])
+    elif provider == "nvidia":
+        candidates.extend(
+            [
+                settings.pack_llm_nvidia_api_keys,
+                settings.pack_llm_nvidia_api_key,
+                settings.pack_llm_api_keys,
+                settings.pack_llm_api_key,
+                settings.llm_api_keys,
+                settings.llm_api_key,
+            ]
+        )
+    else:
+        candidates.extend([settings.pack_llm_api_keys, settings.pack_llm_api_key])
+
+    for value in candidates:
+        keys = [item.strip() for item in str(value or "").split(",") if item.strip()]
+        if keys:
+            return keys
+    return []
 
 
 def next_pack_api_key() -> tuple[str | None, int, int]:

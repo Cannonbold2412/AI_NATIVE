@@ -1,0 +1,15 @@
+{
+  "inputs": [
+    {
+      "name": "user_email",
+      "type": "string",
+      "description": "Enter user email"
+    },
+    {
+      "name": "user_password",
+      "type": "string",
+      "description": "Enter user password",
+      "sensitive": true
+    }
+  ]
+}

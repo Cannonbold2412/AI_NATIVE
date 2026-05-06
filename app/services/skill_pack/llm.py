@@ -11,6 +11,7 @@ from urllib import error, request
 from urllib.parse import urlparse, urlunparse
 
 from app.config import settings
+from app.llm.pack_llm_config import resolved_pack_llm_config
 from app.llm.pack_llm_keys import next_pack_api_key
 from app.services.skill_pack_build_log import (
     skill_pack_json_metrics,
@@ -225,11 +226,12 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
         raise ValueError(
             "Skill package generation requires the LLM structuring layer; SKILL_PACK_LLM_ENABLED is disabled."
         )
-    endpoint = str(settings.pack_llm_endpoint or "").strip()
-    model = str(settings.pack_llm_model or "").strip()
+    llm_config = resolved_pack_llm_config()
+    endpoint = llm_config.endpoint
+    model = llm_config.model
     if not endpoint or not model:
         raise ValueError(
-            "Skill package generation requires SKILL_PACK_LLM_ENDPOINT and SKILL_PACK_LLM_MODEL."
+            "Skill package generation requires a configured Skill Pack LLM endpoint and model."
         )
 
     parsed_ep = urlparse(endpoint)
@@ -281,6 +283,7 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
             {
                 "kind": "llm_request_sent",
                 "attempt": attempt + 1,
+                "provider": llm_config.provider,
                 "model": model,
                 "host": (parsed_ep.netloc or "").lower() or None,
                 "path": api_path,

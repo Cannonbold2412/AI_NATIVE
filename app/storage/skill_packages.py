@@ -656,13 +656,32 @@ def write_skill_package_files(
     extra_bundle_files: dict[str, str] | None = None,
 ) -> Path:
     with _bundle_write_lock(bundle_slug):
-        return _write_skill_package_files_core(
+        return write_skill_package_files_unlocked(
             bundle_slug,
             workflow_slug,
             files,
             visual_assets=visual_assets,
             extra_bundle_files=extra_bundle_files,
         )
+
+
+def write_skill_package_files_unlocked(
+    bundle_slug: str,
+    workflow_slug: str,
+    files: dict[str, str],
+    *,
+    visual_assets: dict[str, bytes] | None = None,
+    extra_bundle_files: dict[str, str] | None = None,
+) -> Path:
+    """Write workflow files when the caller already holds the bundle write lock."""
+
+    return _write_skill_package_files_core(
+        bundle_slug,
+        workflow_slug,
+        files,
+        visual_assets=visual_assets,
+        extra_bundle_files=extra_bundle_files,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
