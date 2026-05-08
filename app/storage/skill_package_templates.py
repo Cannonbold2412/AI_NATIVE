@@ -39,28 +39,23 @@ async function trySelector(page, selector, timeout) {
   }
 }
 
-async function applyRecovery(page, ctx) {
-  for (const layer of [1, 2, 3, 4]) {
+async function applyRecovery(page, ctx, attemptFn) {
+  for (const layer of [1, 2, 3]) {
     let plan;
     try {
       plan = await recovery.runLayer(layer, ctx);
     } catch (_) {
       continue;
     }
-    if (!plan) continue;
-
-    const candidates = [];
-    if (plan.strategy === "selector_fallback" && Array.isArray(plan.candidates)) {
-      candidates.push(...plan.candidates);
-    } else if (plan.strategy === "anchor_fallback" && Array.isArray(plan.anchors)) {
-      const sorted = plan.anchors.slice().sort((a, b) => b.priority - a.priority);
-      for (const anchor of sorted) {
-        candidates.push(`text=${JSON.stringify(anchor.text)}`);
+    if (!plan || !Array.isArray(plan.candidates)) continue;
+    for (const sel of plan.candidates) {
+      if (!(await trySelector(page, sel, 3000))) continue;
+      try {
+        await attemptFn(sel);
+        return { selector: sel, layer };
+      } catch (_) {
+        // candidate visible but action failed — try next candidate / next layer
       }
-    }
-
-    for (const sel of candidates) {
-      if (await trySelector(page, sel, 3000)) return sel;
     }
   }
   return null;
@@ -68,14 +63,9 @@ async function applyRecovery(page, ctx) {
 
 const RECOVERY_ACTION_TYPES = new Set(["type", "fill", "click", "select", "focus"]);
 const PLAIN_RETRY_ACTION_TYPES = new Set(["navigate", "check"]);
-const ELEMENT_TOTAL_ATTEMPTS = 2;
+const TIMING_RETRY_ATTEMPTS = 2;
+const TIMING_RETRY_WAIT_MS = 1000;
 const NAV_CHECK_TOTAL_ATTEMPTS = 3;
-
-function totalAttempts(type) {
-  if (PLAIN_RETRY_ACTION_TYPES.has(type)) return NAV_CHECK_TOTAL_ATTEMPTS;
-  if (RECOVERY_ACTION_TYPES.has(type)) return ELEMENT_TOTAL_ATTEMPTS;
-  return 1;
-}
 
 async function runCheck(page, step, inputs) {
   const kind = String(step.kind || "url").toLowerCase();
@@ -141,8 +131,36 @@ async function performAction(page, step, inputs, selector) {
     return;
   }
   if (type === "click") {
-    await page.locator(selector).first().click({ timeout: 15000 });
-    return;
+    try {
+      await page.locator(selector).first().click({ timeout: 15000 });
+      return;
+    } catch (err) {
+      if (String(err).includes("intercepts pointer events")) {
+        // Step 1: scoped under known popup containers (target the popup button, not the one behind it)
+        const modalContainers = [
+          '[role="dialog"]',
+          '[role="alertdialog"]',
+          '[aria-modal="true"]',
+          '[data-floating-ui-portal]',
+          '.modal',
+        ];
+        for (const container of modalContainers) {
+          const scoped = `${container} ${selector}`;
+          if (await trySelector(page, scoped, 2000)) {
+            try {
+              await page.locator(scoped).first().click({ timeout: 10000 });
+              return;
+            } catch (_) {}
+          }
+        }
+        // Step 2: .last() — popups are appended last in DOM order, so .last() finds the popup button
+        try {
+          await page.locator(selector).last().click({ timeout: 10000 });
+          return;
+        } catch (_) {}
+      }
+      throw err;
+    }
   }
   if (type === "select") {
     const value = interpolate(step.value || "", inputs);
@@ -164,32 +182,70 @@ async function dispatchStep(page, step, inputs, skill, stepIdx) {
 
   try {
     let lastError = null;
-    const attempts = totalAttempts(type);
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      row.attempts = attempt;
-      try {
-        await performAction(page, step, inputs, sel);
-        row.status = "ok";
-        lastError = null;
-        break;
-      } catch (err) {
-        lastError = err;
-        if (RECOVERY_ACTION_TYPES.has(type)) {
-          const alt = await applyRecovery(page, { skill, step: stepIdx, error: String(err), page });
-          if (alt) {
-            try {
-              await performAction(page, step, inputs, alt);
-              row.status = "recovered"; row.recovered_via = alt;
-              lastError = null;
-              break;
-            } catch (recoveryErr) {
-              lastError = recoveryErr;
+
+    if (RECOVERY_ACTION_TYPES.has(type)) {
+      // L1: timing retries — wait and retry before escalating to recovery layers
+      for (let attempt = 1; attempt <= TIMING_RETRY_ATTEMPTS; attempt += 1) {
+        row.attempts = attempt;
+        if (attempt > 1) await new Promise((r) => setTimeout(r, TIMING_RETRY_WAIT_MS));
+        try {
+          await performAction(page, step, inputs, sel);
+          row.status = "ok";
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      // L2–L4: stored alternatives → visual spatial → agent recovery
+      if (lastError) {
+        // Skip recovery for disabled elements — application-state issue, not UI drift
+        let isDisabled = false;
+        if (sel) {
+          try {
+            const loc = page.locator(sel).first();
+            isDisabled = await loc.isDisabled({ timeout: 1000 }).catch(() => false);
+            if (!isDisabled) {
+              const aria = await loc.getAttribute("aria-disabled", { timeout: 1000 }).catch(() => null);
+              isDisabled = aria === "true";
             }
+          } catch (_) {}
+        }
+        if (isDisabled) {
+          row.error = "element disabled — application-state issue, not UI drift; recovery skipped";
+        } else {
+          const result = await applyRecovery(
+            page,
+            { skill, step: stepIdx, error: String(lastError), page },
+            (s) => performAction(page, step, inputs, s)
+          );
+          if (result) {
+            row.status = "recovered";
+            row.recovered_via = result.selector;
+            row.recovered_layer = result.layer;
+            lastError = null;
           }
         }
-        if (attempt === attempts) throw lastError;
       }
+    } else if (PLAIN_RETRY_ACTION_TYPES.has(type)) {
+      for (let attempt = 1; attempt <= NAV_CHECK_TOTAL_ATTEMPTS; attempt += 1) {
+        row.attempts = attempt;
+        try {
+          await performAction(page, step, inputs, sel);
+          row.status = "ok";
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
+          if (attempt === NAV_CHECK_TOTAL_ATTEMPTS) throw lastError;
+        }
+      }
+    } else {
+      row.attempts = 1;
+      await performAction(page, step, inputs, sel);
+      row.status = "ok";
     }
+
     if (lastError) throw lastError;
   } catch (err) {
     row.status = "failed";
@@ -383,53 +439,25 @@ function getRecoveryEntry(ctx) {
   return recovery.steps.find((entry) => stepId(entry && entry.step_id) === currentStep) || null;
 }
 
-function buildTextVariantSelectors(entry) {
-  const fallback = entry && typeof entry.fallback === "object" ? entry.fallback : {};
-  const variants = Array.isArray(fallback.text_variants) ? fallback.text_variants : [];
-  return variants
-    .map((text) => (typeof text === "string" && text.trim() ? `text=${JSON.stringify(text.trim())}` : ""))
-    .filter(Boolean);
-}
+function runStoredAlternatives(ctx, entry) {
+  if (!entry) return null;
+  const selectorCtx = entry.selector_context && typeof entry.selector_context === "object" ? entry.selector_context : {};
+  const fallback = entry.fallback && typeof entry.fallback === "object" ? entry.fallback : {};
+  const anchors = Array.isArray(entry.anchors) ? entry.anchors : [];
 
-function runSelectorFallback(ctx, entry) {
-  const selectorContext = entry && typeof entry.selector_context === "object" ? entry.selector_context : {};
-  const primary = typeof selectorContext.primary === "string" ? selectorContext.primary : "";
-  const alternatives = Array.isArray(selectorContext.alternatives) ? selectorContext.alternatives : [];
-  const candidates = uniqueStrings([primary, ...alternatives, ...buildTextVariantSelectors(entry)]);
+  const primary = typeof selectorCtx.primary === "string" ? selectorCtx.primary : "";
+  const alternatives = Array.isArray(selectorCtx.alternatives) ? selectorCtx.alternatives : [];
+  const textVariants = (Array.isArray(fallback.text_variants) ? fallback.text_variants : [])
+    .filter((t) => typeof t === "string" && t.trim())
+    .map((t) => `text=${JSON.stringify(t.trim())}`);
+  const anchorSelectors = anchors
+    .filter((a) => a && typeof a.text === "string" && a.text.trim())
+    .sort((a, b) => (Number(b.priority) || 1) - (Number(a.priority) || 1))
+    .map((a) => `text=${JSON.stringify(a.text.trim())}`);
+
+  const candidates = uniqueStrings([primary, ...alternatives, ...textVariants, ...anchorSelectors]);
   if (!candidates.length) return null;
-  return {
-    layer: 1,
-    strategy: "selector_fallback",
-    candidates,
-    recovery_entry: entry,
-  };
-}
-
-function runAnchorFallback(ctx, entry) {
-  const anchors = Array.isArray(entry && entry.anchors) ? entry.anchors : [];
-  const fallback = entry && typeof entry.fallback === "object" ? entry.fallback : {};
-  const target = entry && typeof entry.target === "object" ? entry.target : {};
-  const role = typeof fallback.role === "string" && fallback.role.trim()
-    ? fallback.role.trim()
-    : (typeof target.role === "string" ? target.role.trim() : "");
-  const texts = uniqueStrings(
-    anchors
-      .map((anchor) => (anchor && typeof anchor === "object" ? anchor.text : ""))
-      .filter(Boolean)
-  );
-  if (!texts.length && !role) return null;
-  return {
-    layer: 2,
-    strategy: "anchor_fallback",
-    anchors: anchors
-      .filter((anchor) => anchor && typeof anchor === "object" && typeof anchor.text === "string" && anchor.text.trim())
-      .map((anchor) => ({
-        text: anchor.text.trim(),
-        priority: Number.isFinite(Number(anchor.priority)) ? Number(anchor.priority) : 1,
-      })),
-    role,
-    recovery_entry: entry,
-  };
+  return { layer: 1, strategy: "selector_fallback", candidates, recovery_entry: entry };
 }
 
 function truncateText(value, maxLength) {
@@ -437,14 +465,16 @@ function truncateText(value, maxLength) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
-async function captureDomSnapshot(page) {
+async function captureDomSnapshot(page, limit) {
   if (!page || typeof page.evaluate !== "function") return "";
+  const elementLimit = typeof limit === "number" ? limit : 120;
+  const textLimit = typeof limit === "number" ? 60000 : 12000;
+  const bodyTextLimit = typeof limit === "number" ? 10000 : 3000;
   try {
-    return truncateText(await page.evaluate(() => {
+    return truncateText(await page.evaluate((elementLimit, bodyTextLimit) => {
       const visibleText = (node) => (node.innerText || node.textContent || "").replace(/\\s+/g, " ").trim();
-      const elements = Array.from(document.querySelectorAll("button,a,input,textarea,select,[role],[aria-label],[placeholder],[data-testid]"))
-        .slice(0, 120)
-        .map((el) => {
+      const all = Array.from(document.querySelectorAll("button,a,input,textarea,select,[role],[aria-label],[placeholder],[data-testid]"));
+      const elements = (elementLimit > 0 ? all.slice(0, elementLimit) : all).map((el) => {
           const rect = el.getBoundingClientRect();
           return {
             tag: el.tagName.toLowerCase(),
@@ -462,13 +492,13 @@ async function captureDomSnapshot(page) {
       return {
         url: location.href,
         title: document.title,
-        body_text: visibleText(document.body).slice(0, 3000),
+        body_text: visibleText(document.body).slice(0, bodyTextLimit),
         elements,
       };
-    }), 12000);
+    }, elementLimit, bodyTextLimit), textLimit);
   } catch (_) {
     try {
-      return truncateText(await page.content(), 12000);
+      return truncateText(await page.content(), textLimit);
     } catch (_) {
       return "";
     }
@@ -485,89 +515,71 @@ async function captureScreenshotBase64(page) {
   }
 }
 
-function parseLlmSelectors(text) {
-  if (!text) return [];
-  const match = text.match(/\\{[\\s\\S]*\\}/);
-  if (!match) return [];
-  try {
-    const parsed = JSON.parse(match[0]);
-    return uniqueStrings(Array.isArray(parsed.selectors) ? parsed.selectors : []);
-  } catch (_) {
-    return [];
-  }
-}
-
-async function runLlmIntentRecovery(ctx, entry) {
-  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.SKILL_LLM_API_KEY;
-  if (!apiKey || !ctx || !ctx.page) return null;
+async function runAgentRecovery(ctx, entry) {
+  if (!ctx || !ctx.page) return null;
 
   const [domResult, screenshotResult] = await Promise.allSettled([
-    captureDomSnapshot(ctx.page),
+    captureDomSnapshot(ctx.page, 0),
     captureScreenshotBase64(ctx.page),
   ]);
   const dom = domResult.status === "fulfilled" ? domResult.value : "";
   const screenshot = screenshotResult.status === "fulfilled" ? screenshotResult.value : "";
 
-  const prompt = [
-    "Suggest Playwright selectors for recovering a failed browser automation step.",
-    "Return only JSON: {\\"selectors\\":[\\"selector1\\",\\"selector2\\"]}.",
-    "Prefer robust selectors: role selectors, text selectors, input attributes, aria labels, placeholders, data-testid.",
-    `Error: ${truncateText(ctx.error || "", 2000)}`,
-    `Recovery entry: ${truncateText(entry || {}, 4000)}`,
-    `Current DOM summary: ${dom}`,
-  ].join("\\n\\n");
+  const pluginRoot = path.join(__dirname, "..");
+  const responsePath = path.join(pluginRoot, "RECOVERY_RESPONSE.json");
 
-  const content = [{ type: "text", text: prompt }];
-  if (screenshot) {
-    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: screenshot } });
-  }
+  // Clear any stale response from a previous recovery attempt
+  try { fs.unlinkSync(responsePath); } catch (_) {}
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Number(process.env.CONXA_LLM_RECOVERY_TIMEOUT_MS) || 8000);
+  // Write context for Claude Code — the orchestrating agent IS the L4 recovery layer
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.ANTHROPIC_RECOVERY_MODEL || "claude-haiku-4-5-20251001",
-        max_tokens: 200,
-        messages: [{ role: "user", content }],
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const text = data.content && data.content[0] ? data.content[0].text || "" : "";
-    const selectors = parseLlmSelectors(text);
-    if (!selectors.length) return null;
-    return {
-      layer: 3,
-      strategy: "selector_fallback",
-      candidates: selectors,
-      recovery_entry: entry,
-    };
-  } catch (_) {
-    return null;
-  } finally {
-    clearTimeout(timer);
+    fs.writeFileSync(
+      path.join(pluginRoot, "RECOVERY_CONTEXT.json"),
+      JSON.stringify({
+        skill: ctx.skill,
+        step: ctx.step,
+        error: ctx.error || "",
+        recovery_entry: entry,
+        dom_snapshot: typeof dom === "string" ? dom : JSON.stringify(dom),
+        screenshot_saved: !!screenshot,
+        timestamp: new Date().toISOString(),
+        instructions: "Write RECOVERY_RESPONSE.json with: {\\\"selectors\\\": [\\\"...correct playwright selector...\\\"]}. Analyze RECOVERY_CONTEXT.json dom_snapshot and RECOVERY_SCREENSHOT.jpeg to find the right selector for the failed intent.",
+      }, null, 2),
+      "utf8"
+    );
+    if (screenshot) {
+      fs.writeFileSync(path.join(pluginRoot, "RECOVERY_SCREENSHOT.jpeg"), Buffer.from(screenshot, "base64"));
+    }
+  } catch (_) { return null; }
+
+  // Pause execution and poll for Claude Code's response — browser stays open
+  const timeoutMs = Number(process.env.AGENT_RECOVERY_TIMEOUT_MS) || 120000;
+  const deadline = Date.now() + timeoutMs;
+  process.stdout.write(`\\n[recovery] L4 agent recovery — step ${ctx.step} paused, waiting for RECOVERY_RESPONSE.json (${timeoutMs / 1000}s timeout)\\n`);
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1000));
+    if (!fs.existsSync(responsePath)) continue;
+    try {
+      const response = JSON.parse(fs.readFileSync(responsePath, "utf8"));
+      const selectors = Array.isArray(response.selectors) ? response.selectors.filter((s) => typeof s === "string" && s.trim()) : [];
+      if (!selectors.length) continue;
+      try { fs.unlinkSync(responsePath); } catch (_) {}
+      process.stdout.write(`[recovery] agent provided selector(s): ${selectors.join(", ")}\\n`);
+      return { layer: 3, strategy: "selector_fallback", candidates: selectors, recovery_entry: entry };
+    } catch (_) {}
   }
+
+  process.stdout.write(`[recovery] agent recovery timeout — step ${ctx.step} will fail\\n`);
+  return null;
 }
 
-function resolveVisualRef(ctx, entry) {
-  const visualRef = entry && typeof entry.visual_ref === "string" ? entry.visual_ref.trim() : "";
-  if (!visualRef) return "";
-  if (path.isAbsolute(visualRef)) return visualRef;
-  return path.join(skillDir(ctx && ctx.skill), visualRef);
-}
-
-async function runVisionRecovery(ctx, entry) {
+async function runVisualSpatial(ctx, entry) {
   const page = ctx && ctx.page;
-  const visualPath = resolveVisualRef(ctx, entry);
-  if (!page || !visualPath || !fs.existsSync(visualPath)) return null;
+  const visualRef = entry && typeof entry.visual_ref === "string" ? entry.visual_ref.trim() : "";
+  if (!page || !visualRef) return null;
+  const visualPath = path.isAbsolute(visualRef) ? visualRef : path.join(skillDir(ctx && ctx.skill), visualRef);
+  if (!fs.existsSync(visualPath)) return null;
 
   let current;
   try {
@@ -578,9 +590,10 @@ async function runVisionRecovery(ctx, entry) {
 
   const target = entry && typeof entry.target === "object" ? entry.target : {};
   const fallback = entry && typeof entry.fallback === "object" ? entry.fallback : {};
+  const refExt = path.extname(visualPath).toLowerCase() === ".png" ? "png" : "jpeg";
   const payload = {
     currentDataUrl: `data:image/png;base64,${Buffer.from(current).toString("base64")}`,
-    refDataUrl: `data:image/${path.extname(visualPath).toLowerCase() === ".png" ? "png" : "jpeg"};base64,${fs.readFileSync(visualPath).toString("base64")}`,
+    refDataUrl: `data:image/${refExt};base64,${fs.readFileSync(visualPath).toString("base64")}`,
     targetText: typeof target.text === "string" ? target.text.trim() : "",
     targetRole: typeof target.role === "string" ? target.role.trim() : "",
     fallbackRole: typeof fallback.role === "string" ? fallback.role.trim() : "",
@@ -590,71 +603,20 @@ async function runVisionRecovery(ctx, entry) {
   try {
     candidates = await page.evaluate(async ({ currentDataUrl, refDataUrl, targetText, targetRole, fallbackRole }) => {
       const loadImage = (src) => new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = reject;
-        image.src = src;
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
       });
       const [current, reference] = await Promise.all([loadImage(currentDataUrl), loadImage(refDataUrl)]);
-      const scale = Math.min(1, 180 / Math.max(current.width, current.height, reference.width, reference.height));
-      const width = Math.max(1, Math.floor(Math.min(current.width, reference.width) * scale));
-      const height = Math.max(1, Math.floor(Math.min(current.height, reference.height) * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width * 2;
-      canvas.height = height;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      context.drawImage(current, 0, 0, width, height);
-      context.drawImage(reference, width, 0, width, height);
-      const a = context.getImageData(0, 0, width, height).data;
-      const b = context.getImageData(width, 0, width, height).data;
-      const changed = new Uint8Array(width * height);
-      for (let i = 0, p = 0; i < a.length; i += 4, p++) {
-        changed[p] = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 42 ? 1 : 0;
-      }
 
-      const components = [];
-      const queue = [];
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const start = y * width + x;
-          if (!changed[start]) continue;
-          changed[start] = 0;
-          let minX = x, maxX = x, minY = y, maxY = y, count = 0;
-          queue.length = 0;
-          queue.push(start);
-          for (let q = 0; q < queue.length; q++) {
-            const idx = queue[q];
-            const cx = idx % width;
-            const cy = (idx / width) | 0;
-            count++;
-            if (cx < minX) minX = cx;
-            if (cx > maxX) maxX = cx;
-            if (cy < minY) minY = cy;
-            if (cy > maxY) maxY = cy;
-            const next = [idx - 1, idx + 1, idx - width, idx + width];
-            for (const ni of next) {
-              if (ni < 0 || ni >= changed.length || !changed[ni]) continue;
-              const nx = ni % width;
-              if ((ni === idx - 1 || ni === idx + 1) && Math.abs(nx - cx) !== 1) continue;
-              changed[ni] = 0;
-              queue.push(ni);
-            }
-          }
-          if (count >= 6) components.push({ minX, maxX, minY, maxY, count });
-        }
-      }
-
+      // Shared helpers — defined first so both phases can use them
       const needle = String(targetText || "").toLowerCase();
       const wantedRole = String(fallbackRole || targetRole || "").toLowerCase();
       const seen = new Set();
       const out = [];
-      const add = (selector) => {
-        if (selector && !seen.has(selector)) {
-          seen.add(selector);
-          out.push(selector);
-        }
-      };
-      const attr = (value) => String(value).replace(/["\\\\]/g, "\\\\$&");
+      const add = (sel) => { if (sel && !seen.has(sel)) { seen.add(sel); out.push(sel); } };
+      const attr = (v) => String(v).replace(/["\\\\]/g, "\\\\$&");
       const textOf = (el) => (el.innerText || el.value || el.getAttribute("aria-label") || "").trim().replace(/\\s+/g, " ");
       const selectorsFor = (el) => {
         const tag = el.tagName.toLowerCase();
@@ -687,32 +649,103 @@ async function runVisionRecovery(ctx, entry) {
         return value;
       };
 
-      const scaleX = current.width / width;
-      const scaleY = current.height / height;
+      // Phase 1: Red box hint — find original element position marked in reference screenshot
+      {
+        const rb = document.createElement("canvas");
+        rb.width = reference.naturalWidth; rb.height = reference.naturalHeight;
+        const rbCtx = rb.getContext("2d", { willReadFrequently: true });
+        rbCtx.drawImage(reference, 0, 0);
+        const rbData = rbCtx.getImageData(0, 0, rb.width, rb.height).data;
+        let rbMinX = rb.width, rbMaxX = 0, rbMinY = rb.height, rbMaxY = 0, rbCount = 0;
+        for (let y = 0; y < rb.height; y++) {
+          for (let x = 0; x < rb.width; x++) {
+            const i = (y * rb.width + x) * 4;
+            if (rbData[i] > 200 && rbData[i + 1] < 80 && rbData[i + 2] < 80) {
+              if (x < rbMinX) rbMinX = x; if (x > rbMaxX) rbMaxX = x;
+              if (y < rbMinY) rbMinY = y; if (y > rbMaxY) rbMaxY = y;
+              rbCount++;
+            }
+          }
+        }
+        if (rbCount > 20) {
+          const scX = current.naturalWidth / rb.width;
+          const scY = current.naturalHeight / rb.height;
+          const rbCX = ((rbMinX + rbMaxX) / 2) * scX;
+          const rbCY = ((rbMinY + rbMaxY) / 2) * scY;
+          for (const el of document.elementsFromPoint(rbCX, rbCY)) {
+            for (let cur = el; cur && cur !== document.body; cur = cur.parentElement) {
+              if (score(cur, { count: 50000 }) > 0) { selectorsFor(cur); break; }
+            }
+          }
+        }
+      }
+
+      // Phase 2: Pixel diff — find changed regions as secondary fallback
+      const scale = Math.min(1, 180 / Math.max(current.naturalWidth, current.naturalHeight, reference.naturalWidth, reference.naturalHeight));
+      const width = Math.max(1, Math.floor(Math.min(current.naturalWidth, reference.naturalWidth) * scale));
+      const height = Math.max(1, Math.floor(Math.min(current.naturalHeight, reference.naturalHeight) * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width * 2; canvas.height = height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context.drawImage(current, 0, 0, width, height);
+      context.drawImage(reference, width, 0, width, height);
+      const a = context.getImageData(0, 0, width, height).data;
+      const b = context.getImageData(width, 0, width, height).data;
+      const changed = new Uint8Array(width * height);
+      for (let i = 0, p = 0; i < a.length; i += 4, p++) {
+        changed[p] = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 42 ? 1 : 0;
+      }
+
+      const components = [];
+      const queue = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const start = y * width + x;
+          if (!changed[start]) continue;
+          changed[start] = 0;
+          let minX = x, maxX = x, minY = y, maxY = y, count = 0;
+          queue.length = 0;
+          queue.push(start);
+          for (let q = 0; q < queue.length; q++) {
+            const idx = queue[q];
+            const cx = idx % width;
+            const cy = (idx / width) | 0;
+            count++;
+            if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+            if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+            const next = [idx - 1, idx + 1, idx - width, idx + width];
+            for (const ni of next) {
+              if (ni < 0 || ni >= changed.length || !changed[ni]) continue;
+              const nx = ni % width;
+              if ((ni === idx - 1 || ni === idx + 1) && Math.abs(nx - cx) !== 1) continue;
+              changed[ni] = 0;
+              queue.push(ni);
+            }
+          }
+          if (count >= 6) components.push({ minX, maxX, minY, maxY, count });
+        }
+      }
+
+      const scaleX = current.naturalWidth / width;
+      const scaleY = current.naturalHeight / height;
       components
-        .sort((left, right) => right.count - left.count)
-        .slice(0, 8)
+        .sort((l, r) => r.count - l.count)
         .map((component) => {
           const x = ((component.minX + component.maxX + 1) / 2) * scaleX;
           const y = ((component.minY + component.maxY + 1) / 2) * scaleY;
-          let best = null;
-          let bestScore = -1;
+          let best = null, bestScore = -1;
           for (const el of document.elementsFromPoint(x, y)) {
             for (let cur = el; cur && cur !== document.body; cur = cur.parentElement) {
-              const value = score(cur, component);
-              if (value > bestScore) {
-                best = cur;
-                bestScore = value;
-              }
+              const v = score(cur, component);
+              if (v > bestScore) { best = cur; bestScore = v; }
             }
           }
           return { best, bestScore };
         })
-        .sort((left, right) => right.bestScore - left.bestScore)
-        .forEach(({ best }) => {
-          if (best) selectorsFor(best);
-        });
-      return out.slice(0, 12);
+        .sort((l, r) => r.bestScore - l.bestScore)
+        .forEach(({ best }) => { if (best) selectorsFor(best); });
+
+      return out;
     }, payload);
   } catch (_) {
     return null;
@@ -720,37 +753,24 @@ async function runVisionRecovery(ctx, entry) {
 
   const selectorCandidates = uniqueStrings(candidates);
   if (!selectorCandidates.length) return null;
-  return {
-    layer: 4,
-    strategy: "selector_fallback",
-    candidates: selectorCandidates,
-    recovery_entry: entry,
-  };
+  return { layer: 2, strategy: "selector_fallback", candidates: selectorCandidates, recovery_entry: entry };
 }
 
 async function runLayer(layer, ctx) {
   tracker.send(`${ctx.skill}:${ctx.step}:${layer}`);
   const entry = getRecoveryEntry(ctx);
   switch (layer) {
-    case 1:
-      return runSelectorFallback(ctx, entry);
-    case 2:
-      return runAnchorFallback(ctx, entry);
-    case 3:
-      return runLlmIntentRecovery(ctx, entry);
-    case 4:
-      return runVisionRecovery(ctx, entry);
-    default:
-      throw new Error(`Unknown recovery layer: ${layer}`);
+    case 1: return runStoredAlternatives(ctx, entry);
+    case 2: return runVisualSpatial(ctx, entry);
+    case 3: return runAgentRecovery(ctx, entry);
+    default: throw new Error(`Unknown recovery layer: ${layer}`);
   }
 }
 
 async function runRecovery(ctx) {
-  for (const layer of [1, 2, 3, 4]) {
+  for (const layer of [1, 2, 3]) {
     const result = await runLayer(layer, ctx);
-    if (result) {
-      return result;
-    }
+    if (result) return result;
   }
   tracker.send(`${ctx.skill}:${ctx.step}:0`);
   throw new Error(`All recovery layers exhausted for ${ctx.skill}:${ctx.step}`);

@@ -1,7 +1,0 @@
-{
-  "name": "conxa-plugin-runtime",
-  "private": true,
-  "dependencies": {
-    "playwright": "^1.47.0"
-  }
-}
