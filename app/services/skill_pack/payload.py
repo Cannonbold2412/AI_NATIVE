@@ -237,17 +237,24 @@ def _sanitize_recording_step_for_llm(step: dict[str, Any]) -> dict[str, Any] | N
         if "inner_text" in target:
             target["inner_text"] = _trim_str(target["inner_text"], _MAX_INNER_TEXT)
 
-    selectors = c.get("selectors")
-    if isinstance(selectors, dict):
-        selectors.pop("xpath", None)
-        best = next(
-            (selectors[k] for k in _SELECTOR_PRIORITY if selectors.get(k)),
-            None,
-        )
-        if best:
-            c["selectors"] = {"selector": best}
-        else:
-            c.pop("selectors", None)
+    # For fill/type actions, derive input[name="..."] from target.name (DOM attribute).
+    # This ensures the LLM receives the exact correct selector rather than inferring it.
+    action_type = _get_step_action_type(c)
+    target_name = (c.get("target") or {}).get("name") or ""
+    if action_type in {"type", "fill", "input"} and target_name:
+        c["selectors"] = {"selector": f'input[name="{target_name}"]'}
+    else:
+        selectors = c.get("selectors")
+        if isinstance(selectors, dict):
+            selectors.pop("xpath", None)
+            best = next(
+                (selectors[k] for k in _SELECTOR_PRIORITY if selectors.get(k)),
+                None,
+            )
+            if best:
+                c["selectors"] = {"selector": best}
+            else:
+                c.pop("selectors", None)
 
     context = c.get("context")
     if isinstance(context, dict):
