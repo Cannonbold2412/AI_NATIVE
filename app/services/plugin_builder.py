@@ -1341,7 +1341,7 @@ If `execute_plan` returns an error:
 3. Call `read_skill_files("auth_login")` → get login steps + recovery
 4. Call `read_skill_files("delete_database")` → get delete steps + recovery
 5. Merge: [login steps] + [navigate to DB] + [delete DB] + [confirm delete]
-6. Call `execute_plan(steps=[merged], inputs={database: "conxa-db"})`
+6. Call `execute_plan(steps=[merged], inputs={{"database": "conxa-db"}})`
 7. Browser opens, executes all steps, closes
 8. Return screenshot confirming deletion
 
