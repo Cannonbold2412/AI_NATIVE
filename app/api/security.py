@@ -17,6 +17,7 @@ PUBLIC_PATHS = {
     "/health",
     "/api/v1/health",
     "/api/v1/webhooks/stripe",
+    "/api/v1/integrations/github/callback",
 }
 
 
@@ -26,7 +27,8 @@ def _request_id(request: Request) -> str:
 
 
 def _is_public_path(path: str) -> bool:
-    return path in PUBLIC_PATHS
+    normalized = path.rstrip("/") or "/"
+    return normalized in PUBLIC_PATHS
 
 
 def _bearer_token(request: Request) -> str:
@@ -90,7 +92,8 @@ class ProductionRequestMiddleware(BaseHTTPMiddleware):
                     headers={"x-request-id": rid},
                 )
 
-        if settings.auth_required and not _is_public_path(request.url.path):
+        is_public = _is_public_path(request.url.path)
+        if settings.auth_required and not is_public:
             try:
                 claims = verify_clerk_jwt(_bearer_token(request))
             except HTTPException as exc:
@@ -104,6 +107,9 @@ class ProductionRequestMiddleware(BaseHTTPMiddleware):
                 "org_id": claims.get("org_id") or claims.get("orgid"),
                 "claims": claims,
             }
+            request.state.workspace_id = (
+                claims.get("org_id") or claims.get("orgid") or claims.get("sub")
+            )
 
         response = await call_next(request)
         response.headers["x-request-id"] = rid

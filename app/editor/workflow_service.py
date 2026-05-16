@@ -289,8 +289,17 @@ def collect_suggestions(steps: list[dict[str, Any]], policy: dict[str, Any]) -> 
                     message="wait_for element_appear needs a selector target or primary_selector on the step.",
                 )
             )
+        cw = (step.get("confidence_protocol") or {}).get("compile_warnings") or {}
+        if isinstance(cw, dict) and cw.get("vision_anchor_fallback"):
+            items.append(
+                SuggestionItem(
+                    step_index=idx,
+                    severity="warn",
+                    code="vision_anchor_fallback",
+                    message="Vision anchors were unavailable during compile; deterministic anchors were used.",
+                )
+            )
         if destructive_compiler_step(skill_step_for_destructive_check(step), policy):
-            cw = (step.get("confidence_protocol") or {}).get("compile_warnings") or {}
             if isinstance(cw, dict) and cw.get("destructive_low_anchor_count"):
                 items.append(
                     SuggestionItem(
@@ -369,6 +378,7 @@ def step_to_dto(
         intent=intent_top,
         final_intent=final_intent,
         url=_step_url(step),
+        url_state=dict(step.get("url_state") or {}),
         target=dict(step.get("target") or {}),
         selectors=dict(signals.get("selectors") or {}),
         anchors_signals=[] if is_url_check else normalize_anchor_list(signals.get("anchors") or []),

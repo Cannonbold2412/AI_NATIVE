@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/layout/AppLayout'
@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 import {
   AlertCircle,
   ChevronDown,
+  ChevronLeft,
   Copy,
   Home,
   Image as ImageIcon,
@@ -58,16 +59,23 @@ export function HumanEditPage() {
   const EDITOR_SIDEBAR_WIDTH_KEY = 'ai-native-editor-sidebar-width'
   const EDITOR_SIDEBAR_MIN = 280
   const EDITOR_SIDEBAR_MAX = 560
+  const TOOLS_PANE_WIDTH_KEY = 'ai-native-editor-tools-pane-width'
+  const TOOLS_PANE_MIN = 320
+  const TOOLS_PANE_MAX = 640
   const params = useParams<{ skillId?: string | string[] }>()
   const skillIdParam = Array.isArray(params?.skillId) ? params.skillId[0] : params?.skillId
   const skillId = skillIdParam?.trim() || null
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const fromPath = searchParams?.get('from') ? decodeURIComponent(searchParams.get('from')!) : null
   const qc = useQueryClient()
   const [flowStatus, setFlowStatus] = useState('Load a saved skill to edit, or go home to record a new one.')
   const [resumePick, setResumePick] = useState('')
   const [manualSkillId, setManualSkillId] = useState('')
   const [workflowPaneWidth, setWorkflowPaneWidth] = useState(340)
   const [isResizingPane, setIsResizingPane] = useState(false)
+  const [toolsPaneWidth, setToolsPaneWidth] = useState(384)
+  const [isResizingToolsPane, setIsResizingToolsPane] = useState(false)
   const [showValidationPane, setShowValidationPane] = useState(false)
   const [showSuggestionsPane, setShowSuggestionsPane] = useState(true)
   const [showVariablesPane, setShowVariablesPane] = useState(false)
@@ -135,6 +143,18 @@ export function HumanEditPage() {
   }, [workflowPaneWidth])
 
   useEffect(() => {
+    const stored = window.localStorage.getItem(TOOLS_PANE_WIDTH_KEY)
+    if (!stored) return
+    const parsed = Number.parseInt(stored, 10)
+    if (Number.isNaN(parsed)) return
+    setToolsPaneWidth(Math.max(TOOLS_PANE_MIN, Math.min(TOOLS_PANE_MAX, parsed)))
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(TOOLS_PANE_WIDTH_KEY, String(toolsPaneWidth))
+  }, [toolsPaneWidth])
+
+  useEffect(() => {
     if (!isResizingPane) return
     const onMouseMove = (event: MouseEvent) => {
       const rect = splitPaneRef.current?.getBoundingClientRect()
@@ -159,6 +179,32 @@ export function HumanEditPage() {
       document.body.style.userSelect = ''
     }
   }, [isResizingPane])
+
+  useEffect(() => {
+    if (!isResizingToolsPane) return
+    const onMouseMove = (event: MouseEvent) => {
+      const rect = splitPaneRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const proposed = rect.right - event.clientX
+      const nextWidth = Math.max(TOOLS_PANE_MIN, Math.min(TOOLS_PANE_MAX, proposed))
+      setToolsPaneWidth(nextWidth)
+    }
+    const onMouseUp = () => {
+      setIsResizingToolsPane(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizingToolsPane])
 
   const runValidate = () => {
     if (!skillId) return
@@ -256,7 +302,7 @@ export function HumanEditPage() {
     setFlowStatus('Finished editing; your skill stays the same id and title on disk.')
     void qc.invalidateQueries({ queryKey: ['skillList'] })
     toast.success(`${skillId} saved in place — same skill id as when you compiled from the recording.`)
-    router.push('/edit')
+    router.push(fromPath ?? '/edit')
   }
 
   const toggleToolsPane = (pane: 'validation' | 'suggestions' | 'variables' | 'screenshots') => {
@@ -536,7 +582,9 @@ export function HumanEditPage() {
             </CardHeader>
             <CardContent>
               <Button variant="default" asChild className="bg-white text-black hover:bg-zinc-200">
-                <Link href="/edit">Back to choose skill</Link>
+                <Link href={fromPath ?? '/edit'}>
+                  {fromPath ? 'Back to Plugin' : 'Back to choose skill'}
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -554,6 +602,7 @@ export function HumanEditPage() {
   const suggestionCount = wf.suggestions.length
   const splitPaneStyle = {
     ['--workflow-pane-width' as string]: `${workflowPaneWidth}px`,
+    ['--tools-pane-width' as string]: `${toolsPaneWidth}px`,
   } as CSSProperties
 
   return (
@@ -596,6 +645,18 @@ export function HumanEditPage() {
       }
       actions={
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {fromPath && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
+              onClick={() => router.push(fromPath)}
+              title="Back to plugin"
+            >
+              <ChevronLeft className="size-3.5" />
+              <span className="hidden sm:inline">Back to Plugin</span>
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]" asChild>
             <Link href="/" title="Start a new recording (home)">
               <Home className="size-3.5" />
@@ -607,57 +668,48 @@ export function HumanEditPage() {
               type="button"
               size="sm"
               variant="outline"
-              className="border-white/10 bg-black text-white hover:bg-zinc-900"
+              className="relative border-white/10 bg-black pr-7 text-white hover:bg-zinc-900"
               onClick={runValidate}
+              title="Runs fast static checks on the skill you’re editing"
             >
               Check Issues
-            </Button>
-            <span className="text-zinc-500 hover:text-zinc-400" title="Runs fast static checks on the skill you’re editing">
-              <Info className="size-3.5 shrink-0" aria-hidden />
+              <Info className="absolute top-1 right-1 size-3 shrink-0 opacity-80" aria-hidden />
               <span className="sr-only">About Check Issues</span>
-            </span>
+            </Button>
           </span>
           <span className="inline-flex items-center gap-1">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
+              className="relative border-white/10 bg-white/[0.04] pr-7 text-zinc-200 hover:bg-white/[0.08]"
               onClick={rebuildSkillFromRecording}
-            >
-              Rebuild from recording
-            </Button>
-            <span
-              className="text-zinc-500 hover:text-zinc-400"
               title="Discards saved editor changes and regenerates from the recording (destructive)."
             >
-              <Info className="size-3.5 shrink-0" aria-hidden />
+              Rebuild from recording
+              <Info className="absolute top-1 right-1 size-3 shrink-0 opacity-80" aria-hidden />
               <span className="sr-only">About rebuilding from recording</span>
-            </span>
+            </Button>
           </span>
           <span className="inline-flex items-center gap-1">
             <Button
               type="button"
               size="default"
-              className="h-10 bg-white px-5 text-[0.9375rem] font-medium text-black hover:bg-zinc-200 sm:min-w-[6.75rem]"
+              className="relative h-10 bg-white px-5 pr-8 text-[0.9375rem] font-medium text-black hover:bg-zinc-200 sm:min-w-[6.75rem]"
               onClick={() => void finishEditing()}
-            >
-              Finish
-            </Button>
-            <span
-              className="text-zinc-500 hover:text-zinc-400"
               title="Saves the open step if dirty, then returns to the skill list. Keeps this skill id — no duplicate skill."
             >
-              <Info className="size-3.5 shrink-0" aria-hidden />
+              Finish
+              <Info className="absolute top-1 right-1 size-3 shrink-0 opacity-80" aria-hidden />
               <span className="sr-only">About Finish</span>
-            </span>
+            </Button>
           </span>
         </div>
       }
     >
       <div
         ref={splitPaneRef}
-        className="relative grid h-full min-h-0 w-full min-w-0 grid-cols-1 overflow-hidden border-t border-white/8 md:min-h-0 md:[grid-template-columns:var(--workflow-pane-width)_minmax(0,1fr)_24rem] md:items-stretch"
+        className="relative grid h-full min-h-0 w-full min-w-0 grid-cols-1 overflow-hidden border-t border-white/8 md:min-h-0 md:[grid-template-columns:var(--workflow-pane-width)_minmax(0,1fr)_var(--tools-pane-width)] md:items-stretch"
         style={splitPaneStyle}
       >
         <WorkflowViewer
@@ -694,6 +746,19 @@ export function HumanEditPage() {
           onDroppedRecordingScreenshot={onDroppedRecordingScreenshot}
           onClearStepVisual={onClearStepVisual}
         />
+        <div
+          className="group absolute inset-y-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize md:block"
+          style={{ left: `calc(100% - ${toolsPaneWidth}px)` }}
+          onMouseDown={(event) => {
+            event.preventDefault()
+            setIsResizingToolsPane(true)
+          }}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize tools sidebar"
+        >
+          <div className="mx-auto h-full w-px bg-white/10 transition-colors group-hover:bg-white/35 group-active:bg-white/45" />
+        </div>
         <aside className="border-border/60 bg-card/20 supports-[backdrop-filter]:bg-card/10 hidden min-h-0 overflow-hidden border-l p-2 backdrop-blur-sm md:flex md:flex-col md:gap-2">
           <section className="shrink-0 space-y-2 px-1 py-1">
             <h2 className="px-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Tools</h2>
@@ -702,7 +767,7 @@ export function HumanEditPage() {
                 type="button"
                 variant={showValidationPane ? 'default' : 'outline'}
                 className={cn(
-                  'h-10 w-full items-center justify-between gap-2 px-3',
+                  'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
                   showValidationPane
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
@@ -716,17 +781,20 @@ export function HumanEditPage() {
                   <span className="truncate text-sm font-medium">Validation</span>
                 </span>
                 <span
-                  className={cn('inline-flex shrink-0', showValidationPane ? 'text-zinc-700' : 'text-zinc-400')}
+                  className={cn(
+                    'absolute top-1 right-1 inline-flex shrink-0',
+                    showValidationPane ? 'text-zinc-700' : 'text-zinc-400',
+                  )}
                   title="View validation checks and failure details."
                 >
-                  <Info className="size-3.5" />
+                  <Info className="size-3" />
                 </span>
               </Button>
               <Button
                 type="button"
                 variant={showSuggestionsPane ? 'default' : 'outline'}
                 className={cn(
-                  'h-10 w-full items-center justify-between gap-2 px-3',
+                  'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
                   showSuggestionsPane
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
@@ -739,7 +807,7 @@ export function HumanEditPage() {
                   <Lightbulb className={cn('size-4 shrink-0', showSuggestionsPane ? 'text-black' : 'text-amber-300')} />
                   <span className="truncate text-sm font-medium">Suggestions</span>
                 </span>
-                <span className="flex items-center gap-1.5">
+                <span className="ml-auto flex items-center gap-1.5 pr-3">
                   <Badge
                     variant="outline"
                     className={cn('text-[0.65rem]', showSuggestionsPane ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300')}
@@ -747,10 +815,13 @@ export function HumanEditPage() {
                     {suggestionCount}
                   </Badge>
                   <span
-                    className={cn('inline-flex shrink-0', showSuggestionsPane ? 'text-zinc-700' : 'text-zinc-400')}
+                    className={cn(
+                      'absolute top-1 right-1 inline-flex shrink-0',
+                      showSuggestionsPane ? 'text-zinc-700' : 'text-zinc-400',
+                    )}
                     title="Review AI suggestions to improve this workflow."
                   >
-                    <Info className="size-3.5" />
+                    <Info className="size-3" />
                   </span>
                 </span>
               </Button>
@@ -758,7 +829,7 @@ export function HumanEditPage() {
                 type="button"
                 variant={showVariablesPane ? 'default' : 'outline'}
                 className={cn(
-                  'h-10 w-full items-center justify-between gap-2 px-3',
+                  'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
                   showVariablesPane
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
@@ -772,17 +843,20 @@ export function HumanEditPage() {
                   <span className="truncate text-sm font-medium">Input variables</span>
                 </span>
                 <span
-                  className={cn('inline-flex shrink-0', showVariablesPane ? 'text-zinc-700' : 'text-zinc-400')}
+                  className={cn(
+                    'absolute top-1 right-1 inline-flex shrink-0',
+                    showVariablesPane ? 'text-zinc-700' : 'text-zinc-400',
+                  )}
                   title="Configure input variables and replace literals with {{id}} across the workflow."
                 >
-                  <Info className="size-3.5" />
+                  <Info className="size-3" />
                 </span>
               </Button>
               <Button
                 type="button"
                 variant={showScreenshotsPane ? 'default' : 'outline'}
                 className={cn(
-                  'h-10 w-full items-center justify-between gap-2 px-3',
+                  'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
                   showScreenshotsPane
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
@@ -795,7 +869,7 @@ export function HumanEditPage() {
                   <ImageIcon className={cn('size-4 shrink-0', showScreenshotsPane ? 'text-black' : 'text-fuchsia-300')} />
                   <span className="truncate text-sm font-medium">Recording screenshots</span>
                 </span>
-                <span className="flex items-center gap-1.5">
+                <span className="ml-auto flex items-center gap-1.5 pr-3">
                   <Badge
                     variant="outline"
                     className={cn(
@@ -806,16 +880,19 @@ export function HumanEditPage() {
                     {recordingShotsQ.data?.items?.length ?? '—'}
                   </Badge>
                   <span
-                    className={cn('inline-flex shrink-0', showScreenshotsPane ? 'text-zinc-700' : 'text-zinc-400')}
+                    className={cn(
+                      'absolute top-1 right-1 inline-flex shrink-0',
+                      showScreenshotsPane ? 'text-zinc-700' : 'text-zinc-400',
+                    )}
                     title="Recording frames plus “No image” (default): drag onto the preview or a step — swap frame, attach, or strip the screenshot."
                   >
-                    <Info className="size-3.5" />
+                    <Info className="size-3" />
                   </span>
                 </span>
               </Button>
             </div>
           </section>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <ScrollArea className="min-h-0 flex-1">
             <div id="validation-pane">{showValidationPane ? <ValidationReportPanel data={validationReport} defaultOpen /> : null}</div>
             <div id="suggestions-pane">{showSuggestionsPane ? <SuggestionsInlinePanel suggestions={wf.suggestions} /> : null}</div>
             <div id="variables-pane">{showVariablesPane ? <ParameterizationInlinePanel workflow={wf} onSaved={onWorkflowUpdated} /> : null}</div>
@@ -838,7 +915,7 @@ export function HumanEditPage() {
                 />
               ) : null}
             </div>
-          </div>
+          </ScrollArea>
         </aside>
       </div>
     </AppShell>

@@ -46,11 +46,27 @@ async function proxy(request: Request, path: string[]) {
   const body =
     method === 'GET' || method === 'HEAD' ? undefined : await request.text()
 
-  const upstream = await fetch(upstreamUrl, {
-    method,
-    headers,
-    body,
-  })
+  let upstream: Response
+  try {
+    upstream = await fetch(upstreamUrl, {
+      method,
+      headers,
+      body,
+    })
+  } catch (error) {
+    console.error('API proxy request failed', {
+      origin,
+      path: path.join('/'),
+      error,
+    })
+    return Response.json(
+      {
+        detail: 'backend_unavailable',
+        origin,
+      },
+      { status: 503 },
+    )
+  }
 
   const responseHeaders = new Headers()
   upstream.headers.forEach((value, key) => {

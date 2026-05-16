@@ -32,6 +32,7 @@ class StepEditorDTO(BaseModel):
     intent: str = ""
     final_intent: str = ""
     url: str = ""
+    url_state: dict[str, Any] = Field(default_factory=dict)
     target: dict[str, Any] = Field(default_factory=dict)
     selectors: dict[str, Any] = Field(default_factory=dict)
     anchors_signals: list[dict[str, Any]] = Field(default_factory=list)

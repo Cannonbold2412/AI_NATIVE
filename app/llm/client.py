@@ -1,4 +1,4 @@
-"""Shared LLM HTTP client with round-robin API key rotation."""
+"""Shared LLM HTTP client for OpenAI-compatible endpoints."""
 
 from __future__ import annotations
 
@@ -16,8 +16,6 @@ from urllib.parse import urlparse, urlunparse
 from app.config import settings
 
 _REQUEST_COUNTER = itertools.count(1)
-_KEY_INDEX = 0
-_KEY_LOCK = threading.Lock()
 
 
 def _debug_log(message: str) -> None:
@@ -27,12 +25,23 @@ def _debug_log(message: str) -> None:
     print(f"[LLM DEBUG] {ts} | {message}")
 
 
-def _configured_keys() -> list[str]:
-    csv_keys = [k.strip() for k in str(settings.llm_api_keys or "").split(",") if k.strip()]
-    if csv_keys:
-        return csv_keys
-    single = str(settings.llm_api_key or "").strip()
-    return [single] if single else []
+def _is_vision_task(task: str) -> bool:
+    """True for multimodal vision tasks."""
+    return task in {"anchor_vision", "vision_reasoning"}
+
+
+def _selected_endpoint_and_keys(task: str) -> tuple[str, list[str]]:
+    """Select endpoint and API keys based on task type."""
+    if _is_vision_task(task):
+        endpoint = settings.llm_vision_endpoint
+        api_key_single = settings.llm_vision_api_key
+    else:
+        endpoint = settings.llm_text_endpoint
+        api_key_single = settings.llm_text_api_key
+
+    csv_keys = [k.strip() for k in str(api_key_single or "").split(",") if k.strip()]
+    keys = csv_keys if csv_keys else []
+    return endpoint, keys
 
 
 def _safe_error_snippet(text: str, limit: int = 280) -> str:
@@ -61,9 +70,14 @@ def _is_openai_compatible_endpoint(endpoint: str) -> bool:
     return (parsed.path or "").rstrip("/") == "/v1"
 
 
-def supports_multimodal_chat(endpoint: str | None = None) -> bool:
+def supports_multimodal_chat(task: str | None = None, endpoint: str | None = None) -> bool:
     """True when the configured endpoint uses OpenAI-style chat (vision images supported)."""
-    ep = str(endpoint or settings.llm_endpoint or "").strip()
+    if endpoint:
+        ep = str(endpoint).strip()
+    elif task:
+        ep, _ = _selected_endpoint_and_keys(task)
+    else:
+        ep = str(settings.llm_vision_endpoint or "").strip()
     return bool(ep) and _is_openai_compatible_endpoint(ep)
 
 
@@ -88,9 +102,9 @@ def _legacy_payload(task: str, payload: dict[str, Any]) -> bytes:
 
 
 def _resolved_model(task: str, payload: dict[str, Any]) -> Any:
-    if task == "anchor_vision":
-        return payload.get("model") or settings.llm_vision_model or settings.llm_text_model
-    return payload.get("model") or settings.llm_text_model or settings.llm_vision_model
+    if _is_vision_task(task):
+        return payload.get("model") or settings.llm_vision_model
+    return payload.get("model") or settings.llm_text_model
 
 
 def _openai_messages_for_task(task: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -280,15 +294,11 @@ def _normalize_openai_response(data: dict[str, Any]) -> dict[str, Any]:
     return {"text": content, "output": content}
 
 
-def _next_api_key() -> tuple[str, int, int]:
-    keys = _configured_keys()
+def _next_api_key(keys: list[str]) -> tuple[str, int, int]:
+    """Get first available API key from the provided list."""
     if not keys:
         return "", 0, 0
-    global _KEY_INDEX
-    with _KEY_LOCK:
-        idx = _KEY_INDEX % len(keys)
-        _KEY_INDEX += 1
-    return keys[idx], idx + 1, len(keys)
+    return keys[0], 1, len(keys)
 
 
 def _decode_http_error_body(exc: error.HTTPError) -> str:
@@ -449,22 +459,21 @@ def call_llm(
     *,
     error_detail: list[str] | None = None,
 ) -> dict[str, Any] | None:
-    if not settings.llm_endpoint:
+    endpoint_raw, keys = _selected_endpoint_and_keys(task)
+    if not endpoint_raw:
         return None
 
     req_id = next(_REQUEST_COUNTER)
-    keys = _configured_keys()
-    api_key, key_slot, key_count = _next_api_key()
+    api_key, key_slot, key_count = _next_api_key(keys)
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
     _debug_log(
         "request_sent "
-        f"req_id={req_id} task={task} endpoint={settings.llm_endpoint} "
+        f"req_id={req_id} task={task} endpoint={endpoint_raw} "
         f"key_slot={key_slot}/{key_count} timeout_ms={timeout_ms} keys={len(keys)}"
     )
-    endpoint_raw = settings.llm_endpoint
     use_openai_shape = _is_openai_compatible_endpoint(endpoint_raw)
 
     timeout_s = max(0.2, timeout_ms / 1000.0)

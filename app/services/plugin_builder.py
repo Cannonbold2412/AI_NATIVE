@@ -1,4 +1,4 @@
-"""Plugin-first build pipeline.
+﻿"""Plugin-first build pipeline.
 
 Compiles a Plugin entity (auth session + N workflow sessions) into a
 GitHub-ready plugin folder:
@@ -8,7 +8,7 @@ GitHub-ready plugin folder:
       plugin.json                  <- Claude Code plugin manifest
       marketplace.json             <- Claude Code marketplace catalog
     .mcp.json                      <- auto-start MCP server for Claude Code
-    plugin.config.json            <- versioned manifest (replaces plugin.json)
+    plugin.json                   <- plugin manifest
     README.md                     <- auto-generated, public-facing
     CLAUDE.md                     <- Claude reads this for skill discovery
     .gitignore                    <- excludes auth/auth.json and local state
@@ -592,24 +592,6 @@ def _build_workflow_from_saved_skill(
     (skill_dir / "execution.json").write_text(json.dumps(execution_steps, indent=2, ensure_ascii=False), encoding="utf-8")
     (skill_dir / "recovery.json").write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
     (skill_dir / "input.json").write_text(json.dumps({"inputs": inputs}, indent=2, ensure_ascii=False), encoding="utf-8")
-    (skill_dir / "manifest.json").write_text(
-        json.dumps(
-            {
-                "name": workflow_slug,
-                "description": f"Run the {title} workflow.",
-                "version": "1.0.0",
-                "entry": {
-                    "execution": "./execution.json",
-                    "recovery": "./recovery.json",
-                    "input": "./input.json",
-                },
-                "inputs": [{"name": item["name"], "type": item["type"]} for item in inputs],
-            },
-            indent=2,
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
     (skill_dir / "SKILL.md").write_text(_render_saved_skill_markdown(title, inputs, execution_steps), encoding="utf-8")
 
 
@@ -618,8 +600,7 @@ def _build_workflow_from_saved_skill(
 # ─────────────────────────────────────────────────
 
 def _plugin_bundle_slug(plugin_id: str, plugin_name: str) -> str:
-    base = _to_bundle_slug(plugin_name)
-    return f"{base}_{plugin_id[:8]}"
+    return _to_bundle_slug(plugin_name)
 
 
 def _bundle_root(bundle_slug: str) -> Path:
@@ -631,579 +612,129 @@ def _bundle_root(bundle_slug: str) -> Path:
 
 
 # ─────────────────────────────────────────────────
-# session_manager.js — generated per plugin with
-# protected_url and marker_text injected as constants
+# Template helpers
 # ─────────────────────────────────────────────────
 
-_MCP_SERVER_TEMPLATE = '''\
-#!/usr/bin/env node
-"use strict";
-/**
- * server.js — MCP server for {plugin_name}.
- *
- * Install via Claude Code: Settings → MCP Servers → Add from GitHub
- * Then ask Claude: "call bootstrap_auth to set up your session"
- */
-const {{ Server }} = require("@modelcontextprotocol/sdk/server/index.js");
-const {{ StdioServerTransport }} = require("@modelcontextprotocol/sdk/server/stdio.js");
-const {{ CallToolRequestSchema, ListToolsRequestSchema }} = require("@modelcontextprotocol/sdk/types.js");
-const {{ chromium }} = require("playwright");
-const fs = require("fs");
-const path = require("path");
-
-const PLUGIN_DIR    = path.dirname(require.main.filename);
-const CONFIG        = JSON.parse(fs.readFileSync(path.join(PLUGIN_DIR, "plugin.config.json"), "utf8"));
-const AUTH_JSON     = path.join(PLUGIN_DIR, "auth", "auth.json");
-const LOGIN_DIR     = path.join(PLUGIN_DIR, "auth", "login");
-const PROTECTED_URL = {protected_url};
-const MARKER_TEXT   = {marker_text};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function interpolate(value, inputs) {{
-  if (typeof value !== "string") return value;
-  return value.replace(/\\{{\\{{\\s*([^{{}}]+?)\\s*\\}}\\}}/g, (_, k) => String(inputs[k] ?? ""));
-}}
-
-async function tryLocator(page, sel, timeout) {{
-  try {{ await page.locator(sel).waitFor({{ state: "visible", timeout: timeout || 4000 }}); return true; }}
-  catch (_) {{ return false; }}
-}}
-
-const URL_STATE_WAIT_MS = 2000;
-const URL_STATE_POLL_MS = 100;
-
-async function waitForUrlState(page, urlState) {{
-  if (!urlState || !urlState.url_pattern) return;
-  const pattern = new RegExp(urlState.url_pattern);
-  const deadline = Date.now() + URL_STATE_WAIT_MS;
-  let currentUrl = page.url();
-
-  while (Date.now() <= deadline) {{
-    currentUrl = page.url();
-    if (pattern.test(currentUrl)) return;
-    await page.waitForTimeout(Math.min(URL_STATE_POLL_MS, Math.max(0, deadline - Date.now())));
-  }}
-
-  throw new Error(`URL ${{currentUrl}} does not match expected pattern ${{urlState.url_pattern}}`);
-}}
-
-// ─── Step executor ────────────────────────────────────────────────────────────
-
-async function executeStep(page, step, inputs) {{
-  const type  = step.type;
-  const raw   = step.selector || step.css_selector || (step.target && step.target.css) || "";
-  const sel   = interpolate(raw, inputs);
-
-  if (type === "wait") {{ await page.waitForTimeout(Number(step.ms) || 1000); return; }}
-  if (type === "navigate") {{
-    await page.goto(interpolate(step.url || "", inputs), {{ timeout: 30000, waitUntil: "domcontentloaded" }});
-    return;
-  }}
-  if (type === "scroll") {{
-    if (sel) {{ await page.locator(sel).first().scrollIntoViewIfNeeded({{ timeout: 5000 }}).catch(() => {{}}); }}
-    else      {{ await page.evaluate(`window.scrollBy(${{Number(step.delta_x)||0}}, ${{Number(step.delta_y)||0}})`); }}
-    return;
-  }}
-  if (type === "fill" || type === "type") {{
-    await page.locator(sel).first().fill(interpolate(step.value || "", inputs), {{ timeout: 15000 }});
-    return;
-  }}
-  if (type === "click") {{
-    try {{ await page.locator(sel).first().click({{ timeout: 15000 }}); return; }}
-    catch (err) {{
-      if (String(err).includes("intercepts pointer events")) {{
-        try {{ await page.locator(sel).last().click({{ timeout: 10000 }}); return; }} catch (_) {{}}
-      }}
-      throw err;
-    }}
-  }}
-  if (type === "select") {{
-    await page.locator(sel).first().selectOption(interpolate(step.value || "", inputs), {{ timeout: 15000 }});
-    return;
-  }}
-  if (type === "check") {{
-    const pattern = interpolate(step.pattern || step.check_pattern || "", inputs);
-    if (pattern && !new RegExp(pattern).test(page.url()))
-      throw new Error(`URL check failed: ${{page.url()}} does not match ${{pattern}}`);
-    return;
-  }}
-  // Unknown type — skip
-}}
-
-async function runSkill(page, skillDir, inputs) {{
-  const execPath = path.join(skillDir, "execution.json");
-  if (!fs.existsSync(execPath)) throw new Error(`execution.json not found in ${{skillDir}}`);
-  const exec  = JSON.parse(fs.readFileSync(execPath, "utf8"));
-  const steps = Array.isArray(exec) ? exec
-              : Array.isArray(exec.steps) ? exec.steps
-              : Array.isArray(exec.execution_plan) ? exec.execution_plan : [];
-
-  const recoveryPath = path.join(skillDir, "recovery.json");
-  const recovery = fs.existsSync(recoveryPath)
-    ? JSON.parse(fs.readFileSync(recoveryPath, "utf8"))
-    : {{ steps: [] }};
-
-  for (let i = 0; i < steps.length; i++) {{
-    const step = steps[i];
-    try {{
-      if (step.url_state && step.url_state.before && step.url_state.before.url_pattern) {{
-        await waitForUrlState(page, step.url_state.before);
-      }}
-      await executeStep(page, step, inputs);
-      if (step.url_state && step.url_state.after && step.url_state.after.url_pattern) {{
-        await waitForUrlState(page, step.url_state.after);
-      }}
-    }} catch (err) {{
-      if (String(err.message || err).includes("expected pattern")) {{
-        throw new Error(`Step ${{step.id || i}} (${{step.type}}) failed: ${{err.message}}`);
-      }}
-      // Attempt fallback selectors from recovery.json
-      const stepNumber = i + 1;
-      const rec = (recovery.steps || []).find(r =>
-        (step.id && r.id === step.id) || Number(r.step_id) === stepNumber
-      );
-      let recovered = false;
-      if (rec) {{
-        const selectorContext = rec.selector_context && typeof rec.selector_context === "object" ? rec.selector_context : {{}};
-        const fallback = rec.fallback && typeof rec.fallback === "object" ? rec.fallback : {{}};
-        const anchors = Array.isArray(rec.anchors) ? rec.anchors : [];
-        const candidates = Array.from(new Set([
-          ...(Array.isArray(rec.fallback_selectors) ? rec.fallback_selectors : []),
-          ...(Array.isArray(rec.candidates) ? rec.candidates : []),
-          ...(typeof selectorContext.primary === "string" ? [selectorContext.primary] : []),
-          ...(Array.isArray(selectorContext.alternatives) ? selectorContext.alternatives : []),
-          ...(Array.isArray(fallback.text_variants) ? fallback.text_variants.map(t => `text=${{JSON.stringify(String(t).trim())}}`) : []),
-          ...anchors
-            .filter(a => a && typeof a.text === "string" && a.text.trim())
-            .map(a => `text=${{JSON.stringify(a.text.trim())}}`),
-        ].filter(Boolean)));
-        for (const cand of candidates) {{
-          if (await tryLocator(page, cand, 3000)) {{
-            try {{
-              await executeStep(page, {{ ...step, selector: cand }}, inputs);
-              if (step.url_state && step.url_state.after && step.url_state.after.url_pattern) {{
-                await waitForUrlState(page, step.url_state.after);
-              }}
-              recovered = true;
-              break;
-            }}
-            catch (_) {{}}
-          }}
-        }}
-      }}
-      if (!recovered) throw new Error(`Step ${{step.id || i}} (${{step.type}}) failed: ${{err.message}}`);
-    }}
-  }}
-}}
-
-async function runPlan(page, steps, inputs) {{
-  for (let i = 0; i < steps.length; i++) {{
-    const step = steps[i];
-    try {{
-      if (step.url_state && step.url_state.before && step.url_state.before.url_pattern) {{
-        await waitForUrlState(page, step.url_state.before);
-      }}
-      await executeStep(page, step, inputs);
-      if (step.url_state && step.url_state.after && step.url_state.after.url_pattern) {{
-        await waitForUrlState(page, step.url_state.after);
-      }}
-    }} catch (err) {{
-      // Layer 1: step-embedded alternative selectors
-      const candidates = Array.from(new Set([
-        ...(Array.isArray(step.fallback_selectors) ? step.fallback_selectors : []),
-        ...(Array.isArray(step.candidates) ? step.candidates : []),
-        ...(Array.isArray(step.anchors) ? step.anchors.filter(a => a && typeof a.text === "string").map(a => `text=${{JSON.stringify(a.text.trim())}}`) : []),
-        ...(Array.isArray(step.fallback_text_variants) ? step.fallback_text_variants.map(t => `text=${{JSON.stringify(String(t).trim())}}`) : []),
-      ].filter(Boolean)));
-
-      let recovered = false;
-      // Layer 2: try each candidate selector
-      for (const cand of candidates) {{
-        if (await tryLocator(page, cand, 3000)) {{
-          try {{
-            await executeStep(page, {{ ...step, selector: cand }}, inputs);
-            if (step.url_state && step.url_state.after && step.url_state.after.url_pattern) {{
-              await waitForUrlState(page, step.url_state.after);
-            }}
-            recovered = true;
-            break;
-          }} catch (_) {{}}
-        }}
-      }}
-      // Layer 3: derive text selector from step value or label
-      if (!recovered) {{
-        const textHints = [step.value, step.label, step.aria_label].filter(v => v && typeof v === "string" && v.length < 60);
-        for (const hint of textHints) {{
-          const textSel = `text=${{JSON.stringify(hint.trim())}}`;
-          if (await tryLocator(page, textSel, 3000)) {{
-            try {{
-              await executeStep(page, {{ ...step, selector: textSel }}, inputs);
-              recovered = true;
-              break;
-            }} catch (_) {{}}
-          }}
-        }}
-      }}
-      if (!recovered) throw new Error(`Step ${{i}} (${{step.type}}) failed: ${{err.message}}`);
-    }}
-  }}
-}}
-
-// ─── Session management ───────────────────────────────────────────────────────
-
-async function isAuthenticated(page) {{
-  const url = page.url();
-  try {{
-    if (new URL(url).hostname !== new URL(PROTECTED_URL).hostname) return false;
-  }} catch (_) {{ return false; }}
-  if (MARKER_TEXT) {{
-    const text = await page.textContent("body").catch(() => "");
-    if (!text.includes(MARKER_TEXT)) return false;
-  }}
-  return true;
-}}
-
-async function getAuthContext(headless) {{
-  const browser = await chromium.launch({{ headless: headless !== false }});
-  const opts = {{}};
-  if (fs.existsSync(AUTH_JSON)) {{
-    try {{ opts.storageState = JSON.parse(fs.readFileSync(AUTH_JSON, "utf8")); }} catch (_) {{}}
-  }}
-  const context = await browser.newContext(opts);
-  const page    = await context.newPage();
-
-  await page.goto(PROTECTED_URL, {{ waitUntil: "domcontentloaded", timeout: 30000 }}).catch(() => {{}});
-  await page.waitForTimeout(600);
-
-  if (!(await isAuthenticated(page))) {{
-    if (!fs.existsSync(LOGIN_DIR))
-      throw new Error("Session expired. Ask Claude to call bootstrap_auth first.");
-    await runSkill(page, LOGIN_DIR, {{}});
-    const state = await context.storageState();
-    fs.mkdirSync(path.dirname(AUTH_JSON), {{ recursive: true }});
-    fs.writeFileSync(AUTH_JSON, JSON.stringify(state, null, 2));
-    await page.goto(PROTECTED_URL, {{ waitUntil: "domcontentloaded", timeout: 30000 }}).catch(() => {{}});
-    if (!(await isAuthenticated(page))) throw new Error("Auth failed. Call bootstrap_auth again.");
-  }}
-
-  await page.close();
-  return {{ browser, context }};
-}}
-
-// ─── MCP server ───────────────────────────────────────────────────────────────
-
-const server = new Server(
-  {{ name: CONFIG.id, version: CONFIG.version }},
-  {{ capabilities: {{ tools: {{}} }} }},
-);
-
-server.setRequestHandler(ListToolsRequestSchema, async () => {{
-  const tools = [
-    {{
-      name: "bootstrap_auth",
-      description: `Set up your ${{CONFIG.name}} session. Opens a browser — log in, then close the window. Run once before using any skill.`,
-      inputSchema: {{ type: "object", properties: {{}}, required: [] }},
-    }},
-    {{
-      name: "list_skills",
-      description: "List all available skills with metadata",
-      inputSchema: {{ type: "object", properties: {{}}, required: [] }},
-    }},
-    {{
-      name: "read_skill_files",
-      description: "Read execution.json and recovery.json for a skill. Returns steps and recovery info for planning.",
-      inputSchema: {{ type: "object", properties: {{ slug: {{ type: "string", description: "Skill slug (use underscores or hyphens)" }} }}, required: ["slug"] }},
-    }},
-    {{
-      name: "execute_plan",
-      description: "Execute a merged multi-skill plan via Playwright. Accepts steps array (merged from multiple execution.json files). Runs visible browser.",
-      inputSchema: {{ type: "object", properties: {{ steps: {{ type: "array", description: "Merged array of execution steps from one or more skills" }}, inputs: {{ type: "object", description: "Input values to substitute into step placeholders" }} }}, required: ["steps"] }},
-    }},
-  ];
-
-  for (const skill of (CONFIG.skills || [])) {{
-    let description = `Execute ${{skill.slug}} on ${{CONFIG.target_url}}`;
-    let inputSchema = {{ type: "object", properties: {{}}, required: [] }};
-    const mPath = path.join(PLUGIN_DIR, skill.path, "manifest.json");
-    const iPath = path.join(PLUGIN_DIR, skill.path, "input.json");
-    if (fs.existsSync(mPath)) {{
-      try {{ const m = JSON.parse(fs.readFileSync(mPath, "utf8")); description = m.description || m.intent || description; }}
-      catch (_) {{}}
-    }}
-    if (fs.existsSync(iPath)) {{
-      try {{
-        const loaded = JSON.parse(fs.readFileSync(iPath, "utf8"));
-        inputSchema = {{ type: "object", ...loaded }};
-      }} catch (_) {{}}
-    }}
-    tools.push({{ name: skill.slug.replace(/-/g, "_"), description, inputSchema }});
-  }}
-  console.error(`[ListTools] Registering ${{tools.length}} tools: ${{tools.map(t => t.name).join(", ")}}`);
-  return {{ tools }};
-}});
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {{
-  const {{ name, arguments: args }} = request.params;
-
-  if (name === "bootstrap_auth") {{
-    const browser = await chromium.launch({{ headless: false }});
-    const context = await browser.newContext();
-    const page    = await context.newPage();
-    await page.goto(CONFIG.target_url, {{ waitUntil: "domcontentloaded", timeout: 30000 }});
-    // Wait until user navigates to the protected area (up to 5 min)
-    try {{
-      const protectedHostPath = new URL(PROTECTED_URL).pathname.replace(/\\/$/, "");
-      await page.waitForURL(u => u.pathname.startsWith(protectedHostPath) || u.href.includes(PROTECTED_URL), {{ timeout: 300000 }});
-    }} catch (_) {{}}
-    const state = await context.storageState();
-    fs.mkdirSync(path.dirname(AUTH_JSON), {{ recursive: true }});
-    fs.writeFileSync(AUTH_JSON, JSON.stringify(state, null, 2));
-    await browser.close();
-    return {{ content: [{{ type: "text", text: `Session saved. You can now use ${{CONFIG.name}} skills.` }}] }};
-  }}
-
-  // ── list_skills ───────────────────────────────────────────────────────────
-  if (name === "list_skills") {{
-    const skills = CONFIG.skills || [];
-    console.error(`[list_skills] Returning ${{skills.length}} skills: ${{skills.map(s => s.slug).join(", ")}}`);
-    return {{ content: [{{ type: "text", text: JSON.stringify(skills, null, 2) }}] }};
-  }}
-
-  // ── read_skill_files ─────────────────────────────────────────────────────
-  if (name === "read_skill_files") {{
-    const slugArg = (args && args.slug) ? String(args.slug) : "";
-    console.error(`[read_skill_files] Looking for skill: ${{slugArg}}`);
-    const skill = (CONFIG.skills || []).find(s => s.slug === slugArg || s.slug === slugArg.replace(/_/g, "-") || s.slug === slugArg.replace(/-/g, "_"));
-    if (!skill) {{
-      console.error(`[read_skill_files] Skill not found. Available: ${{(CONFIG.skills || []).map(s => s.slug).join(", ")}}`);
-      return {{ content: [{{ type: "text", text: `Skill not found: ${{slugArg}}. Use list_skills to see available skills.` }}] }};
-    }}
-    const skillDir = path.join(PLUGIN_DIR, skill.path);
-    const execPath = path.join(skillDir, "execution.json");
-    const recPath  = path.join(skillDir, "recovery.json");
-    const result = {{
-      slug: skill.slug,
-      path: skill.path,
-      execution: fs.existsSync(execPath) ? JSON.parse(fs.readFileSync(execPath, "utf8")) : null,
-      recovery:  fs.existsSync(recPath)  ? JSON.parse(fs.readFileSync(recPath,  "utf8")) : null,
-    }};
-    console.error(`[read_skill_files] Found ${{skill.slug}}: ${{result.execution ? result.execution.length + " steps" : "no execution.json"}}`);
-    return {{ content: [{{ type: "text", text: JSON.stringify(result, null, 2) }}] }};
-  }}
-
-  // ── execute_plan ─────────────────────────────────────────────────────────
-  if (name === "execute_plan") {{
-    const steps  = (args && Array.isArray(args.steps))  ? args.steps  : [];
-    const inputs = (args && typeof args.inputs === "object" && args.inputs) ? args.inputs : {{}};
-    console.error(`[execute_plan] Starting with ${{steps.length}} steps, inputs: ${{JSON.stringify(inputs)}}`);
-    if (steps.length === 0) return {{ content: [{{ type: "text", text: "execute_plan: no steps provided." }}] }};
-
-    let _browser, _context;
-    try {{
-      ({{ browser: _browser, context: _context }} = await getAuthContext(false));
-      console.error(`[execute_plan] Auth context ready`);
-    }} catch (authErr) {{
-      console.error(`[execute_plan] Auth failed: ${{authErr}}`);
-      return {{ content: [{{ type: "text", text: String(authErr) }}] }};
-    }}
-
-    const page = await _context.newPage();
-    try {{
-      console.error(`[execute_plan] Running ${{steps.length}} steps...`);
-      await runPlan(page, steps, inputs);
-      const state = await _context.storageState();
-      fs.mkdirSync(path.dirname(AUTH_JSON), {{ recursive: true }});
-      fs.writeFileSync(AUTH_JSON, JSON.stringify(state, null, 2));
-      const shot = await page.screenshot({{ type: "png" }}).catch(() => null);
-      const url  = page.url();
-      await _browser.close();
-      console.error(`[execute_plan] Success! URL: ${{url}}`);
-      const content = [{{ type: "text", text: `Plan executed successfully. URL: ${{url}}` }}];
-      if (shot) content.push({{ type: "image", data: shot.toString("base64"), mimeType: "image/png" }});
-      return {{ content }};
-    }} catch (err) {{
-      console.error(`[execute_plan] Failed: ${{err.message}}`);
-      await _browser.close().catch(() => {{}});
-      return {{ content: [{{ type: "text", text: `Plan execution failed at: ${{err.message}}` }}] }};
-    }}
-  }}
-
-  const skillSlug = name.replace(/_/g, "-");
-  const skill = (CONFIG.skills || []).find(s => s.slug === skillSlug);
-  if (!skill) throw new Error(`Unknown tool: ${{name}}`);
-
-  let _browser, _context;
-  try {{
-    ({{ browser: _browser, context: _context }} = await getAuthContext(false));
-  }} catch (authErr) {{
-    return {{ content: [{{ type: "text", text: String(authErr) }}] }};
-  }}
-
-  const page = await _context.newPage();
-  try {{
-    await runSkill(page, path.join(PLUGIN_DIR, skill.path), args || {{}});
-    const state = await _context.storageState();
-    fs.mkdirSync(path.dirname(AUTH_JSON), {{ recursive: true }});
-    fs.writeFileSync(AUTH_JSON, JSON.stringify(state, null, 2));
-    const shot = await page.screenshot({{ type: "png" }}).catch(() => null);
-    const url  = page.url();
-    await _browser.close();
-    const content = [{{ type: "text", text: `${{skill.slug}} completed. URL: ${{url}}` }}];
-    if (shot) content.push({{ type: "image", data: shot.toString("base64"), mimeType: "image/png" }});
-    return {{ content }};
-  }} catch (err) {{
-    await _browser.close().catch(() => {{}});
-    return {{ content: [{{ type: "text", text: `Skill failed: ${{err}}` }}] }};
-  }}
-}});
-
-const _skillFlagIdx = process.argv.indexOf("--run-skill");
-if (_skillFlagIdx !== -1) {{
-  // ── CLI execution mode ────────────────────────────────────────────────────
-  const _skillSlug  = process.argv[_skillFlagIdx + 1];
-  const _inputsIdx  = process.argv.indexOf("--inputs");
-  const _inputs     = _inputsIdx !== -1 ? JSON.parse(process.argv[_inputsIdx + 1]) : {{}};
-  const _headless   = process.argv.includes("--headless");
-
-  const _skill = (CONFIG.skills || []).find(s => s.slug === _skillSlug);
-  if (!_skill) {{
-    process.stdout.write(JSON.stringify({{ status: "failed", error: `Skill not found: ${{_skillSlug}}` }}));
-    process.exit(1);
-  }}
-
-  getAuthContext(_headless).then(async ({{ browser, context }}) => {{
-    const page = await context.newPage();
-    try {{
-      await runSkill(page, path.join(PLUGIN_DIR, _skill.path), _inputs);
-      const url  = page.url();
-      const shot = await page.screenshot({{ type: "png" }}).catch(() => null);
-      const state = await context.storageState();
-      fs.mkdirSync(path.dirname(AUTH_JSON), {{ recursive: true }});
-      fs.writeFileSync(AUTH_JSON, JSON.stringify(state, null, 2));
-      await browser.close();
-      process.stdout.write(JSON.stringify({{
-        status: "success",
-        url,
-        screenshot: shot ? shot.toString("base64") : null,
-      }}));
-      process.exit(0);
-    }} catch (err) {{
-      await browser.close().catch(() => {{}});
-      process.stdout.write(JSON.stringify({{ status: "failed", error: String(err) }}));
-      process.exit(1);
-    }}
-  }}).catch(err => {{
-    process.stdout.write(JSON.stringify({{ status: "failed", error: String(err) }}));
-    process.exit(1);
-  }});
-}} else {{
-  // ── MCP server mode (default) ─────────────────────────────────────────────
-  const transport = new StdioServerTransport();
-  server.connect(transport);
-}}
-'''
+def _templates_dir() -> Path:
+    return Path(__file__).parent.parent / "storage" / "plugin_templates"
 
 
-def _render_mcp_server(plugin_name: str, protected_url: str, marker_text: str) -> str:
-    """Inject plugin_name, protected_url and marker_text as JS string literals."""
-    return _MCP_SERVER_TEMPLATE.format(
-        plugin_name=plugin_name,
-        protected_url=json.dumps(protected_url),
-        marker_text=json.dumps(marker_text),
+def _render_plugin_template(name: str, **subs: str) -> str:
+    tmpl = (_templates_dir() / "plugin" / name).read_text(encoding="utf-8")
+    for k, v in subs.items():
+        tmpl = tmpl.replace("{{" + k + "}}", v)
+    return tmpl
+
+
+def _copy_plugin_templates(
+    bundle_root: Path,
+    *,
+    plugin_name: str,
+    plugin_slug: str,
+    target_url: str,
+    version: str,
+    skill_slugs: list[str],
+) -> None:
+    """Copy plugin-side templates into bundle_root with substitutions."""
+    templates = _templates_dir()
+
+    # .gitignore
+    tmpl_gi = templates / "plugin" / ".gitignore"
+    if tmpl_gi.exists():
+        (bundle_root / ".gitignore").write_text(tmpl_gi.read_text(encoding="utf-8"), encoding="utf-8")
+
+    # auth/credentials.example.json
+    creds_src = templates / "plugin" / "auth" / "credentials.example.json"
+    if creds_src.exists():
+        (bundle_root / "auth").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(creds_src), str(bundle_root / "auth" / "credentials.example.json"))
+
+    # Claude.md (from template)
+    skills_list = "\n".join(f"- `{s}`" for s in skill_slugs)
+    (bundle_root / "Claude.md").write_text(
+        _render_plugin_template(
+            "Claude.md.tmpl",
+            plugin_name=plugin_name,
+            slug=plugin_slug,
+            target_url=target_url,
+            skills_list=skills_list,
+        ),
+        encoding="utf-8",
     )
 
-
-# ─────────────────────────────────────────────────
-# GitHub-ready file generators
-# ─────────────────────────────────────────────────
-
-def _render_gitignore() -> str:
-    return (
-        "# Conxa plugin — these are local-only and must never be committed\n"
-        "auth/auth.json\n"
-        "node_modules/\n"
-        ".venv/\n"
-        "execution_log.jsonl\n"
-        "data/runs/\n"
-        "*.local.json\n"
-        ".env\n"
+    # index.md (from template)
+    skills_catalog = "\n".join(f"- `{s}` — see `skills/{s}/SKILL.md`" for s in skill_slugs)
+    (bundle_root / "index.md").write_text(
+        _render_plugin_template(
+            "index.md.tmpl",
+            plugin_name=plugin_name,
+            slug=plugin_slug,
+            target_url=target_url,
+            skills_catalog=skills_catalog,
+        ),
+        encoding="utf-8",
     )
 
+    # .claude-plugin/plugin.json — points to bootstrap.js shim via relative path
+    # so the published GitHub repo works regardless of where it's cloned.
+    claude_dir = bundle_root / ".claude-plugin"
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    plugin_json_text = _render_plugin_template(
+        ".claude-plugin/plugin.json.tmpl",
+        plugin_name=_to_claude_plugin_name(plugin_name),
+        version=version,
+        description=f"Conxa plugin for {plugin_name}",
+        bootstrap_js=".claude-plugin/bootstrap.js",
+    )
+    (claude_dir / "plugin.json").write_text(plugin_json_text, encoding="utf-8")
 
-def _render_package_json(name: str, version: str, description: str, node_deps: dict[str, str]) -> str:
-    deps = {
-        "@modelcontextprotocol/sdk": "^1.0.0",
-        "playwright": "^1.45.0",
-    }
-    deps.update(node_deps)
-    manifest = {
-        "name": f"conxa-plugin-{_to_bundle_slug(name)}",
-        "version": version,
-        "description": description,
-        "main": "server.js",
-        "scripts": {"prestart": "npm install --prefer-offline --silent", "start": "node server.js"},
-        "dependencies": deps,
-        "engines": {"node": ">=20"},
-    }
-    return json.dumps(manifest, indent=2, ensure_ascii=False)
-
-
-def _render_claude_plugin_json(
-    plugin_name: str,
-    version: str,
-    description: str,
-    repository_url: str = "",
-) -> str:
-    manifest: dict[str, Any] = {
-        "name": _to_claude_plugin_name(plugin_name),
-        "description": description,
-        "version": version,
-        "author": {"name": "Conxa"},
-        "license": "MIT",
-    }
-    if repository_url:
-        manifest["repository"] = repository_url
-    return json.dumps(manifest, indent=2, ensure_ascii=False)
-
-
-def _render_claude_mcp_json(plugin_slug: str) -> str:
-    manifest = {
-        "mcpServers": {
-            plugin_slug: {
-                "command": "npm",
-                "args": ["--prefix", "${CLAUDE_PLUGIN_ROOT}", "start"],
-            }
-        }
-    }
-    return json.dumps(manifest, indent=2, ensure_ascii=False)
-
-
-def _render_claude_marketplace_json(
-    plugin_name: str,
-    version: str,
-    description: str,
-    repository_url: str = "",
-) -> str:
-    plugin_entry: dict[str, Any] = {
-        "name": _to_claude_plugin_name(plugin_name),
-        "description": description,
-        "version": version,
-        "source": "./",
-        "category": "productivity",
-    }
-    if repository_url:
-        plugin_entry["repository"] = repository_url
-
+    # .claude-plugin/marketplace.json
     marketplace = {
         "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
         "name": f"{_to_claude_plugin_name(plugin_name)}-marketplace",
         "version": version,
         "description": f"Claude Code marketplace for {plugin_name}",
         "owner": {"name": "Conxa"},
-        "plugins": [plugin_entry],
+        "plugins": [{"name": _to_claude_plugin_name(plugin_name), "description": f"Conxa plugin for {plugin_name}", "version": version, "source": "./", "category": "productivity"}],
     }
-    return json.dumps(marketplace, indent=2, ensure_ascii=False)
+    (claude_dir / "marketplace.json").write_text(json.dumps(marketplace, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # .claude-plugin/ gets only the two allowed files: bootstrap.js + cli.js
+    for js_name in ("bootstrap.js", "cli.js"):
+        src = templates / "plugin" / ".claude-plugin" / js_name
+        if not src.exists():
+            src = templates / "runtime" / js_name
+        if src.exists():
+            shutil.copy2(str(src), str(claude_dir / js_name))
+
+
+
+
+def _clean_stale_artifacts(bundle_root: Path) -> None:
+    """Remove files from old build architectures before rebuilding."""
+    stale_files = [
+        "server.js", "run.js", "browser.js", "config.js", "runtime.js",
+        "package.json", "package-lock.json", ".mcp.json",
+        "plugin.config.json",  # renamed to plugin.json
+        "schema.json",         # removed from build output
+    ]
+    stale_dirs = ["execution", "node_modules", "auth/login", "runtime", "runtime/node_modules"]
+    for name in stale_files:
+        p = bundle_root / name
+        if p.exists():
+            p.unlink()
+    for name in stale_dirs:
+        p = bundle_root / name
+        if p.is_dir():
+            shutil.rmtree(p)
+    # Remove hash-suffixed per-plugin registry json files (e.g. render_c759c810.json)
+    for p in bundle_root.glob("*_*.json"):
+        p.unlink()
+
+
+# ─────────────────────────────────────────────────
+# GitHub-ready file generators (kept for README/LICENSE)
+# ─────────────────────────────────────────────────
 
 
 def _render_readme(plugin_name: str, plugin_slug: str, target_url: str, skill_slugs: list[str]) -> str:
@@ -1215,30 +746,13 @@ Automate [{target_url}]({target_url}) with Claude using this Conxa plugin.
 
 ## Install
 
-Add to **Claude Code** (Settings → MCP Servers → Add from GitHub):
+Add to **Claude Code** via the marketplace:
 
 ```
-github.com/<your-org>/{plugin_slug}
+/plugin marketplace add github.com/<your-org>/{plugin_slug}
 ```
 
-Or add manually to `.claude/settings.json`:
-
-```json
-{{
-  "mcpServers": {{
-    "{plugin_slug}": {{
-      "command": "node",
-      "args": ["/path/to/{plugin_slug}/server.js"]
-    }}
-  }}
-}}
-```
-
-After installing, ask Claude to set up your session:
-
-> "Call bootstrap_auth to set up {plugin_name}"
-
-Claude will open a browser — log in manually, and your session is saved locally.
+The shared Conxa runtime installs automatically on first use.
 
 ## Available Skills
 
@@ -1246,120 +760,13 @@ Claude will open a browser — log in manually, and your session is saved locall
 
 ## How It Works
 
-This plugin runs as a local MCP server. When Claude calls a skill tool, Chrome
-launches on your machine, executes the recorded workflow, and returns a result
-and screenshot. Your auth session (`auth/auth.json`) stays on your machine
+This plugin works with the shared `conxa` MCP server. When Claude calls a skill,
+a real Chromium browser opens on your machine, executes the recorded workflow,
+and returns a result and screenshot. Your auth session stays on your machine
 and is never uploaded anywhere.
 
 ---
 *Generated by [Conxa](https://conxa.ai)*
-"""
-
-
-def _render_claude_md(
-    plugin_name: str, target_url: str, skill_slugs: list[str]
-) -> str:
-    skills_list = "\n".join(f"- `{s}`" for s in skill_slugs)
-    return f"""\
-# {plugin_name} Plugin — Claude Instructions
-
-## ⚠️ CRITICAL EXECUTION RULES
-
-**NEVER use any of these tools:**
-- `mcp__Claude_in_Chrome__*` (Chrome MCP browser tools)
-- `computer_use` or `computer-use`
-- Any built-in browser navigation or screenshot tools
-
-**ALWAYS use this plugin's MCP tools to execute browser automation.**
-
----
-
-## Available MCP Tools
-
-| Tool | Purpose |
-|------|---------|
-| `bootstrap_auth` | Open browser for user to log in and save session |
-| `list_skills` | List all available skills with metadata |
-| `read_skill_files(slug)` | Get execution.json + recovery.json for a skill |
-| `execute_plan(steps, inputs)` | Run a merged multi-skill plan via Playwright |
-| Individual skill tools | Shortcut to run a single skill directly |
-
----
-
-## Available Skills
-
-{skills_list}
-
----
-
-## Execution Flow
-
-When the user asks you to do something on {target_url}:
-
-### Step 1: Identify Skills
-Determine which skills are needed from the list above.
-Example: "Delete my database" → needs: `bootstrap_auth` (if not authed) + `delete_database`
-
-### Step 2: Load Skill Data
-For each required skill, call:
-```
-read_skill_files(slug: "<skill-slug>")
-```
-This returns `execution` (steps array) and `recovery` (per-step fallbacks).
-
-### Step 3: Merge into a Plan
-Combine the steps from all skills into ONE sequence:
-- Login steps come first
-- Remove duplicate navigation (if multiple skills navigate to the same page, keep only one)
-- Annotate each step with its recovery info from the recovery data
-- Inject `{{{{input_key}}}}` placeholders with actual user-provided values
-
-### Step 4: Execute the Plan
-Call:
-```
-execute_plan(steps: [...merged steps...], inputs: {{"key": "value"}})
-```
-The plugin will run a visible Playwright browser and execute all steps. A screenshot is returned on success.
-
-### Step 5: Handle Failures
-If `execute_plan` returns an error:
-- Check the error message for which step failed
-- The step may have recovery alternatives (fallback_selectors, candidates)
-- If recovery fails, reload skill files and adjust the plan
-- Modify selectors or step order and retry `execute_plan`
-- Continue until success or maximum recovery attempts exhausted
-
----
-
-## Complete Example Flow
-
-**User:** "Delete my database conxa-db"
-
-**You do:**
-1. Call `list_skills` → see available skills
-2. Identify needed skills: `auth_login`, `delete_database`
-3. Call `read_skill_files("auth_login")` → get login steps + recovery
-4. Call `read_skill_files("delete_database")` → get delete steps + recovery
-5. Merge: [login steps] + [navigate to DB] + [delete DB] + [confirm delete]
-6. Call `execute_plan(steps=[merged], inputs={{"database": "conxa-db"}})`
-7. Browser opens, executes all steps, closes
-8. Return screenshot confirming deletion
-
----
-
-## Authentication
-
-If you get: *"Session expired. Ask Claude to call bootstrap_auth first."*
-→ Call `bootstrap_auth` (opens a visible browser for the user to log in)
-→ Once the user logs in and the browser closes, call `execute_plan` again
-
----
-
-## Input Parameters
-
-When calling `read_skill_files`, the response includes each step's `inputs` field.
-Look for `{{{{key}}}}` placeholders in `value` fields — those are the required inputs to inject.
-Always provide `inputs` to `execute_plan` with actual values, not placeholders.
 """
 
 
@@ -1412,12 +819,10 @@ def build_plugin(
     version: str = "0.1.0",
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Compile a plugin from its recorded sessions into a GitHub-ready skill package."""
+    """Compile a plugin from its recorded sessions into a data-only GitHub-ready package."""
     plugin = get_plugin(plugin_id)
     if plugin is None:
         raise ValueError(f"Plugin {plugin_id!r} not found.")
-    if plugin.auth is None:
-        raise ValueError("Plugin has no recorded auth session. Record login first.")
     if not plugin.workflows:
         raise ValueError("Plugin has no workflows. Record at least one workflow.")
 
@@ -1429,35 +834,20 @@ def build_plugin(
     bundle_slug = _plugin_bundle_slug(plugin_id, plugin.name)
     _log("Starting plugin build", bundle_slug=bundle_slug, version=version)
 
-    from app.services.skill_pack_builder import build_skill_package
-
-    # ── 1. Build auth/login skill ──────────────────────────────────────────
-    _log("Building auth/login skill", session_id=plugin.auth.session_id)
-    auth_events = read_session_events(plugin.auth.session_id)
-    if not auth_events:
-        raise ValueError(f"No events found for auth session {plugin.auth.session_id!r}.")
-
-    auth_json_text = _events_to_json_text(auth_events, f"{plugin.name} login")
-    build_skill_package(
-        auth_json_text,
-        package_name="_auth_login",
-        bundle_slug=bundle_slug,
-        realtime_sink=realtime_sink,
-    )
-    _log("Auth/login skill compiled")
     bundle_root = _bundle_root(bundle_slug)
 
-    # ── 2. Build workflow skills ───────────────────────────────────────────
+    # ── 0. Clean stale artifacts from old build architectures ─────────────
+    _clean_stale_artifacts(bundle_root)
+    _log("Cleaned stale artifacts")
+
+    # ── 1. Build workflow skills ───────────────────────────────────────────
+    from app.services.skill_pack.compiler import build_skill_package
+
     skill_slugs: list[str] = []
     for wf in plugin.workflows:
         saved_skill = read_skill(wf.skill_id) if wf.skill_id else None
         if saved_skill is not None:
-            _log(
-                "Building workflow from saved skill JSON",
-                workflow=wf.name,
-                workflow_id=wf.id,
-                skill_id=wf.skill_id,
-            )
+            _log("Building workflow from saved skill JSON", workflow=wf.name, workflow_id=wf.id)
             _build_workflow_from_saved_skill(
                 bundle_root=bundle_root,
                 workflow_slug=wf.slug,
@@ -1467,21 +857,7 @@ def build_plugin(
             _log(f"Workflow {wf.name!r} compiled from saved skill JSON")
             continue
 
-        if wf.skill_id:
-            _log(
-                "Saved skill JSON not found; building workflow from original recording",
-                workflow=wf.name,
-                workflow_id=wf.id,
-                skill_id=wf.skill_id,
-                warning=True,
-            )
-        else:
-            _log(
-                "Building workflow from original recording",
-                workflow=wf.name,
-                workflow_id=wf.id,
-                session_id=wf.session_id,
-            )
+        _log("Building workflow from original recording", workflow=wf.name, session_id=wf.session_id)
         raw_events = read_session_events(wf.session_id)
         if not raw_events:
             _log(f"Skipping workflow {wf.name!r} — no events found", warning=True)
@@ -1502,132 +878,49 @@ def build_plugin(
         skill_slugs.append(wf.slug)
         _log(f"Workflow {wf.name!r} compiled")
 
-    # ── 3. Post-process: restructure auth ─────────────────────────────────
-    # Move skills/_auth_login/ → auth/login/
-    auth_skill_src = bundle_root / "skills" / "_auth_login"
-    auth_login_dir = bundle_root / "auth" / "login"
-    if auth_skill_src.is_dir():
-        if auth_login_dir.exists():
-            shutil.rmtree(auth_login_dir)
-        shutil.move(str(auth_skill_src), str(auth_login_dir))
-        _log("Moved _auth_login skill to auth/login/")
+    # ── 2. Write plugin.json ──────────────────────────────────────────────
+    var_pattern = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
+    protected_url_vars = var_pattern.findall(plugin.protected_url)
 
-    # auth/auth.json is captured locally via `conxa auth <plugin>` — never placed here.
-
-    # ── 4. Write server.js — MCP server entry point ───────────────────────
-    (bundle_root / "server.js").write_text(
-        _render_mcp_server(plugin.name, plugin.protected_url, plugin.protected_url_marker_text),
-        encoding="utf-8",
-    )
-    _log("Written server.js (MCP server)")
-
-    # ── 5. Write auth/credentials.example.json ────────────────────────────
-    creds_example_path = bundle_root / "auth" / "credentials.example.json"
-    creds_example_path.parent.mkdir(parents=True, exist_ok=True)
-    creds_example_path.write_text(_render_credentials_example(), encoding="utf-8")
-    _log("Written auth/credentials.example.json")
-
-    # ── 6. Write plugin.config.json ───────────────────────────────────────
-    skills_list = [
-        {"slug": "auth_login", "path": "skills/auth_login", "version": "1.0.0"},
-        *[
-            {"slug": slug, "path": f"skills/{slug}", "version": "1.0.0"}
-            for slug in skill_slugs
-        ]
-    ]
     plugin_config = {
-        "schema_version": "1.0",
-        "id": plugin.id,
         "slug": bundle_slug,
         "name": plugin.name,
         "version": version,
-        "description": f"Conxa plugin for {plugin.name}",
         "target_url": plugin.target_url,
         "protected_url": plugin.protected_url,
-        "protected_url_marker_text": plugin.protected_url_marker_text,
-        "built_at": time.time(),
-        "auth": {
-            "kind": "session",
-            "storage_state": "auth/auth.json",
-            "credentials_example": "auth/credentials.example.json",
-            "login_skill": "auth/login",
-        },
-        "skills": skills_list,
-        "execution": {
-            "server": "server.js",
-        },
-        "dependencies": {
-            "node": {
-                "@modelcontextprotocol/sdk": "^1.0.0",
-                "playwright": "^1.45.0",
-            },
-            "python": {},
-        },
-        "compatibility": {
-            "conxa_runtime": ">=1.0.0",
-            "node": ">=20",
-        },
-        "metadata": {
-            "author": "",
-            "repository": "",
-            "license": "MIT",
-            "tags": [],
-        },
+        "protected_url_vars": protected_url_vars,
+        "skills": [{"slug": s, "path": f"skills/{s}"} for s in skill_slugs],
+        "compatibility": {"conxa_runtime": ">=1.0.0"},
     }
-    (bundle_root / "plugin.config.json").write_text(
+    (bundle_root / "plugin.json").write_text(
         json.dumps(plugin_config, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    # Remove legacy root plugin.json if it exists from a previous build.
-    legacy = bundle_root / "plugin.json"
-    if legacy.exists():
-        legacy.unlink()
-    _log("Written plugin.config.json", skills=skill_slugs)
+    _log("Written plugin.json", skills=skill_slugs)
 
-    # ── 7. Write GitHub-ready root files ──────────────────────────────────
-    claude_dir = bundle_root / ".claude-plugin"
-    claude_dir.mkdir(parents=True, exist_ok=True)
-    description = f"Conxa plugin for {plugin.name}"
-    (claude_dir / "plugin.json").write_text(
-        _render_claude_plugin_json(plugin.name, version, description),
-        encoding="utf-8",
+    # ── 3. Copy plugin templates (Claude.md, index.md, .gitignore, .claude-plugin/) ─
+    _copy_plugin_templates(
+        bundle_root,
+        plugin_name=plugin.name,
+        plugin_slug=bundle_slug,
+        target_url=plugin.target_url,
+        version=version,
+        skill_slugs=skill_slugs,
     )
-    (claude_dir / "marketplace.json").write_text(
-        _render_claude_marketplace_json(plugin.name, version, description),
-        encoding="utf-8",
-    )
-    (bundle_root / ".mcp.json").write_text(
-        _render_claude_mcp_json(bundle_slug),
-        encoding="utf-8",
-    )
-    _log("Written Claude Code plugin marketplace files")
+    _log("Copied plugin templates")
 
-    (bundle_root / ".gitignore").write_text(_render_gitignore(), encoding="utf-8")
-    _log("Written .gitignore")
-
-    (bundle_root / "package.json").write_text(
-        _render_package_json(plugin.name, version, description, {}),
-        encoding="utf-8",
-    )
-    _log("Written package.json")
-
+    # ── 4. Write README.md and LICENSE ────────────────────────────────────
     (bundle_root / "README.md").write_text(
         _render_readme(plugin.name, bundle_slug, plugin.target_url, skill_slugs),
         encoding="utf-8",
     )
     _log("Written README.md")
 
-    (bundle_root / "CLAUDE.md").write_text(
-        _render_claude_md(plugin.name, plugin.target_url, skill_slugs),
-        encoding="utf-8",
-    )
-    _log("Written CLAUDE.md")
-
     license_path = bundle_root / "LICENSE"
     if not license_path.exists():
         license_path.write_text(_render_license(), encoding="utf-8")
         _log("Written LICENSE")
 
-    # ── 8. Persist build record ────────────────────────────────────────────
+    # ── 5. Persist build record ────────────────────────────────────────────
     set_build(plugin_id, output_path=str(bundle_root), version=version)
 
     return {
@@ -1636,7 +929,6 @@ def build_plugin(
         "output_path": str(bundle_root),
         "version": version,
         "skills": skill_slugs,
-        "auth_login_skill": str(auth_login_dir) if auth_login_dir.is_dir() else None,
     }
 
 

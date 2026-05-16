@@ -12,7 +12,7 @@ from urllib.parse import urlparse, urlunparse
 
 from app.config import settings
 from app.llm.pack_llm_config import resolved_pack_llm_config
-from app.llm.pack_llm_keys import next_pack_api_key
+from app.llm.pack_llm_keys import configured_pack_keys, next_pack_api_key
 from app.services.skill_pack_build_log import (
     skill_pack_json_metrics,
     skill_pack_log_append,
@@ -60,7 +60,7 @@ When to insert `check` steps:
 Rules for selectors:
 
 * Prefer text="..." for buttons
-* Use input[name="..."] for fields
+* Use input[name="..."] for fields; if name is unavailable use input[aria-label="..."] or input[placeholder="..."]
 * NEVER output:
 
   * "input"
@@ -222,7 +222,7 @@ def _parse_strict_json_object(text: str) -> dict[str, Any]:
 
 
 def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
-    if not settings.pack_llm_enabled:
+    if not settings.llm_pack_enabled:
         raise ValueError(
             "Skill package generation requires the LLM structuring layer; SKILL_PACK_LLM_ENABLED is disabled."
         )
@@ -231,11 +231,36 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
     model = llm_config.model
     if not endpoint or not model:
         raise ValueError(
-            "Skill package generation requires a configured Skill Pack LLM endpoint and model."
+            "Skill package generation requires a configured Skill Pack LLM endpoint and model. "
+            "Set SKILL_LLM_PACK_ENDPOINT and SKILL_LLM_PACK_MODEL in .env."
+        )
+    if not configured_pack_keys():
+        skill_pack_log_append(
+            {
+                "kind": "llm_missing_api_key",
+                "required_env": "SKILL_LLM_PACK_API_KEY",
+            }
+        )
+        raise ValueError(
+            "Skill package generation requires an API key configured in SKILL_LLM_PACK_API_KEY."
         )
 
     parsed_ep = urlparse(endpoint)
     ep_host = (parsed_ep.netloc or "").lower()
+
+    # Log fill steps as they'll be seen by the LLM — helps trace bad selectors
+    def _is_fill(step: dict[str, Any]) -> bool:
+        action = step.get("action")
+        action_type = action.get("type") if isinstance(action, dict) else action
+        return str(action_type or "").lower() in {"fill", "type", "input"} or str(
+            step.get("type") or ""
+        ).lower() in {"fill", "type", "input"}
+
+    skill_pack_log_append({
+        "kind": "debug_preprocessed_fill_steps",
+        "fill_steps": [s for s in raw_steps if _is_fill(s)],
+    })
+
     user_msg = json.dumps(
         {"raw_steps": raw_steps}, ensure_ascii=False, separators=(",", ":")
     )
@@ -245,12 +270,12 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
             {"role": "system", "content": _STRUCTURING_SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
         ],
-        "temperature": settings.pack_llm_structure_temperature,
+        "temperature": settings.llm_pack_structure_temperature,
     }
-    if settings.pack_llm_structure_max_tokens is not None:
-        body["max_tokens"] = settings.pack_llm_structure_max_tokens
-    if settings.pack_llm_top_p is not None:
-        body["top_p"] = settings.pack_llm_top_p
+    if settings.llm_pack_structure_max_tokens is not None:
+        body["max_tokens"] = settings.llm_pack_structure_max_tokens
+    if settings.llm_pack_top_p is not None:
+        body["top_p"] = settings.llm_pack_top_p
     # integrate.api.nvidia.com: runtime logs show repeated HTTP 504 ~300s with response_format=json_object;
     # omit strict JSON mode so the gateway/model can finish within upstream limits; prompt still requires JSON.
     if "integrate.api.nvidia.com" not in ep_host:
@@ -262,9 +287,9 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
     parsed_call = urlparse(url)
     api_path = (parsed_call.path or "/").strip() or "/"
     strict_json_response = body.get("response_format") is not None
-    _timeout_s = max(0.2, settings.pack_llm_timeout_ms / 1000.0)
+    _timeout_s = max(0.2, settings.llm_pack_timeout_ms / 1000.0)
     # Transient 5xx retries: up to this many HTTP POSTs total (initial + retries).
-    max_tries = settings.pack_llm_max_attempts
+    max_tries = settings.llm_pack_max_attempts
     raw_step_count = len(raw_steps)
 
     raw = ""
@@ -283,11 +308,10 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
             {
                 "kind": "llm_request_sent",
                 "attempt": attempt + 1,
-                "provider": llm_config.provider,
                 "model": model,
                 "host": (parsed_ep.netloc or "").lower() or None,
                 "path": api_path,
-                "timeout_ms": int(settings.pack_llm_timeout_ms),
+                "timeout_ms": int(settings.llm_pack_timeout_ms),
                 "payload_bytes": len(raw_body),
                 "llm_message_chars": system_prompt_metrics["system_prompt_chars"]
                 + user_message_metrics["user_message_chars"],
@@ -386,7 +410,7 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
                     {
                         "kind": "llm_timeout",
                         "attempt": attempt + 1,
-                        "timeout_ms": int(settings.pack_llm_timeout_ms),
+                        "timeout_ms": int(settings.llm_pack_timeout_ms),
                         "elapsed_ms": elapsed_ms,
                         "path": api_path,
                         "raw_step_count": raw_step_count,
@@ -452,14 +476,14 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
     structured = _parse_strict_json_object(content)
+    steps_list = structured.get("steps", []) if isinstance(structured.get("steps"), list) else []
     skill_pack_log_append(
         {
             "kind": "llm_structured_output",
             "source": "message_content",
-            "canonical_step_count": len(structured.get("steps", []))
-            if isinstance(structured.get("steps"), list)
-            else 0,
+            "canonical_step_count": len(steps_list),
             **skill_pack_json_metrics(structured, prefix="structured"),
+            "steps": steps_list,
         }
     )
     return structured

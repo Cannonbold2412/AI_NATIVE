@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
 import { FormProvider, useForm, useFormState, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import type { StepEditorDTO, WorkflowResponse } from '../types/workflow'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { fieldSelectClass } from '@/lib/fieldStyles'
 import { cn } from '@/lib/utils'
@@ -17,6 +18,8 @@ import { BoxSelect, Info, Trash2 } from 'lucide-react'
 type FormValues = {
   intent: string
   url: string
+  url_state_before_pattern: string
+  url_state_after_pattern: string
   scroll_mode: 'scroll_only' | 'scroll_to_locate'
   scroll_amount: string
   scroll_selector: string
@@ -37,6 +40,8 @@ type FormValues = {
 const emptyForm: FormValues = {
   intent: '',
   url: '',
+  url_state_before_pattern: '',
+  url_state_after_pattern: '',
   scroll_mode: 'scroll_only',
   scroll_amount: '',
   scroll_selector: '',
@@ -61,6 +66,9 @@ const EXACT_URL_CHECK_KINDS = new Set(['url_exact', 'url_must_be'])
 function defaultsFromStep(step: StepEditorDTO): FormValues {
   const tgt = step.target as { primary_selector?: string; fallback_selectors?: string[] }
   const sel = step.selectors as { css?: string; aria?: string; text_based?: string; xpath?: string }
+  const urlState = step.url_state || {}
+  const beforeUrlState = (urlState.before || {}) as Record<string, string>
+  const afterUrlState = (urlState.after || {}) as Record<string, string>
   const anc = (step.anchors_signals || [])
     .map((a) => {
       const o = a as Record<string, string>
@@ -73,6 +81,8 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
   return {
     intent: step.intent || step.final_intent,
     url: step.url || '',
+    url_state_before_pattern: String(beforeUrlState.url_pattern || ''),
+    url_state_after_pattern: String(afterUrlState.url_pattern || ''),
     scroll_mode: step.scroll_mode === 'scroll_to_locate' ? 'scroll_to_locate' : 'scroll_only',
     scroll_amount: step.scroll_amount === null || step.scroll_amount === undefined ? '' : String(step.scroll_amount),
     scroll_selector: String(step.scroll_selector || ''),
@@ -128,10 +138,6 @@ export type StepEditorPanelHandle = {
   submitIfDirty: () => Promise<boolean>
 }
 
-function compactStepLabel(label: string): string {
-  return label.replace(/^Step\s+\d+:\s*/i, '').trim()
-}
-
 function humanizeAction(action: string): string {
   const cleaned = action.trim().replace(/[_-]+/g, ' ')
   if (!cleaned) return 'Action'
@@ -176,6 +182,31 @@ function parseScrollAmount(raw: string): number {
   return Number.parseInt(trimmed, 10)
 }
 
+function urlStateBlock(step: StepEditorDTO, phase: 'before' | 'after'): Record<string, string> {
+  const block = step.url_state?.[phase]
+  return block && typeof block === 'object' && !Array.isArray(block) ? (block as Record<string, string>) : {}
+}
+
+function appendUrlStatePatch(patch: Record<string, unknown>, values: FormValues, step: StepEditorDTO) {
+  const before = urlStateBlock(step, 'before')
+  const after = urlStateBlock(step, 'after')
+  const nextBeforePattern = values.url_state_before_pattern.trim()
+  const nextAfterPattern = values.url_state_after_pattern.trim()
+  const changed =
+    nextBeforePattern !== String(before.url_pattern || '') ||
+    nextAfterPattern !== String(after.url_pattern || '')
+  if (!changed) return
+  patch.url_state = {
+    before: {
+      url_pattern: nextBeforePattern,
+    },
+    after: {
+      url_pattern: nextAfterPattern,
+    },
+    edited_by_user: true,
+  }
+}
+
 function DirtySync({ stepIndex }: { stepIndex: number }) {
   const { isDirty } = useFormState()
   const markDirty = useEditorStore((s) => s.markStepDirty)
@@ -200,9 +231,13 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
     ref,
   ) {
   const methods = useForm<FormValues>({ defaultValues: emptyForm })
+  const [urlStateTestResult, setUrlStateTestResult] = useState<{ before?: boolean; after?: boolean } | null>(null)
 
   useEffect(() => {
-    if (step) methods.reset(defaultsFromStep(step))
+    if (step) {
+      methods.reset(defaultsFromStep(step))
+      setUrlStateTestResult(null)
+    }
   }, [step, methods])
 
   const saveVisualBbox = useCallback(
@@ -255,6 +290,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
             success_conditions: { url },
           },
         }
+        appendUrlStatePatch(patch, values, step)
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
@@ -282,6 +318,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         else if (values.check_kind === 'snapshot') patch.check_threshold = Number(values.check_threshold)
         else if (values.check_kind === 'selector') patch.check_selector = values.check_selector
         else if (values.check_kind === 'text') patch.check_text = values.check_text
+        appendUrlStatePatch(patch, values, step)
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
@@ -322,6 +359,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
             delta: scrollAmount,
           }
         }
+        appendUrlStatePatch(patch, values, step)
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
@@ -359,6 +397,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         },
       }
       if (canEditField('value')) patch.value = values.value
+      appendUrlStatePatch(patch, values, step)
       try {
         const res = await patchStep(skillId, step.step_index, patch, false)
         onWorkflowUpdated(res.workflow)
@@ -403,6 +442,8 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
   const anchors = useWatch({ control: methods.control, name: 'anchors' }) || ['']
   const checkKind = useWatch({ control: methods.control, name: 'check_kind' }) || 'url'
   const scrollMode = useWatch({ control: methods.control, name: 'scroll_mode' }) || 'scroll_only'
+  const urlStateBeforePattern = useWatch({ control: methods.control, name: 'url_state_before_pattern' }) || ''
+  const urlStateAfterPattern = useWatch({ control: methods.control, name: 'url_state_after_pattern' }) || ''
 
   if (!step) {
     return (
@@ -419,6 +460,28 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
   const isScrollStep = step.flags.is_scroll
   const showSelectorAndAnchorTools = !isScrollStep && !isNavigateStep && !(isCheckStep && URL_CHECK_KINDS.has(checkKind))
   const bboxSummary = visualBboxSummary(step)
+  const beforeUrlState = urlStateBlock(step, 'before')
+  const afterUrlState = urlStateBlock(step, 'after')
+  const testUrlStatePatterns = () => {
+    const values = methods.getValues()
+    let beforeOk: boolean | undefined
+    let afterOk: boolean | undefined
+    try {
+      if (values.url_state_before_pattern.trim()) {
+        beforeOk = new RegExp(values.url_state_before_pattern.trim()).test(String(beforeUrlState.url || ''))
+      }
+    } catch {
+      beforeOk = false
+    }
+    try {
+      if (values.url_state_after_pattern.trim()) {
+        afterOk = new RegExp(values.url_state_after_pattern.trim()).test(String(afterUrlState.url || ''))
+      }
+    } catch {
+      afterOk = false
+    }
+    setUrlStateTestResult({ before: beforeOk, after: afterOk })
+  }
 
   const onSubmit = methods.handleSubmit(async (values) => {
     try {
@@ -429,8 +492,10 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
   })
 
   return (
-    <div className="bg-card/30 border-border/60 supports-[backdrop-filter]:bg-card/20 relative z-0 min-h-0 min-w-0 space-y-2 border-t p-2 backdrop-blur-sm md:border-t-0 md:border-l md:overflow-x-hidden md:overflow-y-auto">
-      <ScreenshotViewer
+    <div className="bg-card/30 border-border/60 supports-[backdrop-filter]:bg-card/20 relative z-0 flex min-h-0 min-w-0 flex-col overflow-hidden border-t backdrop-blur-sm md:border-t-0 md:border-l">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-2 p-2">
+          <ScreenshotViewer
         screenshot={step.screenshot}
         label={step.human_readable_description}
         stepIndex={step.step_index}
@@ -440,12 +505,12 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         isScrollStep={step.flags.is_scroll}
         onSaveVisualBbox={!step.flags.is_scroll ? saveVisualBbox : undefined}
       />
-      <div
-        className={cn(
-          'border-border/60 bg-background/35 flex min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-xs',
-          bboxSummary.usable ? 'text-zinc-300' : 'text-zinc-500',
-        )}
-      >
+          <div
+            className={cn(
+              'border-border/60 bg-background/35 flex min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-xs',
+              bboxSummary.usable ? 'text-zinc-300' : 'text-zinc-500',
+            )}
+          >
         <span
           className={cn(
             'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border',
@@ -469,14 +534,13 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
             {bboxSummary.label}
           </p>
         </div>
-      </div>
-      <FormProvider {...methods}>
-        <DirtySync stepIndex={step.step_index} />
-        <form onSubmit={onSubmit} className="space-y-2">
+          </div>
+          <FormProvider {...methods}>
+            <DirtySync stepIndex={step.step_index} />
+            <form onSubmit={onSubmit} className="space-y-2">
           <Card className="gap-2 py-3">
             <CardHeader className="p-2.5 pb-1">
               <CardTitle className="text-lg font-semibold tracking-tight">Action: {humanizeAction(step.action_type)}</CardTitle>
-              <CardDescription className="line-clamp-2">{compactStepLabel(step.human_readable_description)}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 p-2.5 pt-0">
               <div className="grid gap-2">
@@ -663,6 +727,73 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                   ) : null}
                 </>
               ) : null}
+          </CardContent>
+          </Card>
+
+          <Card className="gap-2 py-3">
+            <CardHeader className="p-2.5 pb-1">
+              <CardTitle className="text-sm">URL State</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2.5 p-2.5 pt-0">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="url_state_before_pattern">Before pattern</Label>
+                  <Input
+                    id="url_state_before_pattern"
+                    type="text"
+                    className="font-mono text-xs"
+                    placeholder="^https://example\\.com/path$"
+                    {...methods.register('url_state_before_pattern', {
+                      onChange: () => setUrlStateTestResult(null),
+                    })}
+                  />
+                  {beforeUrlState.url ? (
+                    <p className="text-muted-foreground truncate font-mono text-[11px]">
+                      recorded: {beforeUrlState.url}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="url_state_after_pattern">After pattern</Label>
+                  <Input
+                    id="url_state_after_pattern"
+                    type="text"
+                    className="font-mono text-xs"
+                    placeholder="^https://example\\.com/next$"
+                    {...methods.register('url_state_after_pattern', {
+                      onChange: () => setUrlStateTestResult(null),
+                    })}
+                  />
+                  {afterUrlState.url ? (
+                    <p className="text-muted-foreground truncate font-mono text-[11px]">
+                      recorded: {afterUrlState.url}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              {urlStateTestResult ? (
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {urlStateTestResult.before != null ? (
+                    <span className={urlStateTestResult.before ? 'text-emerald-400' : 'text-destructive'}>
+                      before: {urlStateTestResult.before ? 'matches' : 'no match'}
+                    </span>
+                  ) : null}
+                  {urlStateTestResult.after != null ? (
+                    <span className={urlStateTestResult.after ? 'text-emerald-400' : 'text-destructive'}>
+                      after: {urlStateTestResult.after ? 'matches' : 'no match'}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={testUrlStatePatterns}
+                disabled={!urlStateBeforePattern.trim() && !urlStateAfterPattern.trim()}
+              >
+                Test patterns
+              </Button>
             </CardContent>
           </Card>
 
@@ -766,8 +897,10 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
           {methods.formState.errors.root ? (
             <p className="text-destructive text-sm">{(methods.formState.errors.root as { message?: string }).message}</p>
           ) : null}
-        </form>
-      </FormProvider>
+            </form>
+          </FormProvider>
+        </div>
+      </ScrollArea>
     </div>
   )
 })

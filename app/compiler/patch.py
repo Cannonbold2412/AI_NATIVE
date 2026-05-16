@@ -216,6 +216,7 @@ def apply_step_patch(
     for key in (
         "target",
         "signals",
+        "url_state",
         "validation",
         "recovery",
         "confidence_protocol",
@@ -224,6 +225,10 @@ def apply_step_patch(
         if key in patch and isinstance(patch[key], dict):
             base = step.get(key) or {}
             step[key] = deep_merge(dict(base), dict(patch[key]))
+    if "url_state" in patch and isinstance(patch.get("url_state"), dict):
+        url_state = dict(step.get("url_state") or {})
+        url_state["edited_by_user"] = True
+        step["url_state"] = url_state
     _apply_top_level_step_fields(step, patch)
     step = _normalize_step_anchor_blocks(step)
     user_edited_recovery = "recovery" in patch and isinstance(patch.get("recovery"), dict)

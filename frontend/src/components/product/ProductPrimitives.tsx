@@ -157,7 +157,7 @@ export function GlobalCreateMenu() {
   return (
     <div className="flex flex-wrap gap-2">
       <Button asChild size="sm">
-        <a href="/recordings/new">New recording</a>
+        <a href="/plugins">New plugin</a>
       </Button>
       <Button asChild size="sm" variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-200">
         <a href="/skill-pack-builder">Build package</a>

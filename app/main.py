@@ -4,8 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.job_routes import router as job_router
+from app.api.plugin_routes import router as plugin_router
 from app.api.product_routes import router as product_router
+from app.api.publish_routes import router as publish_router
 from app.api.routes import router
+from app.api.run_routes import router as run_router
 from app.api.security import ProductionRequestMiddleware
 from app.api.skill_pack_routes import router as skill_pack_router
 from app.api.v1_alias_routes import router as v1_alias_router
@@ -36,6 +39,9 @@ app.include_router(workflow_router, prefix="/api/v1")
 app.include_router(job_router, prefix="/api/v1")
 app.include_router(product_router, prefix="/api/v1")
 app.include_router(v1_alias_router, prefix="/api/v1")
+app.include_router(plugin_router, prefix="/api/v1")
+app.include_router(run_router, prefix="/api/v1")
+app.include_router(publish_router, prefix="/api/v1")
 
 
 @app.get("/")

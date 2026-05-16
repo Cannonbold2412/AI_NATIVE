@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 from app.compiler.action_policy import no_recovery_block, recovery_enabled_for_action
 from app.compiler.decision_layer import rank_merged_anchors
@@ -44,8 +46,65 @@ from app.policy.bundle import PolicyBundle, get_policy_bundle
 from app.policy.intent_ontology import intent_specificity_score, normalize_compiler_intent
 
 
+_URL_DYNAMIC_SEG = re.compile(r"^(?:[0-9]+|[0-9a-f]{8,}|[A-Za-z0-9_-]{16,})$")
+_URL_VOLATILE_PARAMS = frozenset({
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "ts", "_", "t", "ref",
+})
+_RECOVERABLE_VISION_ANCHOR_REASONS = frozenset({
+    "vision_anchors_disabled_in_policy",
+    "llm_disabled",
+    "llm_anchor_vision_disabled",
+    "llm_endpoint_unset",
+    "llm_endpoint_not_multimodal_capable",
+    "vision_llm_request_failed",
+    "vision_llm_empty_response",
+    "vision_llm_invalid_primary_phrase",
+})
+
+
+def _normalize_url_pattern(url: str) -> str:
+    url = str(url or "").strip()
+    if not url:
+        return ""
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        host_part = re.escape(parsed.scheme + "://" + parsed.netloc)
+        segments = parsed.path.split("/")
+        normalized = [
+            "[^/]+" if _URL_DYNAMIC_SEG.match(seg) else re.escape(seg)
+            for seg in segments
+        ]
+        path_pattern = "/".join(normalized)
+        qs = [(k, v) for k, v in parse_qsl(parsed.query) if k not in _URL_VOLATILE_PARAMS and not k.startswith("utm_")]
+        query_suffix = ("\\?" + re.escape(urlencode(qs))) if qs else ""
+        return f"^{host_part}{path_pattern}{query_suffix}$"
+    except Exception:
+        return ""
+
+
 def _default_confidence_protocol(bundle: PolicyBundle) -> dict[str, Any]:
     return bundle.as_confidence_protocol_fragment()
+
+
+def _build_url_state(ev: dict[str, Any]) -> dict[str, Any]:
+    raw = ev.get("url_state")
+    if not isinstance(raw, dict):
+        return {}
+    before = raw.get("before") if isinstance(raw.get("before"), dict) else {}
+    after = raw.get("after") if isinstance(raw.get("after"), dict) else {}
+    before_url = str(before.get("url") or "")
+    after_url = str(after.get("url") or "")
+    return {
+        "before": {
+            "url_pattern": str(before.get("url_pattern") or _normalize_url_pattern(before_url)),
+        },
+        "after": {
+            "url_pattern": str(after.get("url_pattern") or _normalize_url_pattern(after_url)),
+        },
+    }
 
 
 def _merge_compile_warnings(
@@ -53,17 +112,60 @@ def _merge_compile_warnings(
     ev_with_intent: dict[str, Any],
     merged_anchors: list[dict[str, Any]],
     policy: dict[str, Any],
+    *,
+    vision_anchor_warning: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     out = dict(protocol)
-    if not destructive_compiler_step(ev_with_intent, policy):
-        return out
+    cw = dict(out.get("compile_warnings") or {})
+    if vision_anchor_warning:
+        cw["vision_anchor_fallback"] = vision_anchor_warning
     unc = policy.get("uncertainty") if isinstance(policy.get("uncertainty"), dict) else {}
     min_a = int(unc.get("destructive_min_anchors_warn", 2))
-    if len(merged_anchors) < min_a:
-        cw = dict(out.get("compile_warnings") or {})
+    if destructive_compiler_step(ev_with_intent, policy) and len(merged_anchors) < min_a:
         cw["destructive_low_anchor_count"] = True
+    if cw:
         out["compile_warnings"] = cw
     return out
+
+
+def _vision_anchor_failure_is_recoverable(exc: VisionAnchorGenerationError) -> bool:
+    reason = str(exc.reason or "")
+    return reason in _RECOVERABLE_VISION_ANCHOR_REASONS
+
+
+def _fallback_anchors_from_event(ev_with_intent: dict[str, Any], policy: dict[str, Any]) -> list[dict[str, Any]]:
+    anchors = clean_anchors(
+        ev_with_intent.get("anchors") or [],
+        ev_with_intent.get("context") or {},
+        policy,
+        target=dict(ev_with_intent.get("target") or {}),
+        semantic=dict(ev_with_intent.get("semantic") or {}),
+    )
+    target = ev_with_intent.get("target") if isinstance(ev_with_intent.get("target"), dict) else {}
+    semantic = ev_with_intent.get("semantic") if isinstance(ev_with_intent.get("semantic"), dict) else {}
+    direct = ""
+    for key in ("inner_text", "aria_label", "name", "placeholder"):
+        direct = str(target.get(key) or "").strip()
+        if direct:
+            break
+    if not direct:
+        direct = str(semantic.get("normalized_text") or "").strip()
+    direct = " ".join(direct.lower().split())[:96]
+    if direct and direct not in {"button", "input", "link", "element"}:
+        target_anchor = {"element": direct, "relation": "target"}
+        anchors = [target_anchor, *[a for a in anchors if str(a.get("element") or "").lower() != direct]]
+    return anchors
+
+
+def _vision_anchor_warning(exc: VisionAnchorGenerationError, *, step_index: int) -> dict[str, Any]:
+    warning: dict[str, Any] = {
+        "reason": str(exc.reason or ""),
+        "step_index": exc.step_index if exc.step_index is not None else step_index,
+        "fallback": "deterministic_anchors",
+    }
+    if exc.hint:
+        warning["hint"] = exc.hint
+    return warning
 
 
 def _persisted_visual_asset_path(
@@ -263,6 +365,7 @@ def _initial_navigation_step(events: list[dict[str, Any]], bundle: PolicyBundle)
             action={"action": "navigate", "url": url},
             intent="navigate_to_start_url",
             url=url,
+            url_state={},
             signals={
                 "context": {
                     "page_url": url,
@@ -314,6 +417,7 @@ def _build_step(
         return SkillStep(
             action=scroll_action,
             intent="scroll_viewport",
+            url_state=_build_url_state(ev),
             signals={
                 "visual": visual_signals,
             },
@@ -333,13 +437,20 @@ def _build_step(
     semantic["llm_intent"] = intent
     semantic["intent_specificity_score"] = intent_specificity_score(intent, policy)
     ev_with_intent["semantic"] = semantic
-    merged_anchors = generate_anchors_for_step_or_raise(
-        ev_with_intent,
-        session_root=session_root,
-        final_intent=intent,
-        policy=policy,
-        step_index=step_index,
-    )
+    vision_anchor_warning: dict[str, Any] | None = None
+    try:
+        merged_anchors = generate_anchors_for_step_or_raise(
+            ev_with_intent,
+            session_root=session_root,
+            final_intent=intent,
+            policy=policy,
+            step_index=step_index,
+        )
+    except VisionAnchorGenerationError as exc:
+        if not _vision_anchor_failure_is_recoverable(exc):
+            raise
+        merged_anchors = _fallback_anchors_from_event(ev_with_intent, policy)
+        vision_anchor_warning = _vision_anchor_warning(exc, step_index=step_index)
     merged_anchors = rank_merged_anchors(merged_anchors, ev_with_intent, intent, policy)
     validation = _build_validation(ev_with_intent, state_diff, policy)
     if recovery_enabled_for_action(action_payload):
@@ -366,10 +477,12 @@ def _build_step(
         ev_with_intent,
         merged_anchors,
         policy,
+        vision_anchor_warning=vision_anchor_warning,
     )
     return SkillStep(
         action=action_payload,
         intent=intent,
+        url_state=_build_url_state(ev),
         target=target,
         signals=signals,
         state={"before": state_before, "after": state_after},
@@ -427,6 +540,6 @@ def compile_skill_package(
             "anchor_vision": settings.llm_anchor_vision,
             "recovery_assist": settings.llm_recovery_assist,
             "max_calls_per_step": settings.llm_max_calls_per_step,
-            "timeout_ms": settings.llm_timeout_ms,
+            "timeout_ms": settings.llm_pack_timeout_ms,
         },
     )

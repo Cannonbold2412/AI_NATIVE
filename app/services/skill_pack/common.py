@@ -15,7 +15,8 @@ _TEXT_SELECTOR_RE = re.compile(
     r"^\s*text\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|(.+?))\s*$", re.IGNORECASE
 )
 _INPUT_NAME_RE = re.compile(
-    r"input\s*\[\s*name\s*=\s*['\"]?([^'\"\]]+)['\"]?\s*\]", re.IGNORECASE
+    r"input\s*\[\s*(name|aria-label|placeholder)\s*[~|^$*]?=\s*['\"]?([^'\"\]]+)['\"]?\s*\]",
+    re.IGNORECASE,
 )
 
 _STEP_LIST_KEYS = (

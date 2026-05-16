@@ -6,7 +6,7 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from io import BytesIO
 from pathlib import Path
 from typing import Iterator
@@ -94,6 +94,46 @@ def _structured_workflow_two() -> dict:
     }
 
 
+@contextmanager
+def _patched_pack_llm_settings(**values: object) -> Iterator[None]:
+    from app.config import settings
+    from app.llm import pack_llm_keys
+
+    defaults: dict[str, object] = {
+        "pack_llm_enabled": True,
+        "pack_llm_provider": "",
+        "pack_llm_endpoint": "",
+        "pack_llm_api_key": "",
+        "pack_llm_api_keys": "",
+        "pack_llm_model": "",
+        "pack_llm_gemini_endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "pack_llm_gemini_api_key": "",
+        "pack_llm_gemini_api_keys": "",
+        "pack_llm_gemini_model": "gemini-2.5-flash",
+        "pack_llm_nvidia_endpoint": "https://integrate.api.nvidia.com/v1",
+        "pack_llm_nvidia_api_key": "",
+        "pack_llm_nvidia_api_keys": "",
+        "pack_llm_nvidia_model": "z-ai/glm-5.1",
+        "pack_llm_timeout_ms": 600000,
+        "pack_llm_max_attempts": 1,
+        "pack_llm_structure_temperature": 0.0,
+        "pack_llm_structure_max_tokens": None,
+        "pack_llm_top_p": None,
+        "llm_api_key": "",
+        "llm_api_keys": "",
+    }
+    defaults.update(values)
+    old_idx = pack_llm_keys._PACK_KEY_IDX
+    pack_llm_keys._PACK_KEY_IDX = 0
+    try:
+        with ExitStack() as stack:
+            for name, value in defaults.items():
+                stack.enter_context(patch.object(settings, name, value))
+            yield
+    finally:
+        pack_llm_keys._PACK_KEY_IDX = old_idx
+
+
 def _multi_workflow_payload() -> dict:
     return {
         "skills": [
@@ -111,14 +151,14 @@ def _multi_workflow_payload() -> dict:
 
 class SkillPackPreprocessTests(unittest.TestCase):
     def test_preprocess_declarations_does_not_mutate_source(self) -> None:
-        from app.services.skill_pack_builder import preprocess_skill_pack_declarations
+        from app.services.skill_pack.compiler import preprocess_skill_pack_declarations
 
         raw = {"steps": [{"a": 1}], "inputs": []}
         _ = preprocess_skill_pack_declarations(raw)
         self.assertIn("inputs", raw)
 
     def test_preprocess_declarations_strips_blocks_recursive(self) -> None:
-        from app.services.skill_pack_builder import preprocess_skill_pack_declarations
+        from app.services.skill_pack.compiler import preprocess_skill_pack_declarations
 
         raw = {
             "meta": {"title": "T", "source_session_id": "sess1"},
@@ -141,7 +181,7 @@ class SkillPackPreprocessTests(unittest.TestCase):
         self.assertEqual(step["nested"], {})
 
     def test_sanitize_raw_steps_for_llm_removes_heavy_fields(self) -> None:
-        from app.services.skill_pack_builder import sanitize_raw_steps_for_llm
+        from app.services.skill_pack.compiler import sanitize_raw_steps_for_llm
 
         heavy = [
             {
@@ -161,7 +201,7 @@ class SkillPackPreprocessTests(unittest.TestCase):
         self.assertIn("screenshot", heavy[0])  # original untouched
 
     def test_structure_steps_with_llm_passes_trimmed_steps_to_provider(self) -> None:
-        from app.services.skill_pack_builder import structure_steps_with_llm
+        from app.services.skill_pack.compiler import structure_steps_with_llm
 
         captured: list[list[dict]] = []
 
@@ -169,7 +209,7 @@ class SkillPackPreprocessTests(unittest.TestCase):
             captured.append(list(steps))
             return _structured_workflow()
 
-        with patch("app.services.skill_pack_builder._call_structuring_llm", side_effect=capture):
+        with patch("app.services.skill_pack.compiler._call_structuring_llm", side_effect=capture):
             structure_steps_with_llm(
                 [
                     {
@@ -183,18 +223,207 @@ class SkillPackPreprocessTests(unittest.TestCase):
         self.assertNotIn("screenshot", captured[0][0])
 
 
+class SkillPackLLMProviderToggleTests(unittest.TestCase):
+    def test_gemini_provider_resolves_endpoint_model_and_key(self) -> None:
+        from app.llm.pack_llm_config import resolved_pack_llm_config
+        from app.llm.pack_llm_keys import configured_pack_keys
+
+        with _patched_pack_llm_settings(
+            pack_llm_provider="gemini",
+            pack_llm_endpoint="https://legacy.invalid/v1",
+            pack_llm_model="gemini-2.5-pro",
+            pack_llm_api_key="legacy-pack-key",
+            pack_llm_gemini_endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
+            pack_llm_gemini_model="gemini-2.5-flash",
+            pack_llm_gemini_api_key="gemini-single",
+        ):
+            cfg = resolved_pack_llm_config()
+            keys = configured_pack_keys()
+
+        self.assertEqual(cfg.provider, "gemini")
+        self.assertEqual(cfg.endpoint, "https://generativelanguage.googleapis.com/v1beta/openai/")
+        self.assertEqual(cfg.model, "gemini-2.5-pro")
+        self.assertEqual(keys, ["gemini-single"])
+
+    def test_nvidia_provider_resolves_endpoint_model_and_key(self) -> None:
+        from app.llm.pack_llm_config import resolved_pack_llm_config
+        from app.llm.pack_llm_keys import configured_pack_keys
+
+        with _patched_pack_llm_settings(
+            pack_llm_provider="nvidia",
+            pack_llm_model="deepseek-ai/deepseek-v4-flash",
+            pack_llm_api_key="legacy-pack-key",
+            llm_api_key="legacy-general-key",
+            pack_llm_nvidia_endpoint="https://integrate.api.nvidia.com/v1",
+            pack_llm_nvidia_model="z-ai/glm-5.1",
+            pack_llm_nvidia_api_key="nvidia-single",
+        ):
+            cfg = resolved_pack_llm_config()
+            keys = configured_pack_keys()
+
+        self.assertEqual(cfg.provider, "nvidia")
+        self.assertEqual(cfg.endpoint, "https://integrate.api.nvidia.com/v1")
+        self.assertEqual(cfg.model, "deepseek-ai/deepseek-v4-flash")
+        self.assertEqual(keys, ["nvidia-single"])
+
+    def test_provider_keys_rotate_round_robin(self) -> None:
+        from app.llm.pack_llm_keys import next_pack_api_key
+
+        with _patched_pack_llm_settings(
+            pack_llm_provider="gemini",
+            pack_llm_gemini_api_keys="gemini-a, gemini-b",
+            pack_llm_gemini_api_key="gemini-single",
+        ):
+            self.assertEqual(next_pack_api_key(), ("gemini-a", 1, 2))
+            self.assertEqual(next_pack_api_key(), ("gemini-b", 2, 2))
+            self.assertEqual(next_pack_api_key(), ("gemini-a", 1, 2))
+
+    def test_selected_provider_without_provider_key_fails_before_request(self) -> None:
+        from app.services.skill_pack import llm as pack_llm
+
+        logs: list[dict[str, object]] = []
+        with _patched_pack_llm_settings(
+            pack_llm_provider="nvidia",
+            pack_llm_api_keys="legacy-pack-key",
+            pack_llm_nvidia_api_key="",
+            pack_llm_nvidia_api_keys="",
+        ), patch("app.services.skill_pack.llm.request.urlopen") as urlopen_mock, patch(
+            "app.services.skill_pack.llm.skill_pack_log_append", side_effect=logs.append
+        ):
+            with self.assertRaisesRegex(ValueError, "SKILL_PACK_LLM_NVIDIA_API_KEYS"):
+                pack_llm._call_structuring_llm([{"action": "click"}])
+
+        urlopen_mock.assert_not_called()
+        missing_key_log = next(row for row in logs if row.get("kind") == "llm_missing_api_key")
+        self.assertEqual(missing_key_log["provider"], "nvidia")
+
+    def test_gemini_request_includes_json_response_format(self) -> None:
+        from app.services.skill_pack import llm as pack_llm
+
+        captured: dict[str, object] = {}
+
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *_exc: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": json.dumps({"goal": "Toggle", "steps": []})
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
+
+        def fake_urlopen(req: object, timeout: float) -> FakeResponse:
+            captured["url"] = getattr(req, "full_url")
+            captured["authorization"] = req.get_header("Authorization")
+            captured["body"] = json.loads(req.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        logs: list[dict[str, object]] = []
+        with _patched_pack_llm_settings(
+            pack_llm_provider="gemini",
+            pack_llm_endpoint="https://integrate.api.nvidia.com/v1",
+            pack_llm_model="gemini-2.5-pro",
+            pack_llm_gemini_api_key="gemini-key",
+            pack_llm_gemini_model="gemini-2.5-flash",
+        ), patch("app.services.skill_pack.llm.request.urlopen", side_effect=fake_urlopen), patch(
+            "app.services.skill_pack.llm.skill_pack_log_append", side_effect=logs.append
+        ):
+            out = pack_llm._call_structuring_llm([{"action": "click"}])
+
+        body = captured["body"]
+        assert isinstance(body, dict)
+        self.assertEqual(out, {"goal": "Toggle", "steps": []})
+        self.assertEqual(captured["authorization"], "Bearer gemini-key")
+        self.assertEqual(
+            captured["url"],
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
+        self.assertEqual(body["model"], "gemini-2.5-pro")
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        request_log = next(row for row in logs if row.get("kind") == "llm_request_sent")
+        self.assertEqual(request_log["provider"], "gemini")
+        self.assertEqual(request_log["model"], "gemini-2.5-pro")
+        self.assertEqual(request_log["host"], "generativelanguage.googleapis.com")
+        self.assertTrue(request_log["strict_json_response"])
+
+    def test_nvidia_request_omits_json_response_format(self) -> None:
+        from app.services.skill_pack import llm as pack_llm
+
+        captured: dict[str, object] = {}
+
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *_exc: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": json.dumps({"goal": "Toggle", "steps": []})
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
+
+        def fake_urlopen(req: object, timeout: float) -> FakeResponse:
+            captured["url"] = getattr(req, "full_url")
+            captured["authorization"] = req.get_header("Authorization")
+            captured["body"] = json.loads(req.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        logs: list[dict[str, object]] = []
+        with _patched_pack_llm_settings(
+            pack_llm_provider="nvidia",
+            pack_llm_nvidia_api_key="nvidia-key",
+            pack_llm_nvidia_model="z-ai/glm-5.1",
+        ), patch("app.services.skill_pack.llm.request.urlopen", side_effect=fake_urlopen), patch(
+            "app.services.skill_pack.llm.skill_pack_log_append", side_effect=logs.append
+        ):
+            out = pack_llm._call_structuring_llm([{"action": "click"}])
+
+        body = captured["body"]
+        assert isinstance(body, dict)
+        self.assertEqual(out, {"goal": "Toggle", "steps": []})
+        self.assertEqual(captured["authorization"], "Bearer nvidia-key")
+        self.assertEqual(body["model"], "z-ai/glm-5.1")
+        self.assertNotIn("response_format", body)
+        request_log = next(row for row in logs if row.get("kind") == "llm_request_sent")
+        self.assertEqual(request_log["provider"], "nvidia")
+        self.assertEqual(request_log["model"], "z-ai/glm-5.1")
+        self.assertEqual(request_log["host"], "integrate.api.nvidia.com")
+        self.assertFalse(request_log["strict_json_response"])
+
+
 class SkillPackBuilderTests(unittest.TestCase):
     def test_structure_steps_with_llm_validates_provider_json(self) -> None:
-        from app.services.skill_pack_builder import structure_steps_with_llm
+        from app.services.skill_pack.compiler import structure_steps_with_llm
 
-        with patch("app.services.skill_pack_builder._call_structuring_llm", return_value=_structured_workflow()):
+        with patch("app.services.skill_pack.compiler._call_structuring_llm", return_value=_structured_workflow()):
             structured = structure_steps_with_llm(_raw_workflow()["steps"])
 
         self.assertEqual(structured["goal"], "Delete Database")
         self.assertEqual(structured["steps"][1], {"type": "fill", "selector": "input[name=email]", "value": "{{user_email}}"})
 
     def test_compile_execution_preserves_scroll_steps(self) -> None:
-        from app.services.skill_pack_builder import compile_execution, generate_execution_plan
+        from app.services.skill_pack.compiler import compile_execution, generate_execution_plan
 
         structured = {
             "goal": "Reveal lazy content",
@@ -214,7 +443,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertIn("into_view", execution_md.lower())
 
     def test_compile_execution_supports_exact_url_check(self) -> None:
-        from app.services.skill_pack_builder import compile_execution
+        from app.services.skill_pack.compiler import compile_execution
 
         structured = {
             "goal": "Verify page",
@@ -235,7 +464,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         )
 
     def test_compile_execution_passes_steps_and_adds_only_minimal_guards(self) -> None:
-        from app.services.skill_pack_builder import compile_execution, generate_execution_plan
+        from app.services.skill_pack.compiler import compile_execution, generate_execution_plan
 
         plan = compile_execution(_structured_workflow())
 
@@ -257,7 +486,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertNotIn("assert_visible", execution_md)
 
     def test_validation_rejects_wait_xpath_and_generic_selectors(self) -> None:
-        from app.services.skill_pack_builder import compile_execution, structure_steps_with_llm
+        from app.services.skill_pack.compiler import compile_execution, structure_steps_with_llm
 
         bad_payloads = [
             {"goal": "Bad", "steps": [{"type": "click", "selector": "button"}]},
@@ -267,7 +496,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         ]
 
         for payload in bad_payloads:
-            with self.subTest(payload=payload), patch("app.services.skill_pack_builder._call_structuring_llm", return_value=payload):
+            with self.subTest(payload=payload), patch("app.services.skill_pack.compiler._call_structuring_llm", return_value=payload):
                 with self.assertRaises(ValueError):
                     structure_steps_with_llm([{"raw": True}])
 
@@ -298,7 +527,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertNotIn("visual_ref", delete_entry)
 
     def test_parse_inputs_and_manifest_match_structured_variables(self) -> None:
-        from app.services.skill_pack_builder import build_manifest, parse_inputs
+        from app.services.skill_pack.compiler import build_manifest, parse_inputs
 
         inputs = parse_inputs(_structured_workflow())
         self.assertEqual([item["name"] for item in inputs], ["user_email", "user_password", "db_name"])
@@ -316,10 +545,10 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertEqual([item["name"] for item in manifest["inputs"]], ["user_email", "user_password", "db_name"])
 
     def test_build_skill_package_writes_clean_outputs(self) -> None:
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
                 package = build_skill_package(json.dumps(_raw_workflow()), bundle_slug="render")
 
             execution = json.loads(package["execution_json"])
@@ -327,9 +556,10 @@ class SkillPackBuilderTests(unittest.TestCase):
             self.assertEqual(package["name"], "delete_database_recording")
             # New layout: index has "skills" key instead of "workflows"
             index_by_name = {item["name"]: item for item in index["skills"]}
+            self.assertIn("delete_database_recording", index_by_name)
             self.assertEqual(
-                index_by_name["delete_database_recording"]["manifest"],
-                "skills/delete_database_recording/manifest.json",
+                index_by_name["delete_database_recording"]["execution"],
+                "skills/delete_database_recording/execution.json",
             )
             self.assertTrue(package["used_llm"])
             self.assertEqual(package["input_count"], 3)
@@ -340,11 +570,11 @@ class SkillPackBuilderTests(unittest.TestCase):
             self.assertIn({"type": "click", "selector": "text=Delete Database"}, execution)
 
     def test_build_skill_package_writes_skill_files_in_new_layout(self) -> None:
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
         from app.storage.skill_packages import bundle_root_dir
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
                 package = build_skill_package(json.dumps(_raw_workflow()), bundle_slug="render")
 
             wf_name = package["name"]
@@ -360,23 +590,20 @@ class SkillPackBuilderTests(unittest.TestCase):
             plugin_index = json.loads(plugin_index_path.read_text(encoding="utf-8"))
             skill_names = [s["name"] for s in plugin_index["skills"]]
             self.assertIn(wf_name, skill_names)
-            # orchestration/index.md exists
-            self.assertTrue((br / "orchestration" / "index.md").is_file())
-            # execution/*.js exist
-            self.assertTrue((br / "execution" / "executor.js").is_file())
-            self.assertTrue((br / "execution" / "tracker.js").is_file())
+            # CLAUDE.md exists
+            self.assertTrue((br / "CLAUDE.md").is_file())
             # Legacy dirs should NOT exist
             self.assertFalse((br / ".opencode").exists())
             self.assertFalse((br / ".codex").exists())
             self.assertFalse((br / "claude").exists())
 
     def test_building_multiple_workflows_creates_multiple_bundle_folders(self) -> None:
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
         from app.storage.skill_packages import read_skill_package_files
 
         with _temporary_skill_package_root():
             with patch(
-                "app.services.skill_pack_builder.structure_steps_with_llm",
+                "app.services.skill_pack.compiler.structure_steps_with_llm",
                 side_effect=[_structured_workflow(), _structured_workflow_two()],
             ):
                 first = build_skill_package(
@@ -394,12 +621,12 @@ class SkillPackBuilderTests(unittest.TestCase):
             index_by_name = {item["name"]: item for item in index["skills"]}
             self.assertEqual(set(index_by_name), {"delete_database", "delete_web_service"})
             self.assertEqual(
-                index_by_name["delete_database"]["manifest"],
-                "skills/delete_database/manifest.json",
+                index_by_name["delete_database"]["execution"],
+                "skills/delete_database/execution.json",
             )
             self.assertEqual(
-                index_by_name["delete_web_service"]["manifest"],
-                "skills/delete_web_service/manifest.json",
+                index_by_name["delete_web_service"]["execution"],
+                "skills/delete_web_service/execution.json",
             )
             first_files = read_skill_package_files("default", first["name"])
             self.assertIsNotNone(first_files)
@@ -411,17 +638,17 @@ class SkillPackBuilderTests(unittest.TestCase):
                 self.assertNotIn("skill.md", second_files)
 
     def test_append_workflow_creates_new_folder_and_keeps_existing_files_unchanged(self) -> None:
-        from app.services.skill_pack_builder import append_workflow_to_skill_package, build_skill_package
+        from app.services.skill_pack.compiler import append_workflow_to_skill_package, build_skill_package
         from app.storage.skill_packages import read_skill_package_files
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
                 build_skill_package(json.dumps(_raw_workflow()), package_name="delete_database", bundle_slug="default")
 
             before = read_skill_package_files("default", "delete_database")
             assert before is not None
 
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow_two()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow_two()):
                 appended = append_workflow_to_skill_package(
                     "default",
                     json.dumps(_raw_workflow_two()),
@@ -435,7 +662,6 @@ class SkillPackBuilderTests(unittest.TestCase):
 
             self.assertEqual(appended["name"], "delete_web_service")
             self.assertEqual(before["execution.json"], after["execution.json"])
-            self.assertIn("execution/executor.js", appended_files)
             index_skills = json.loads(appended["index_json"])["skills"]
             skill_names = {s["name"] for s in index_skills}
             self.assertEqual(skill_names, {"delete_database", "delete_web_service"})
@@ -448,7 +674,7 @@ class SkillPackBuilderTests(unittest.TestCase):
             raise ValueError("simulated structuring failure")
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", side_effect=_boom):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", side_effect=_boom):
                 with patch.object(settings, "auth_required", False):
                     client = TestClient(app)
                     resp = client.post("/skill-pack/build", json={"json_text": json.dumps(_raw_workflow())})
@@ -464,10 +690,10 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertIn("pipeline_phase", kinds)
 
     def test_skill_pack_build_log_includes_preprocess_and_llm_size_metrics(self) -> None:
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder._call_structuring_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler._call_structuring_llm", return_value=_structured_workflow()):
                 package = build_skill_package(json.dumps(_raw_workflow()), bundle_slug="default")
 
         build_log = package["build_log"]
@@ -486,23 +712,16 @@ class SkillPackBuilderTests(unittest.TestCase):
             )
         )
 
-        llm_summary = next(
-            row for row in build_log if row.get("kind") == "llm_input_preprocess"
-        )
-        self.assertIn("before_words", llm_summary)
-        self.assertIn("after_words", llm_summary)
-
-        step_rows = [row for row in build_log if row.get("kind") == "llm_step_preprocess_metric"]
-        # Expect metrics only for non-filtered steps (focus step is filtered as noise)
-        self.assertEqual(len(step_rows), 5)
-        self.assertTrue(all("removed_bytes" in row for row in step_rows))
+        # Verify pipeline_phase entries are emitted during compilation
+        pipeline_kinds = {row.get("kind") for row in build_log if isinstance(row, dict)}
+        self.assertIn("persist_phase", pipeline_kinds)
 
     def test_skill_pack_build_stream_emits_log_and_done_sse(self) -> None:
         from app.main import app
         from app.config import settings
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
                 with patch.object(settings, "auth_required", False):
                     client = TestClient(app)
                     with client.stream(
@@ -555,7 +774,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         from app.config import settings
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
                 with patch.object(settings, "auth_required", False):
                     client = TestClient(app)
                     seeded = client.post(
@@ -568,7 +787,7 @@ class SkillPackBuilderTests(unittest.TestCase):
                     )
                     self.assertEqual(seeded.status_code, 200)
 
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow_two()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow_two()):
                 with patch.object(settings, "auth_required", False):
                     client = TestClient(app)
                     with client.stream(
@@ -587,7 +806,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         from app.config import settings
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
                 with patch.object(settings, "auth_required", False):
                     client = TestClient(app)
                     build_response = client.post("/skill-pack/build", json={"json_text": json.dumps(_raw_workflow())})
@@ -595,9 +814,10 @@ class SkillPackBuilderTests(unittest.TestCase):
                     payload = build_response.json()
                     self.assertIn("index_json", payload)
                     index_by_name = {item["name"]: item for item in json.loads(payload["index_json"])["skills"]}
+                    self.assertIn("delete_database_recording", index_by_name)
                     self.assertEqual(
-                        index_by_name["delete_database_recording"]["manifest"],
-                        "skills/delete_database_recording/manifest.json",
+                        index_by_name["delete_database_recording"]["execution"],
+                        "skills/delete_database_recording/execution.json",
                     )
                     files_response = client.get(f"/skill-pack/bundles/default")
                     self.assertEqual(files_response.status_code, 200)
@@ -607,9 +827,7 @@ class SkillPackBuilderTests(unittest.TestCase):
                     wf_prefix = f"skills/{payload['name']}/"
                     self.assertIn("default.json", fn)
                     self.assertIn("README.md", fn)
-                    self.assertIn("auth/auth.json", fn)
-                    self.assertIn("execution/executor.js", fn)
-                    self.assertIn("orchestration/index.md", fn)
+                    self.assertNotIn("orchestration/index.md", fn)
                     self.assertNotIn("install.js", fn)
                     self.assertNotIn("install.bat", fn)
                     self.assertNotIn("index.json", fn)
@@ -634,25 +852,27 @@ class SkillPackBuilderTests(unittest.TestCase):
             skill_root = f"{bundle_folder}/skills/{wf_name}"
             with ZipFile(BytesIO(export_response.content)) as archive:
                 names = archive.namelist()
-                # New bundle-level files
+                # Bundle-level files
                 self.assertIn(f"{bundle_folder}/default.json", names)
                 self.assertIn(f"{bundle_folder}/README.md", names)
-                self.assertIn(f"{bundle_folder}/auth/auth.json", names)
-                self.assertIn(f"{bundle_folder}/auth/credentials.example.json", names)
-                self.assertIn(f"{bundle_folder}/orchestration/index.md", names)
-                self.assertIn(f"{bundle_folder}/orchestration/planner.md", names)
-                self.assertIn(f"{bundle_folder}/orchestration/schema.json", names)
-                self.assertIn(f"{bundle_folder}/execution/executor.js", names)
-                self.assertIn(f"{bundle_folder}/execution/recovery.js", names)
-                self.assertIn(f"{bundle_folder}/execution/tracker.js", names)
-                self.assertIn(f"{bundle_folder}/execution/validator.js", names)
+                self.assertIn(f"{bundle_folder}/CLAUDE.md", names)
+                # Gen 1 JS files must NOT be present (data-only zip)
+                self.assertNotIn(f"{bundle_folder}/execution/executor.js", names)
+                self.assertNotIn(f"{bundle_folder}/execution/tracker.js", names)
+                self.assertNotIn(f"{bundle_folder}/package.json", names)
                 # Per-skill files
                 self.assertIn(f"{skill_root}/SKILL.md", names)
                 self.assertIn(f"{skill_root}/execution.json", names)
                 self.assertIn(f"{skill_root}/recovery.json", names)
-                self.assertIn(f"{skill_root}/input.json", names)
-                self.assertIn(f"{skill_root}/manifest.json", names)
-                self.assertIn(f"{skill_root}/tests/test-cases.json", names)
+                # Removed files must not exist
+                self.assertNotIn(f"{bundle_folder}/auth/auth.json", names)
+                self.assertNotIn(f"{bundle_folder}/auth/credentials.example.json", names)
+                self.assertNotIn(f"{bundle_folder}/orchestration/index.md", names)
+                self.assertNotIn(f"{bundle_folder}/orchestration/planner.md", names)
+                self.assertNotIn(f"{bundle_folder}/orchestration/schema.json", names)
+                self.assertNotIn(f"{skill_root}/input.json", names)
+                self.assertNotIn(f"{skill_root}/manifest.json", names)
+                self.assertNotIn(f"{skill_root}/tests/test-cases.json", names)
                 # Old files must not exist
                 self.assertNotIn(f"{bundle_folder}/install.js", names)
                 self.assertNotIn(f"{bundle_folder}/install.bat", names)
@@ -662,15 +882,8 @@ class SkillPackBuilderTests(unittest.TestCase):
                 self.assertNotIn(f"{bundle_folder}/bridge/run.js", names)
                 # Content checks
                 plugin_index = json.loads(archive.read(f"{bundle_folder}/default.json"))
-                self.assertEqual(plugin_index["skills"][0]["manifest"], f"skills/{wf_name}/manifest.json")
-                manifest = json.loads(archive.read(f"{skill_root}/manifest.json"))
-                self.assertEqual(manifest["entry"]["execution"], "./execution.json")
-                self.assertEqual(manifest["entry"]["input"], "./input.json")
-                executor_js = archive.read(f"{bundle_folder}/execution/executor.js").decode("utf-8")
-                self.assertIn("runSingleSkill", executor_js)
-                tracker_js = archive.read(f"{bundle_folder}/execution/tracker.js").decode("utf-8")
-                self.assertIn("CONXA_TRACKER_URL", tracker_js)
-                self.assertIn(".catch(() => {})", tracker_js)
+                self.assertEqual(plugin_index["skills"][0]["execution"], f"skills/{wf_name}/execution.json")
+                self.assertEqual(plugin_index["skills"][0]["recovery"], f"skills/{wf_name}/recovery.json")
 
     def test_skill_pack_api_rename_package(self) -> None:
         from app.main import app
@@ -746,7 +959,7 @@ class SkillPackBuilderTests(unittest.TestCase):
 
     def test_build_skill_package_persists_step_visuals_and_exports_them(self) -> None:
         from app.config import settings
-        from app.services.skill_pack_builder import build_skill_package, build_skill_package_zip
+        from app.services.skill_pack.compiler import build_skill_package, build_skill_package_zip
         from app.storage.skill_packages import skill_package_dir
 
         payload = {
@@ -793,7 +1006,7 @@ class SkillPackBuilderTests(unittest.TestCase):
                     with patch.object(
                         settings, "pack_recovery_vision_enabled", False
                     ), patch(
-                        "app.services.skill_pack_builder.structure_steps_with_llm",
+                        "app.services.skill_pack.compiler.structure_steps_with_llm",
                         return_value=_structured_workflow_with_visuals(),
                     ), patch(
                         "app.llm.anchor_vision_llm.generate_anchors_from_image_bytes",
@@ -835,23 +1048,8 @@ class SkillPackBuilderTests(unittest.TestCase):
                         self.assertIn(f"{skill_base}/visuals/Image_2.png", names)
                         self.assertEqual(archive.read(f"{skill_base}/visuals/Image_0.jpg"), b"launch-image")
 
-    def test_execution_scaffolds_have_correct_structure(self) -> None:
-        from app.storage.skill_packages import _EXECUTOR_JS, _RECOVERY_JS, _TRACKER_JS, _VALIDATOR_JS
-
-        self.assertIn("runSingleSkill", _EXECUTOR_JS)
-        self.assertIn("execution.json", _EXECUTOR_JS)
-        self.assertIn("runLayer", _RECOVERY_JS)
-        self.assertIn("tracker.send", _RECOVERY_JS)
-        self.assertIn("CONXA_TRACKER_URL", _TRACKER_JS)
-        self.assertIn(".catch(() => {})", _TRACKER_JS)
-        self.assertIn("validateInput", _VALIDATOR_JS)
-        self.assertIn("input.json", _VALIDATOR_JS)
-        self.assertNotIn("assert_visible", _EXECUTOR_JS)
-        self.assertIn("ELEMENT_TOTAL_ATTEMPTS = 2", _EXECUTOR_JS)
-        self.assertIn("NAV_CHECK_TOTAL_ATTEMPTS = 3", _EXECUTOR_JS)
-
     def test_recovery_get_visual_ref_supports_expected_extensions(self) -> None:
-        from app.services.skill_pack_builder import get_visual_ref
+        from app.services.skill_pack.compiler import get_visual_ref
 
         with tempfile.TemporaryDirectory() as tmp:
             visuals_dir = Path(tmp)
@@ -861,7 +1059,7 @@ class SkillPackBuilderTests(unittest.TestCase):
             self.assertIsNone(get_visual_ref(99, visuals_dir))
 
     def test_recovery_generation_omits_non_action_steps_and_rejects_generic_content(self) -> None:
-        from app.services.skill_pack_builder import generate_recovery
+        from app.services.skill_pack.compiler import generate_recovery
 
         recovery = generate_recovery(
             {
@@ -890,12 +1088,12 @@ class SkillPackBuilderTests(unittest.TestCase):
             )
 
     def test_build_skill_package_enumerates_multiple_workflows_from_single_payload(self) -> None:
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
         from app.storage.skill_packages import bundle_root_dir
 
         with _temporary_skill_package_root():
             with patch(
-                "app.services.skill_pack_builder.structure_steps_with_llm",
+                "app.services.skill_pack.compiler.structure_steps_with_llm",
                 side_effect=[_structured_workflow(), _structured_workflow_two()],
             ):
                 package = build_skill_package(json.dumps(_multi_workflow_payload()), bundle_slug="render")
@@ -915,7 +1113,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         import threading
         import time
 
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
 
         payload = {
             "skills": [
@@ -940,7 +1138,7 @@ class SkillPackBuilderTests(unittest.TestCase):
                     active -= 1
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", side_effect=slow_structuring):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", side_effect=slow_structuring):
                 package = build_skill_package(json.dumps(payload), bundle_slug="render")
 
         self.assertEqual(len(package["workflow_names"]), 7)
@@ -948,7 +1146,7 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertLessEqual(max_active, 10)
 
     def test_build_skill_package_keeps_successful_workflows_when_one_llm_task_fails(self) -> None:
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
 
         def structure_or_fail(raw_steps: list[dict]) -> dict:
             if any(
@@ -960,7 +1158,7 @@ class SkillPackBuilderTests(unittest.TestCase):
             raise ValueError("simulated per-workflow failure")
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", side_effect=structure_or_fail):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", side_effect=structure_or_fail):
                 package = build_skill_package(json.dumps(_multi_workflow_payload()), bundle_slug="render")
 
         self.assertEqual(package["workflow_names"], ["delete_web_service"])
@@ -969,11 +1167,11 @@ class SkillPackBuilderTests(unittest.TestCase):
         self.assertIn("simulated per-workflow failure", log_blob)
 
     def test_existing_visuals_are_preserved_when_workflow_is_rewritten(self) -> None:
-        from app.services.skill_pack_builder import build_skill_package
+        from app.services.skill_pack.compiler import build_skill_package
         from app.storage.skill_packages import skill_package_dir
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow_with_visuals()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow_with_visuals()):
                 package = build_skill_package(json.dumps(_raw_workflow()), package_name="delete_database_visual_assets_test")
 
             visuals_dir = skill_package_dir("default", package["name"]) / "visuals"
@@ -982,7 +1180,7 @@ class SkillPackBuilderTests(unittest.TestCase):
             existing.write_bytes(b"keep-me")
             before = existing.read_bytes()
 
-            with patch("app.services.skill_pack_builder.structure_steps_with_llm", return_value=_structured_workflow_with_visuals()):
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow_with_visuals()):
                 build_skill_package(json.dumps(_raw_workflow()), package_name="delete_database_visual_assets_test")
 
             self.assertEqual(existing.read_bytes(), before)
@@ -994,12 +1192,208 @@ class SkillPackBuilderTests(unittest.TestCase):
             root = ensure_bundle_scaffold("render")
             self.assertTrue((root / "skills").is_dir())
             self.assertTrue((root / "auth").is_dir())
-            self.assertTrue((root / "orchestration").is_dir())
             self.assertTrue((root / "execution").is_dir())
-            self.assertTrue((root / "execution" / "executor.js").is_file())
-            self.assertTrue((root / "execution" / "tracker.js").is_file())
-            self.assertTrue((root / "execution" / "recovery.js").is_file())
-            self.assertTrue((root / "execution" / "validator.js").is_file())
-            self.assertTrue((root / "orchestration" / "schema.json").is_file())
             self.assertFalse((root / "engine").exists())
             self.assertFalse((root / "bridge").exists())
+
+
+# ─────────────────────────────────────────────────
+# URL normalization
+# ─────────────────────────────────────────────────
+
+class TestNormalizeUrlPattern(unittest.TestCase):
+    def _norm(self, url: str) -> str:
+        from app.services.skill_pack.compiler import _normalize_url_pattern
+        return _normalize_url_pattern(url)
+
+    def test_plain_path_is_kept_literal(self) -> None:
+        pattern = self._norm("https://dashboard.render.com/services")
+        self.assertRegex(pattern, r"\^.*services.*\$")
+        import re
+        self.assertIsNotNone(re.match(pattern, "https://dashboard.render.com/services"))
+        self.assertIsNone(re.match(pattern, "https://dashboard.render.com/settings"))
+
+    def test_numeric_segment_replaced(self) -> None:
+        pattern = self._norm("https://app.example.com/items/12345")
+        self.assertIn("[^/]+", pattern)
+        import re
+        self.assertIsNotNone(re.match(pattern, "https://app.example.com/items/99999"))
+        self.assertIsNotNone(re.match(pattern, "https://app.example.com/items/1"))
+
+    def test_hex_id_segment_replaced(self) -> None:
+        pattern = self._norm("https://app.example.com/deploys/a1b2c3d4e5f6")
+        self.assertIn("[^/]+", pattern)
+        import re
+        self.assertIsNotNone(re.match(pattern, "https://app.example.com/deploys/deadbeefcafe"))
+
+    def test_long_alphanumeric_segment_replaced(self) -> None:
+        # 16+ char mixed segment that looks like a generated ID
+        pattern = self._norm("https://dashboard.render.com/services/srv-cg1234567890abcdef")
+        self.assertIn("[^/]+", pattern)
+        import re
+        self.assertIsNotNone(re.match(pattern, "https://dashboard.render.com/services/srv-aaaaaaaaaaaaaaaa"))
+
+    def test_multiple_dynamic_segments(self) -> None:
+        # /services/<id>/deploys/<id>
+        pattern = self._norm("https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys/dep-0q1234567890abcdef")
+        self.assertEqual(pattern.count("[^/]+"), 2)
+
+    def test_host_is_kept_literal_and_escaped(self) -> None:
+        pattern = self._norm("https://my.app.example.com/page")
+        self.assertIn(r"my\.app\.example\.com", pattern)
+
+    def test_volatile_query_params_dropped(self) -> None:
+        pattern = self._norm("https://app.example.com/search?q=hello&utm_source=email&ts=12345")
+        import re
+        self.assertIsNotNone(re.match(pattern, "https://app.example.com/search?q=hello"))
+        # utm and ts stripped; q= should remain
+        self.assertNotIn("utm", pattern)
+
+    def test_empty_url_returns_empty(self) -> None:
+        self.assertEqual(self._norm(""), "")
+
+    def test_relative_url_returns_empty(self) -> None:
+        self.assertEqual(self._norm("/services/123"), "")
+
+    def test_pattern_anchored_start_and_end(self) -> None:
+        pattern = self._norm("https://app.example.com/dashboard")
+        self.assertTrue(pattern.startswith("^"))
+        self.assertTrue(pattern.endswith("$"))
+
+
+# ─────────────────────────────────────────────────
+# url_state attachment to compiled steps
+# ─────────────────────────────────────────────────
+
+def _make_raw_steps_with_url_state(before_urls: list[str], after_urls: list[str]) -> list[dict]:
+    """Build fake recorded events that carry url_state."""
+    assert len(before_urls) == len(after_urls)
+    steps = []
+    for b, a in zip(before_urls, after_urls):
+        steps.append({
+            "action": {"action": "click"},
+            "target": {"inner_text": "Click"},
+            "page": {"url": b},
+            "url_state": {
+                "before": {"url": b, "title": "Before Page"},
+                "after": {"url": a, "title": "After Page"},
+            },
+        })
+    return steps
+
+
+class TestBuildUrlStateForSteps(unittest.TestCase):
+    def _call(self, exec_plan, raw_steps, skill_name="test_skill"):
+        from app.services.skill_pack.compiler import _build_url_state_for_steps
+        return _build_url_state_for_steps(exec_plan, raw_steps, skill_name)
+
+    def test_attaches_url_state_to_each_step(self) -> None:
+        exec_plan = [
+            {"type": "click", "selector": "text=Deploy"},
+            {"type": "fill", "selector": "input[name=branch]", "value": "{{branch}}"},
+        ]
+        raw = _make_raw_steps_with_url_state(
+            ["https://dashboard.render.com/services/srv-cg1234567890abcdef",
+             "https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys"],
+            ["https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys",
+             "https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys/dep-0q1234567890abcdef"],
+        )
+        augmented, url_state_json = self._call(exec_plan, raw)
+        self.assertEqual(len(augmented), 2)
+        for step in augmented:
+            self.assertIn("url_state", step)
+            us = step["url_state"]
+            self.assertIn("before", us)
+            self.assertIn("after", us)
+            self.assertEqual(set(us["before"]), {"url_pattern"})
+            self.assertEqual(set(us["after"]), {"url_pattern"})
+            self.assertNotIn("edited_by_user", us)
+
+    def test_url_patterns_have_dynamic_id_replaced(self) -> None:
+        exec_plan = [{"type": "click", "selector": "text=Deploy"}]
+        raw = _make_raw_steps_with_url_state(
+            ["https://dashboard.render.com/services/srv-cg1234567890abcdef"],
+            ["https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys"],
+        )
+        augmented, _ = self._call(exec_plan, raw)
+        before_pattern = augmented[0]["url_state"]["before"]["url_pattern"]
+        self.assertIn("[^/]+", before_pattern)
+        import re
+        self.assertIsNotNone(re.match(before_pattern, "https://dashboard.render.com/services/srv-aaaaaaaaaaaaaaaa"))
+
+    def test_url_state_json_is_not_generated(self) -> None:
+        exec_plan = [{"type": "click", "selector": "text=Deploy"}]
+        raw = _make_raw_steps_with_url_state(
+            ["https://app.example.com/page"],
+            ["https://app.example.com/next"],
+        )
+        augmented, url_state_json = self._call(exec_plan, raw, skill_name="my_skill")
+        self.assertEqual(url_state_json, "")
+        self.assertIn("url_state", augmented[0])
+
+    def test_no_url_state_in_raw_steps_produces_empty_states(self) -> None:
+        exec_plan = [{"type": "click", "selector": "text=Deploy"}]
+        raw = [{"action": {"action": "click"}, "target": {"inner_text": "Deploy"}}]
+        augmented, url_state_json = self._call(exec_plan, raw)
+        # No url_state attached when raw steps have none
+        self.assertNotIn("url_state", augmented[0])
+        self.assertEqual(url_state_json, "")
+
+    def test_empty_execution_plan_returns_empty_states(self) -> None:
+        _, url_state_json = self._call([], [])
+        self.assertEqual(url_state_json, "")
+
+    def test_url_state_stays_inline_and_no_url_state_file_written_to_skill_bundle(self) -> None:
+        from app.services.skill_pack.compiler import build_skill_package
+        from app.storage.skill_packages import read_skill_package_files
+
+        raw = _raw_workflow()
+        # Inject url_state into raw steps
+        for step in raw["steps"]:
+            step["url_state"] = {
+                "before": {"url": "https://app.example.com/before", "title": "Before"},
+                "after": {"url": "https://app.example.com/after", "title": "After"},
+            }
+
+        with _temporary_skill_package_root():
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
+                result = build_skill_package(json.dumps(raw), package_name="delete_database", bundle_slug="default")
+
+        files = result.get("files") or {}
+        self.assertNotIn("url_state.json", files)
+        self.assertIn("url_state", result.get("execution_json", ""))
+
+        from app.storage.skill_packages import read_skill_package_files
+        with _temporary_skill_package_root():
+            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
+                build_skill_package(json.dumps(raw), package_name="delete_database", bundle_slug="default")
+            pkg_files = read_skill_package_files("default", "delete_database")
+            self.assertIsNotNone(pkg_files)
+            if pkg_files:
+                self.assertNotIn("url_state.json", pkg_files)
+                self.assertIn("url_state", pkg_files.get("execution.json", ""))
+
+
+class TestCompilerBuildUrlState(unittest.TestCase):
+    def test_compiler_url_state_contains_only_patterns(self) -> None:
+        from app.compiler.build import _build_url_state
+
+        state = _build_url_state({
+            "url_state": {
+                "before": {
+                    "url": "https://dashboard.render.com/",
+                    "title": "Render Dashboard",
+                },
+                "after": {
+                    "url": "https://dashboard.render.com/d/dpg-d7v5mqvavr4c739h2or0-a",
+                    "title_includes": "conxa-db Database Render Dashboard",
+                },
+                "edited_by_user": False,
+            }
+        })
+
+        self.assertEqual(set(state), {"before", "after"})
+        self.assertEqual(set(state["before"]), {"url_pattern"})
+        self.assertEqual(set(state["after"]), {"url_pattern"})
+        self.assertEqual(state["before"]["url_pattern"], r"^https://dashboard\.render\.com/$")
+        self.assertEqual(state["after"]["url_pattern"], r"^https://dashboard\.render\.com/d/[^/]+$")

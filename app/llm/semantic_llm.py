@@ -61,14 +61,14 @@ def _fallback(inp: SemanticLLMInput) -> SemanticLLMOutput:
 
 
 def _call_provider(inp: SemanticLLMInput) -> SemanticLLMOutput | None:
-    if not settings.llm_endpoint:
+    if not settings.llm_text_endpoint:
         return None
     payload = {
         "task": "semantic_enrichment",
         "model": settings.llm_text_model or None,
         "input": inp.model_dump(mode="json"),
     }
-    data = call_llm("semantic_enrichment", payload, settings.llm_timeout_ms)
+    data = call_llm("semantic_enrichment", payload, settings.llm_text_timeout_ms)
     if data is None:
         return None
     try:

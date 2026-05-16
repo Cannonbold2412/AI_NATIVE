@@ -1,5 +1,5 @@
-import { PublishDeployPage } from '@/PublishDeployPage'
+import { PublishPage } from '@/PublishPage'
 
 export default function PublishRoute() {
-  return <PublishDeployPage />
+  return <PublishPage />
 }

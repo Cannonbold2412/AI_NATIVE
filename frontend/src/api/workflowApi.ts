@@ -110,6 +110,7 @@ const stepEditorSchema = z.object({
   intent: z.string(),
   final_intent: z.string(),
   url: z.string().default(''),
+  url_state: recordUnknown.default({}),
   target: recordUnknown,
   selectors: recordUnknown,
   anchors_signals: z.array(recordUnknown),

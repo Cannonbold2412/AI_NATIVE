@@ -54,7 +54,7 @@ def _extract_message_content(payload: dict[str, Any]) -> str:
 
 
 def generate_skill_markdown_with_llm(summary: dict[str, Any]) -> str | None:
-    if not settings.pack_llm_enabled:
+    if not settings.llm_pack_enabled:
         return None
     llm_config = resolved_pack_llm_config()
     endpoint = llm_config.endpoint
@@ -119,11 +119,11 @@ def generate_skill_markdown_with_llm(summary: dict[str, Any]) -> str | None:
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        "temperature": settings.pack_llm_markdown_temperature,
-        "max_tokens": settings.pack_llm_markdown_max_tokens,
+        "temperature": settings.llm_pack_markdown_temperature,
+        "max_tokens": settings.llm_pack_markdown_max_tokens,
     }
-    if settings.pack_llm_top_p is not None:
-        body["top_p"] = settings.pack_llm_top_p
+    if settings.llm_pack_top_p is not None:
+        body["top_p"] = settings.llm_pack_top_p
     headers = {"Content-Type": "application/json"}
     pack_key, _, _ = next_pack_api_key()
     if pack_key:
@@ -136,7 +136,7 @@ def generate_skill_markdown_with_llm(summary: dict[str, Any]) -> str | None:
         method="POST",
     )
     try:
-        with request.urlopen(req, timeout=max(0.2, settings.pack_llm_timeout_ms / 1000.0)) as res:
+        with request.urlopen(req, timeout=max(0.2, settings.llm_pack_timeout_ms / 1000.0)) as res:
             raw = res.read().decode("utf-8")
     except (error.HTTPError, error.URLError, TimeoutError, OSError, ValueError):
         return None

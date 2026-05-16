@@ -23,6 +23,7 @@ export type StepEditorDTO = {
   intent: string
   final_intent: string
   url: string
+  url_state: Record<string, unknown>
   target: Record<string, unknown>
   selectors: Record<string, unknown>
   anchors_signals: Record<string, unknown>[]

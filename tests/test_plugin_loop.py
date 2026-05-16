@@ -46,7 +46,6 @@ def tmp_bundle(tmp_path: Path) -> Bundle:
     dump_json(skill_dir / "execution.json", execution)
     dump_json(skill_dir / "recovery.json", recovery_data)
     dump_json(skill_dir / "input.json", {"inputs": [{"name": "user_email", "type": "string"}]})
-    (skill_dir / "manifest.json").write_text("{}", encoding="utf-8")
 
     (tmp_path / "execution").mkdir()
     (tmp_path / "execution" / "executor.js").write_text("// stub", encoding="utf-8")

@@ -34,31 +34,25 @@ from app.services.skill_pack_build_log import (
     skill_pack_text_metrics,
 )
 from app.storage.skill_package_formatters import (
-    format_auth_json_text,
-    format_credentials_example_json_text,
+    format_auth_json_text as _format_auth_json_text,
+    format_credentials_example_json_text as _format_credentials_example_json_text,
+    format_plugin_claude_md_text as _format_plugin_claude_md_text,
     format_plugin_index_json as _format_plugin_index_json,
     format_plugin_readme_text as _format_plugin_readme_text,
-    format_test_cases_stub_json_text,
-    infer_auth_config,
-)
-from app.storage.skill_package_templates import (
-    EXECUTOR_JS as _EXECUTOR_JS,
-    ORCHESTRATION_SCHEMA_JSON as _ORCHESTRATION_SCHEMA_JSON,
-    PACKAGE_JSON as _PACKAGE_JSON,
-    RECOVERY_JS as _RECOVERY_JS,
-    TRACKER_JS as _TRACKER_JS,
-    VALIDATOR_JS as _VALIDATOR_JS,
-    orchestration_index_md as _orchestration_index_md,
-    orchestration_planner_md as _orchestration_planner_md,
+    format_test_cases_stub_json_text as _format_test_cases_stub_json_text,
+    infer_auth_config as _infer_auth_config,
 )
 
-WORKFLOW_FILENAMES = ("execution.json", "recovery.json", "input.json", "manifest.json")
+WORKFLOW_FILENAMES = ("execution.json", "recovery.json")
 OBSOLETE_WORKFLOW_FILENAMES = (
     "skill.md",
     "skill.json",
     "execution.md",
     "execution_plan.json",
     "inputs.json",
+    "input.json",
+    "manifest.json",
+    "url_state.json",
 )
 
 SKILLS_SUBDIR = "skills"
@@ -70,19 +64,15 @@ FIXED_PACKAGE_ROOT = Path("output") / "skill_package"
 VISUAL_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 BUNDLE_ROOT_STATE_FILENAME = ".skill_bundle_root"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BUNDLE_RUNTIME_DIRS = ("auth", "orchestration", "execution")
+BUNDLE_RUNTIME_DIRS = ("auth", "execution")
 BUNDLE_RUNTIME_FILES = (
-    "auth/auth.json",
-    "auth/credentials.example.json",
-    "orchestration/index.md",
-    "orchestration/planner.md",
-    "orchestration/schema.json",
     "execution/executor.js",
     "execution/recovery.js",
+    "execution/session_manager.js",
     "execution/tracker.js",
     "execution/validator.js",
 )
-STALE_BUNDLE_DIRS = ("engine", "bridge", "claude", ".opencode", ".codex")
+STALE_BUNDLE_DIRS = ("engine", "bridge", "claude", ".opencode", ".codex", "orchestration")
 
 CONTAINER_LEGACY_NAMES = frozenset(
     {
@@ -113,13 +103,7 @@ RESERVED_BUNDLE_SLUGS = frozenset(
 
 _CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 _NON_WORD = re.compile(r"[^a-zA-Z0-9]+")
-_BUNDLE_INDEX_FILENAMES = ("README.md",)
-_EXECUTION_RUNTIME_FILES = {
-    "executor.js": _EXECUTOR_JS,
-    "recovery.js": _RECOVERY_JS,
-    "tracker.js": _TRACKER_JS,
-    "validator.js": _VALIDATOR_JS,
-}
+_BUNDLE_INDEX_FILENAMES = ("README.md", "CLAUDE.md")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Bundle helpers
@@ -201,14 +185,6 @@ def _slug_from_folder_name(folder_name: str) -> str | None:
     return slug
 
 
-def _write_execution_runtime_files(bundle_root: Path) -> None:
-    execution_dir = bundle_root / "execution"
-    execution_dir.mkdir(parents=True, exist_ok=True)
-    for filename, content in _EXECUTION_RUNTIME_FILES.items():
-        (execution_dir / filename).write_text(content, encoding="utf-8")
-    (bundle_root / "package.json").write_text(_PACKAGE_JSON, encoding="utf-8")
-
-
 def _container_has_nested_bundles(container: Path) -> bool:
     for p in container.iterdir():
         if not p.is_dir():
@@ -256,7 +232,7 @@ def bundle_root_dir(bundle_slug: str) -> Path | None:
 
 
 def ensure_bundle_scaffold(bundle_slug: str) -> Path:
-    """Ensure ``<container>/<bundle>-plugin/`` exists with execution/, orchestration/, auth/, skills/."""
+    """Ensure ``<container>/<bundle>-plugin/`` exists with execution/, auth/, skills/."""
     name = _sanitize_segment(bundle_slug)
     if not name or not validate_bundle_slug(name):
         raise ValueError(f'Invalid bundle name "{bundle_slug}".')
@@ -266,10 +242,6 @@ def ensure_bundle_scaffold(bundle_slug: str) -> Path:
     (root / SKILLS_SUBDIR).mkdir(parents=True, exist_ok=True)
     for dirname in BUNDLE_RUNTIME_DIRS:
         (root / dirname).mkdir(parents=True, exist_ok=True)
-
-    _write_execution_runtime_files(root)
-    (root / "orchestration" / "schema.json").write_text(_ORCHESTRATION_SCHEMA_JSON + "\n", encoding="utf-8")
-    _write_bundle_orchestration(root, name)
 
     for stale_dir in STALE_BUNDLE_DIRS:
         candidate = root / stale_dir
@@ -290,29 +262,56 @@ def format_plugin_readme_text(bundle_slug: str, skills: list[dict[str, str]]) ->
     return _format_plugin_readme_text(_sanitize_segment(bundle_slug), skills)
 
 
+def infer_auth_config(all_inputs: list[dict[str, str]]) -> dict[str, object]:
+    return _infer_auth_config(all_inputs)
+
+
+def format_auth_json_text(auth_dict: dict[str, object]) -> str:
+    return _format_auth_json_text(auth_dict)
+
+
+def format_credentials_example_json_text(sensitive_inputs: list[dict[str, str]]) -> str:
+    return _format_credentials_example_json_text(sensitive_inputs)
+
+
+def format_test_cases_stub_json_text(inputs: list[dict[str, str]]) -> str:
+    return _format_test_cases_stub_json_text(inputs)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Internal skill discovery helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 def _workflow_manifest_summary(path: Path) -> dict[str, str] | None:
-    manifest_path = path / "manifest.json"
-    if not manifest_path.is_file():
+    # A valid skill dir must have execution.json
+    if not (path / "execution.json").is_file():
         return None
     description = ""
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        manifest = {}
-    if isinstance(manifest, dict):
-        description = str(manifest.get("description") or "").strip()
+    # Read title/description from SKILL.md first
+    skill_md_path = path / "SKILL.md"
+    if skill_md_path.is_file():
+        try:
+            for line in skill_md_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("#"):
+                    description = line.lstrip("#").strip()
+                    break
+        except OSError:
+            pass
+    # Fall back to manifest.json if present (legacy builds)
+    if not description:
+        manifest_path = path / "manifest.json"
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(manifest, dict):
+                    description = str(manifest.get("description") or "").strip()
+            except (OSError, json.JSONDecodeError):
+                pass
     if not description:
         description = f"Run the {path.name.replace('_', ' ')} workflow."
-    return {
-        "name": path.name,
-        "description": description,
-        "manifest": f"skills/{path.name}/manifest.json",
-    }
+    return {"name": path.name, "description": description}
 
 
 def _workflow_package_dirs(bundle_root: Path) -> list[Path]:
@@ -336,56 +335,19 @@ def _workflow_summaries(bundle_root: Path) -> list[dict[str, str]]:
     return [summary for _path, summary in _workflow_package_entries(bundle_root)]
 
 
-def _all_inputs_for_bundle(bundle_root: Path) -> list[dict[str, str]]:
-    """Aggregate all inputs across all skills in a bundle (for auth inference)."""
-    all_inputs: list[dict[str, str]] = []
-    for skill_dir in _workflow_package_dirs(bundle_root):
-        input_path = skill_dir / "input.json"
-        if not input_path.is_file():
-            continue
-        try:
-            data = json.loads(input_path.read_text(encoding="utf-8"))
-            raw = data.get("inputs") if isinstance(data, dict) else data
-            if isinstance(raw, list):
-                all_inputs.extend(item for item in raw if isinstance(item, dict))
-        except (OSError, json.JSONDecodeError):
-            pass
-    return all_inputs
-
 
 def _write_bundle_index(bundle_root: Path, bundle_slug: str) -> None:
     skills = _workflow_summaries(bundle_root)
-    (bundle_root / f"{_sanitize_segment(bundle_slug)}.json").write_text(
-        format_plugin_index_json(bundle_slug, skills), encoding="utf-8"
+    (bundle_root / f"{bundle_slug}.json").write_text(
+        _format_plugin_index_json(bundle_slug, skills), encoding="utf-8"
     )
     (bundle_root / "README.md").write_text(
         format_plugin_readme_text(bundle_slug, skills), encoding="utf-8"
     )
-    # Auth files
-    all_inputs = _all_inputs_for_bundle(bundle_root)
-    auth_dict = infer_auth_config(all_inputs)
-    sensitive = [i for i in all_inputs if i.get("sensitive")]
-    auth_dir = bundle_root / "auth"
-    auth_dir.mkdir(parents=True, exist_ok=True)
-    (auth_dir / "auth.json").write_text(format_auth_json_text(auth_dict), encoding="utf-8")
-    (auth_dir / "credentials.example.json").write_text(
-        format_credentials_example_json_text(sensitive), encoding="utf-8"
+    (bundle_root / "CLAUDE.md").write_text(
+        _format_plugin_claude_md_text(bundle_slug, skills), encoding="utf-8"
     )
 
-
-def _write_bundle_orchestration(bundle_root: Path, bundle_slug: str) -> None:
-    skills = _workflow_summaries(bundle_root)
-    skill_names = [s["name"] for s in skills]
-    plugin_name = _sanitize_segment(bundle_slug).replace("_", " ").title()
-    orch_dir = bundle_root / "orchestration"
-    orch_dir.mkdir(parents=True, exist_ok=True)
-    (orch_dir / "index.md").write_text(
-        _orchestration_index_md(plugin_name, bundle_slug, skill_names), encoding="utf-8"
-    )
-    (orch_dir / "planner.md").write_text(
-        _orchestration_planner_md(bundle_slug), encoding="utf-8"
-    )
-    (orch_dir / "schema.json").write_text(_ORCHESTRATION_SCHEMA_JSON + "\n", encoding="utf-8")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -572,17 +534,7 @@ def _refresh_bundle_artifacts(bundle_slug: str, bundle_root: Path, bundle_posix:
     skill_pack_log_append(
         {
             "kind": "bundle_artifact_updated",
-            "path": f"{bundle_posix}/{_sanitize_segment(bundle_slug)}.json",
-            "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-        }
-    )
-
-    started_at = time.perf_counter()
-    _write_bundle_orchestration(bundle_root, bundle_slug)
-    skill_pack_log_append(
-        {
-            "kind": "bundle_artifact_updated",
-            "path": f"{bundle_posix}/orchestration/index.md",
+            "path": f"{bundle_posix}/README.md",
             "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
     )
@@ -636,7 +588,6 @@ def _write_skill_package_files_core(
 
     visuals_dir = workflow_dir / "visuals"
     visuals_dir.mkdir(parents=True, exist_ok=True)
-    (workflow_dir / "tests").mkdir(parents=True, exist_ok=True)
 
     workflow_log_prefix = f"{bundle_posix}/skills/{workflow_name}"
     _remove_obsolete_workflow_files(workflow_dir)
@@ -724,7 +675,7 @@ def _bundle_has_workflows(bundle_root: Path) -> bool:
 
 
 def _bundle_runtime_file_keys(bundle_slug: str) -> list[str]:
-    return [f"{_sanitize_segment(bundle_slug)}.json", "README.md", *BUNDLE_RUNTIME_FILES]
+    return ["plugin.json", "README.md", "CLAUDE.md", "package.json", *BUNDLE_RUNTIME_FILES]
 
 
 def _read_text_file_if_present(path: Path) -> str | None:
@@ -733,23 +684,40 @@ def _read_text_file_if_present(path: Path) -> str | None:
     return path.read_text(encoding="utf-8")
 
 
-def _read_bundle_runtime_files(bundle_root: Path, bundle_slug: str) -> dict[str, str]:
+_SKIP_DIRS = frozenset({"node_modules", ".git", "__pycache__"})
+_SKIP_FILES = frozenset({"auth.json"})
+_TEXT_SUFFIXES = frozenset({".json", ".md", ".js", ".ts", ".txt", ".yaml", ".yml", ".toml", ".gitignore", ".env", ".example", ""})
+
+
+def _walk_bundle_files(bundle_root: Path) -> dict[str, str]:
+    """Walk the entire bundle directory and return all readable files as relative-path → content."""
     files: dict[str, str] = {}
-
-    for filename in (f"{_sanitize_segment(bundle_slug)}.json", *_BUNDLE_INDEX_FILENAMES):
-        content = _read_text_file_if_present(bundle_root / filename)
-        if content is not None:
-            files[filename] = content
-
-    for dirname in BUNDLE_RUNTIME_DIRS:
-        directory = bundle_root / dirname
-        if not directory.is_dir():
+    for path in sorted(bundle_root.rglob("*")):
+        if not path.is_file():
             continue
-        for path in sorted(directory.iterdir()):
-            if path.is_file() and not path.name.startswith("."):
-                files[f"{dirname}/{path.name}"] = path.read_text(encoding="utf-8")
-
+        # Skip hidden/system dirs
+        rel = path.relative_to(bundle_root)
+        parts = rel.parts
+        if any(p in _SKIP_DIRS for p in parts):
+            continue
+        # Never expose auth credentials
+        if parts[0] == "auth" and path.name in _SKIP_FILES:
+            continue
+        key = rel.as_posix()
+        suffix = path.suffix.lower()
+        # Images in visuals/ are handled separately as base64; skip here
+        if suffix in VISUAL_IMAGE_SUFFIXES:
+            continue
+        if suffix in _TEXT_SUFFIXES or not suffix:
+            try:
+                files[key] = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                pass
     return files
+
+
+def _read_bundle_runtime_files(bundle_root: Path, bundle_slug: str) -> dict[str, str]:
+    return _walk_bundle_files(bundle_root)
 
 
 def _read_workflow_text_files(workflow_dir: Path, *, prefix: str = "") -> dict[str, str]:
@@ -763,9 +731,6 @@ def _read_workflow_text_files(workflow_dir: Path, *, prefix: str = "") -> dict[s
     if skill_md is not None:
         files[f"{prefix}SKILL.md"] = skill_md
 
-    test_cases = _read_text_file_if_present(workflow_dir / "tests" / "test-cases.json")
-    if test_cases is not None:
-        files[f"{prefix}tests/test-cases.json"] = test_cases
     return files
 
 
@@ -776,9 +741,9 @@ def _workflow_present_files(workflow_dir: Path) -> list[str]:
 def _workflow_extra_file_keys(bundle_root: Path, workflow_slug: str) -> list[str]:
     workflow_dir = bundle_root / SKILLS_SUBDIR / workflow_slug
     return [
-        f"{SKILLS_SUBDIR}/{workflow_slug}/{extra}"
-        for extra in ("SKILL.md", "tests/test-cases.json")
-        if (workflow_dir / extra).is_file()
+        f"{SKILLS_SUBDIR}/{workflow_slug}/SKILL.md"
+        for _ in [None]
+        if (workflow_dir / "SKILL.md").is_file()
     ]
 
 
@@ -793,13 +758,7 @@ def _workflow_listing_metadata(workflow_dir: Path) -> dict[str, object]:
 
 
 def _bundle_file_keys(bundle_root: Path, bundle_slug: str, workflows_meta: list[dict[str, object]]) -> list[str]:
-    file_keys = _bundle_runtime_file_keys(bundle_slug)
-    for workflow_meta in workflows_meta:
-        workflow_slug = str(workflow_meta["workflow_slug"])
-        for filename in workflow_meta["files"]:  # type: ignore[arg-type]
-            file_keys.append(f"{SKILLS_SUBDIR}/{workflow_slug}/{filename}")
-        file_keys.extend(_workflow_extra_file_keys(bundle_root, workflow_slug))
-    return file_keys
+    return list(_walk_bundle_files(bundle_root).keys())
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -849,16 +808,16 @@ def _read_visual_assets(workflow_dir: Path) -> dict[str, str]:
 
 
 def read_skill_package_bundle_files(bundle_slug: str) -> dict[str, str] | None:
-    """Flatten bundle tree: skills/<wf>/<file>, execution/*, orchestration/*, auth/*, index files."""
+    """Flatten entire bundle tree into relative-path → content (text files + base64 images)."""
     root = bundle_root_dir(bundle_slug)
     if root is None or not root.is_dir():
         return None
 
-    out = _read_bundle_runtime_files(root, bundle_slug)
+    out = _walk_bundle_files(root)
+    # Add images from all skill visuals/ dirs as base64
     for wf_path in _workflow_package_dirs(root):
         wf_name = wf_path.name
         prefix = f"{SKILLS_SUBDIR}/{wf_name}/"
-        out.update(_read_workflow_text_files(wf_path, prefix=prefix))
         for vk, vv in _read_visual_assets(wf_path).items():
             out[prefix + vk] = vv
 

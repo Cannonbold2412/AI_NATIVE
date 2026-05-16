@@ -136,10 +136,13 @@ async def start_record(body: StartRecordBody) -> dict[str, Any]:
 @router.get("/record/{session_id}/events")
 def list_record_events(session_id: str) -> dict[str, Any]:
     sess = registry.get(session_id)
-    if not sess:
+    if sess:
+        return {"session_id": session_id, "events": sess.snapshot_events(), "errors": sess.binding_errors}
+    # Session no longer in memory — read from disk (post-finalize)
+    from app.storage.session_events import session_events_path
+    if not session_events_path(session_id).is_file():
         raise HTTPException(status_code=404, detail="Unknown session_id")
-    evs = sess.snapshot_events()
-    return {"session_id": session_id, "events": evs, "errors": sess.binding_errors}
+    return {"session_id": session_id, "events": read_session_events(session_id), "errors": []}
 
 
 @router.get("/record/{session_id}/status")

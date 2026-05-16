@@ -104,14 +104,14 @@ def _fallback(inp: RecoveryLLMInput) -> RecoveryLLMOutput:
 
 
 def _call_provider(inp: RecoveryLLMInput) -> RecoveryLLMOutput | None:
-    if not settings.llm_endpoint:
+    if not settings.llm_text_endpoint:
         return None
     payload = {
         "task": "recovery_assist",
         "model": settings.llm_text_model or None,
         "input": inp.model_dump(mode="json"),
     }
-    data = call_llm("recovery_assist", payload, settings.llm_timeout_ms)
+    data = call_llm("recovery_assist", payload, settings.llm_text_timeout_ms)
     if data is None:
         return None
     try:

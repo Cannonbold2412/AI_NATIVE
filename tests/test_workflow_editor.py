@@ -89,14 +89,40 @@ class WorkflowEditorTests(unittest.TestCase):
         from app.editor.workflow_service import build_workflow_response
 
         doc = _minimal_skill_doc()
+        doc["skills"][0]["steps"][0]["url_state"] = {
+            "before": {"url": "https://example.com", "url_pattern": "^https://example\\.com$"},
+            "after": {"url": "https://example.com/done", "url_pattern": "^https://example\\.com/done$"},
+            "edited_by_user": False,
+        }
         wf = build_workflow_response("skill_test_editor", doc, asset_base_url="/api/v1")
         self.assertEqual(len(wf.steps), 1)
         self.assertIn("Click", wf.steps[0].human_readable_description)
+        self.assertEqual(wf.steps[0].url_state["before"]["url"], "https://example.com")
         self.assertTrue(wf.steps[0].screenshot.full_url.startswith("/api/v1/skills/"))
         self.assertEqual(
             wf.steps[0].anchors_signals,
             [{"element": "Submit", "relation": "near"}],
         )
+
+    def test_build_workflow_surfaces_vision_anchor_fallback_suggestion(self) -> None:
+        from app.editor.workflow_service import build_workflow_response
+
+        doc = _minimal_skill_doc()
+        doc["skills"][0]["steps"][0]["confidence_protocol"] = {
+            "compile_warnings": {
+                "vision_anchor_fallback": {
+                    "reason": "vision_llm_request_failed",
+                    "step_index": 0,
+                    "fallback": "deterministic_anchors",
+                }
+            }
+        }
+
+        wf = build_workflow_response("skill_test_editor", doc, asset_base_url="/api/v1")
+        match = next((item for item in wf.suggestions if item.code == "vision_anchor_fallback"), None)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.step_index, 0)
+        self.assertEqual(match.severity, "warn")
 
     def test_workflow_backfills_initial_navigate_step(self) -> None:
         from app.editor.workflow_service import build_workflow_response, ensure_initial_navigation_step
@@ -204,6 +230,25 @@ class WorkflowEditorTests(unittest.TestCase):
         step = updated["skills"][0]["steps"][0]
         self.assertEqual(step["signals"]["anchors"], [{"element": "Confirm", "relation": "near"}])
         self.assertEqual(step["recovery"]["anchors"], [{"element": "Password", "relation": "above"}])
+
+    def test_apply_step_patch_merges_url_state_and_marks_user_edited(self) -> None:
+        from app.compiler.patch import apply_step_patch
+
+        doc = _minimal_skill_doc()
+        updated = apply_step_patch(
+            doc,
+            0,
+            {
+                "url_state": {
+                    "before": {"url_pattern": "^https://example\\.com$"},
+                    "after": {"url_pattern": "^https://example\\.com/done$"},
+                },
+            },
+            assist_llm=False,
+        )
+        state = updated["skills"][0]["steps"][0]["url_state"]
+        self.assertTrue(state["edited_by_user"])
+        self.assertEqual(state["after"]["url_pattern"], "^https://example\\.com/done$")
 
     def test_validate_editor_patch_rejects_bad_selector(self) -> None:
         from app.editor.patch_gate import validate_editor_patch

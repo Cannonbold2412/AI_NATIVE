@@ -75,6 +75,18 @@ class Timing(BaseModel):
     timeout: int = 5000
 
 
+class UrlStateEntry(BaseModel):
+    """URL + page title at one moment in time."""
+    url: str = ""
+    title: str = ""
+
+
+class UrlStatePair(BaseModel):
+    """Before/after URL state bracketing a single step."""
+    before: UrlStateEntry = Field(default_factory=UrlStateEntry)
+    after: UrlStateEntry = Field(default_factory=UrlStateEntry)
+
+
 class RecordedEvent(BaseModel):
     """Single user action with all attached signals (paths, not bytes)."""
 
@@ -89,3 +101,4 @@ class RecordedEvent(BaseModel):
     state_change: StateChange
     timing: Timing
     extras: dict[str, Any] = Field(default_factory=dict)
+    url_state: UrlStatePair | None = None

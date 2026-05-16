@@ -77,7 +77,7 @@ def _fallback(inp: VisionLLMInput) -> VisionLLMOutput:
 
 
 def _call_provider(inp: VisionLLMInput) -> VisionLLMOutput | None:
-    if not settings.llm_endpoint:
+    if not settings.llm_vision_endpoint:
         return None
     payload = {
         "task": "vision_reasoning",
@@ -85,7 +85,7 @@ def _call_provider(inp: VisionLLMInput) -> VisionLLMOutput | None:
         "prompt": f"Given this UI screenshot and candidate elements, which element best matches the intent: {inp.intent}?",
         "input": inp.model_dump(mode="json"),
     }
-    data = call_llm("vision_reasoning", payload, settings.llm_timeout_ms)
+    data = call_llm("vision_reasoning", payload, settings.llm_vision_timeout_ms)
     if data is None:
         return None
     try:

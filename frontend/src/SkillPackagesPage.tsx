@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useMemo, useState, type ComponentType, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiUrl } from '@/lib/apiBase'
@@ -54,54 +54,46 @@ import {
   Trash2,
 } from 'lucide-react'
 
-const ROOT_FILE_ORDER = ['package.json', 'index.js', 'skill.json', 'README.md', 'index.json']
-const WORKFLOW_FILE_ORDER = ['skill.md', 'execution.json', 'recovery.json', 'inputs.json', 'manifest.json']
-const ENGINE_FILES = [
-  'execution.ts',
-  'recovery.ts',
-  'logging.ts',
-  'config.ts',
+const ROOT_FILE_ORDER = [
+  'plugin.config.json', 'README.md', 'CLAUDE.md', 'Claude.md', 'index.md', 'LICENSE',
+  'schema.json', 'package.json', 'index.js', 'skill.json', 'README.md', 'index.json',
 ]
-const ENGINE_KEYS = ENGINE_FILES.map((f) => `engine/${f}`)
+const SKILL_FILE_ORDER = ['SKILL.md', 'execution.json', 'recovery.json', 'input.json', 'manifest.json']
 const ROW_TRANSITION = 'transition-colors duration-200 motion-reduce:transition-none'
-
-const AGENT_PLUGIN_PREFIXES = ['.opencode/', '.claude/', '.codex/'] as const
 
 function orderedSkillPackageKeys(keys: string[]): string[] {
   const set = new Set(keys)
   const head: string[] = []
-  for (const k of ROOT_FILE_ORDER) if (set.has(k)) head.push(k)
-  for (const k of ENGINE_KEYS) if (set.has(k)) head.push(k)
+  for (const k of ROOT_FILE_ORDER) if (set.has(k) && !head.includes(k)) head.push(k)
 
-  const agentMid = [...keys]
-    .filter((k) => AGENT_PLUGIN_PREFIXES.some((p) => k.startsWith(p)))
+  // .claude-plugin/ and other dot-dirs first among non-root
+  const dotDirs = [...keys]
+    .filter((k) => /^\.[^/]+\//.test(k))
     .sort((a, b) => a.localeCompare(b))
 
-  const workflowSlugs = [
+  // skills/<slug>/... grouped and ordered
+  const skillSlugs = [
     ...new Set(
       keys
-        .map((k) => {
-          const m = /^workflows\/([^/]+)\//.exec(k)
-          return m ? m[1] : ''
-        })
+        .map((k) => { const m = /^skills\/([^/]+)\//.exec(k); return m ? m[1] : '' })
         .filter(Boolean),
     ),
   ].sort((a, b) => a.localeCompare(b))
 
   const mid: string[] = []
-  for (const wf of workflowSlugs) {
-    const prefix = `workflows/${wf}/`
-    for (const wfFile of WORKFLOW_FILE_ORDER) {
-      const kk = `${prefix}${wfFile}`
+  for (const slug of skillSlugs) {
+    const prefix = `skills/${slug}/`
+    for (const f of SKILL_FILE_ORDER) {
+      const kk = `${prefix}${f}`
       if (set.has(kk)) mid.push(kk)
     }
-    const visuals = [...keys].filter((k) => k.startsWith(`${prefix}visuals/`)).sort((a, b) => a.localeCompare(b))
-    mid.push(...visuals)
+    const rest = keys.filter((k) => k.startsWith(prefix) && !mid.includes(k)).sort((a, b) => a.localeCompare(b))
+    mid.push(...rest)
   }
 
-  const used = new Set([...head, ...agentMid, ...mid])
+  const used = new Set([...head, ...dotDirs, ...mid])
   const tail = [...keys].filter((k) => !used.has(k)).sort((a, b) => a.localeCompare(b))
-  return [...head, ...agentMid, ...mid, ...tail]
+  return [...head, ...dotDirs, ...mid, ...tail]
 }
 
 type PathTrieNode = {
@@ -142,9 +134,8 @@ function buildPathTrie(orderedPaths: readonly string[]): PathTrieNode {
 function defaultSkillPackageActiveKey(keys: string[]): string | null {
   if (keys.length === 0) return null
   const ordered = orderedSkillPackageKeys(keys)
-  const wfSkill =
-    ordered.find((k) => k.endsWith('/skill.md')) ?? (ordered.includes('skill.md') ? 'skill.md' : null)
-  return wfSkill ?? ordered[0] ?? null
+  const preferred = ordered.find((k) => k === 'plugin.config.json' || k === 'README.md' || k.endsWith('/SKILL.md'))
+  return preferred ?? ordered[0] ?? null
 }
 
 function previewPathForKey(bundleRoot: string, bundleName: string, key: string | null): string {
@@ -389,6 +380,12 @@ async function downloadPackageFolder(packageName: string): Promise<string> {
 
 export function SkillPackagesPage() {
   const qc = useQueryClient()
+  const PACKAGES_PANE_WIDTH_KEY = 'ai-native-packages-pane-width'
+  const PACKAGES_PANE_MIN = 240
+  const PACKAGES_PANE_MAX = 520
+  const STRUCTURE_PANE_WIDTH_KEY = 'ai-native-structure-pane-width'
+  const STRUCTURE_PANE_MIN = 220
+  const STRUCTURE_PANE_MAX = 520
 
   const [pendingRename, setPendingRename] = useState<SkillPackageSummary | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -399,6 +396,12 @@ export function SkillPackagesPage() {
   const [selectedPackageName, setSelectedPackageName] = useState<string | null>(null)
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const [searchValue, setSearchValue] = useState('')
+  const [packagesPaneWidth, setPackagesPaneWidth] = useState(286)
+  const [structurePaneWidth, setStructurePaneWidth] = useState(280)
+  const [isResizingPackagesPane, setIsResizingPackagesPane] = useState(false)
+  const [isResizingStructurePane, setIsResizingStructurePane] = useState(false)
+  const outerSplitRef = useRef<HTMLElement | null>(null)
+  const inspectorSplitRef = useRef<HTMLDivElement | null>(null)
 
   const q = useQuery({
     queryKey: ['skillPackages'],
@@ -527,6 +530,88 @@ export function SkillPackagesPage() {
   }
 
   const pkgCount = packages.length
+  const outerSplitStyle = {
+    ['--packages-pane-width' as string]: `${packagesPaneWidth}px`,
+  } as CSSProperties
+  const inspectorSplitStyle = {
+    ['--structure-pane-width' as string]: `${structurePaneWidth}px`,
+  } as CSSProperties
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(PACKAGES_PANE_WIDTH_KEY)
+    if (!stored) return
+    const parsed = Number.parseInt(stored, 10)
+    if (Number.isNaN(parsed)) return
+    setPackagesPaneWidth(Math.max(PACKAGES_PANE_MIN, Math.min(PACKAGES_PANE_MAX, parsed)))
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(PACKAGES_PANE_WIDTH_KEY, String(packagesPaneWidth))
+  }, [packagesPaneWidth])
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(STRUCTURE_PANE_WIDTH_KEY)
+    if (!stored) return
+    const parsed = Number.parseInt(stored, 10)
+    if (Number.isNaN(parsed)) return
+    setStructurePaneWidth(Math.max(STRUCTURE_PANE_MIN, Math.min(STRUCTURE_PANE_MAX, parsed)))
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(STRUCTURE_PANE_WIDTH_KEY, String(structurePaneWidth))
+  }, [structurePaneWidth])
+
+  useEffect(() => {
+    if (!isResizingPackagesPane) return
+    const onMouseMove = (event: MouseEvent) => {
+      const rect = outerSplitRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const proposed = event.clientX - rect.left
+      const nextWidth = Math.max(PACKAGES_PANE_MIN, Math.min(PACKAGES_PANE_MAX, proposed))
+      setPackagesPaneWidth(nextWidth)
+    }
+    const onMouseUp = () => {
+      setIsResizingPackagesPane(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizingPackagesPane])
+
+  useEffect(() => {
+    if (!isResizingStructurePane) return
+    const onMouseMove = (event: MouseEvent) => {
+      const rect = inspectorSplitRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const proposed = event.clientX - rect.left
+      const nextWidth = Math.max(STRUCTURE_PANE_MIN, Math.min(STRUCTURE_PANE_MAX, proposed))
+      setStructurePaneWidth(nextWidth)
+    }
+    const onMouseUp = () => {
+      setIsResizingStructurePane(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizingStructurePane])
 
   return (
     <AppShell
@@ -603,8 +688,12 @@ export function SkillPackagesPage() {
         ) : null}
 
         {!q.isLoading && !q.isError && pkgCount > 0 ? (
-          <section className="flex min-h-[min(640px,calc(100vh-9rem))] min-w-0 flex-col gap-3 md:flex-row md:items-stretch">
-            <PanelChrome className="w-full shrink-0 overflow-hidden md:max-w-[15rem] md:w-[min(100%,15rem)] lg:max-w-[18rem] lg:w-[min(100%,18rem)]">
+          <section
+            ref={outerSplitRef}
+            className="relative grid min-h-[min(640px,calc(100vh-9rem))] min-w-0 grid-cols-1 gap-3 overflow-hidden md:grid-cols-[var(--packages-pane-width)_minmax(0,1fr)] md:gap-0 md:items-stretch"
+            style={outerSplitStyle}
+          >
+            <PanelChrome className="w-full shrink-0 overflow-hidden md:max-w-none md:w-[min(100%,var(--packages-pane-width))]">
               <div className="border-b border-white/10 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <div className="relative min-w-0 flex-1">
@@ -689,7 +778,6 @@ export function SkillPackagesPage() {
                                       {pkg.package_name}
                                     </span>
                                     <span className="mt-0.5 block text-[11px] text-zinc-500">
-                                      {wfCount} workflow folder{wfCount === 1 ? '' : 's'} ·{' '}
                                       {formatModifiedAt(pkg.modified_at)}
                                     </span>
                                     <span className="mt-1.5 flex flex-wrap gap-1.5">
@@ -697,7 +785,7 @@ export function SkillPackagesPage() {
                                         variant="outline"
                                         className="border-white/10 bg-white/[0.04] text-[11px] text-zinc-300"
                                       >
-                                        {pkg.files.length} file{pkg.files.length === 1 ? '' : 's'}
+                                        {wfCount} workflow{wfCount === 1 ? '' : 's'}
                                       </Badge>
                                     </span>
                                   </span>
@@ -756,6 +844,19 @@ export function SkillPackagesPage() {
                 )}
               </ScrollArea>
             </PanelChrome>
+            <div
+              className="group absolute inset-y-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize md:block"
+              style={{ left: packagesPaneWidth }}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                setIsResizingPackagesPane(true)
+              }}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize packages sidebar"
+            >
+              <div className="mx-auto h-full w-px bg-white/10 transition-colors group-hover:bg-white/35 group-active:bg-white/45" />
+            </div>
 
             <PanelChrome className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <div className="shrink-0 border-b border-white/10 px-3 py-2.5 sm:px-4">
@@ -767,9 +868,6 @@ export function SkillPackagesPage() {
                       </p>
                       {selectedPackage ? (
                         <>
-                          <p className="mt-0.5 font-mono text-[11px] leading-snug text-zinc-400 [overflow-wrap:anywhere]">
-                            {bundleRoot}/{selectedPackage.package_name}
-                          </p>
                           <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
                             {selectedPackage.workflows.length} workflow folder
                             {selectedPackage.workflows.length === 1 ? '' : 's'}
@@ -840,29 +938,21 @@ export function SkillPackagesPage() {
                 {!filesQ.isError && selectedPackage && visibleFiles.length > 0 ? (
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
+                      ref={inspectorSplitRef}
+                      style={inspectorSplitStyle}
                       className={cn(
-                        'grid min-h-0 flex-1 gap-2 overflow-hidden',
+                        'relative grid min-h-0 flex-1 gap-2 overflow-hidden',
                         'grid-cols-1 grid-rows-[auto_minmax(0,1fr)]',
-                        '2xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] 2xl:grid-rows-none 2xl:min-h-[14rem]',
+                        'md:grid-cols-[var(--structure-pane-width)_minmax(0,1fr)] md:grid-rows-none md:min-h-[14rem]',
                       )}
                     >
-                      <div className="flex min-h-[8rem] max-h-[min(38vh,15rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2 2xl:max-h-none 2xl:min-h-0">
+                      <div className="flex min-h-[8rem] min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2 md:min-h-0">
                         <div className="mb-2 flex shrink-0 items-start justify-between gap-2">
                           <div className="min-w-0 font-mono text-white">
                             <p className="text-xs font-medium">Structure</p>
                             <p className="mt-0.5 text-[10px] leading-relaxed text-white/70">
-                              {visibleFiles.length} file{visibleFiles.length === 1 ? '' : 's'} under{' '}
-                              <span className="text-white">{selectedPackage.package_name}/</span>
+                              {visibleFiles.length} file{visibleFiles.length === 1 ? '' : 's'}
                             </p>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-0.5">
-                            <Badge
-                              variant="outline"
-                              className="border-white/10 bg-white/[0.04] px-1.5 py-0 text-[10px] text-white/80"
-                              title="Named packages live under output/skill_package/<name>/."
-                            >
-                              {bundleRootDisplay}/
-                            </Badge>
                           </div>
                         </div>
 
@@ -879,17 +969,25 @@ export function SkillPackagesPage() {
                           </div>
                         </ScrollArea>
                       </div>
+                      <div
+                        className="group absolute inset-y-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize md:block"
+                        style={{ left: structurePaneWidth }}
+                        onMouseDown={(event) => {
+                          event.preventDefault()
+                          setIsResizingStructurePane(true)
+                        }}
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label="Resize structure sidebar"
+                      >
+                        <div className="mx-auto h-full w-px bg-white/10 transition-colors group-hover:bg-white/35 group-active:bg-white/45" />
+                      </div>
 
                       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#05070c]">
                         <div className="shrink-0 border-b border-white/10 px-2.5 py-2">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-white">{resolvedActiveFile ?? 'File preview'}</p>
-                              <p className="mt-1 text-xs text-zinc-500">
-                                {resolvedSelectedPackageName
-                                  ? previewPathForKey(bundleRoot, resolvedSelectedPackageName, resolvedActiveFile)
-                                  : 'Select a file to preview'}
-                              </p>
                             </div>
                             {resolvedActiveFile ? (
                               <div className="flex flex-wrap gap-2">

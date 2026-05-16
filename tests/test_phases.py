@@ -76,7 +76,7 @@ def _compile_with_vision_mocks(session_id: str, events: list[dict], *, call_llm_
     return (
         data_dir,
         patch.object(settings, "data_dir", data_dir),
-        patch.object(settings, "llm_endpoint", "https://example.com/v1"),
+        patch.object(settings, "llm_vision_endpoint", "https://example.com/v1"),
         patch.object(settings, "llm_enabled", True),
         patch.object(settings, "llm_anchor_vision", True),
         patch("app.llm.intent_llm.call_llm", return_value=None),
@@ -723,9 +723,8 @@ class PhaseTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.reason, "source_session_id_required")
 
-    def test_vision_llm_failure_aborts_compile(self) -> None:
+    def test_vision_llm_failure_falls_back_to_deterministic_anchors(self) -> None:
         from app.compiler.build import compile_skill_package
-        from app.llm.anchor_vision_llm import VisionAnchorGenerationError
         from app.pipeline.run import run_pipeline
 
         evs = run_pipeline([_minimal_click_event()])
@@ -734,15 +733,24 @@ class PhaseTests(unittest.TestCase):
             with ExitStack() as stack:
                 for p in patchers:
                     stack.enter_context(p)
-                with self.assertRaises(VisionAnchorGenerationError) as ctx:
-                    compile_skill_package(
-                        evs,
-                        skill_id="y",
-                        source_session_id="sess",
-                        title="t",
-                        version=1,
-                    )
-                self.assertEqual(ctx.exception.reason, "vision_llm_empty_response")
+                pkg = compile_skill_package(
+                    evs,
+                    skill_id="y",
+                    source_session_id="sess",
+                    title="t",
+                    version=1,
+                )
+                step = pkg.skills[0].steps[1].model_dump()
+                anchors = step.get("signals", {}).get("anchors") or []
+                self.assertTrue(anchors)
+                self.assertIn("submit", " ".join(str(a.get("element") or "") for a in anchors))
+                warning = ((step.get("confidence_protocol") or {}).get("compile_warnings") or {}).get(
+                    "vision_anchor_fallback"
+                )
+                self.assertIsInstance(warning, dict)
+                self.assertEqual(warning.get("reason"), "vision_llm_empty_response")
+                self.assertEqual(warning.get("step_index"), 0)
+                self.assertEqual(warning.get("fallback"), "deterministic_anchors")
         finally:
             shutil.rmtree(data_dir, ignore_errors=True)
 
@@ -759,7 +767,7 @@ class PhaseTests(unittest.TestCase):
                 patch.object(settings, "data_dir", root),
                 patch.object(settings, "llm_enabled", True),
                 patch.object(settings, "llm_anchor_vision", True),
-                patch.object(settings, "llm_endpoint", "http://llm.test"),
+                patch.object(settings, "llm_vision_endpoint", "http://llm.test"),
                 patch("app.llm.anchor_vision_llm.supports_multimodal_chat", return_value=True),
                 patch(
                     "app.llm.anchor_vision_llm.call_llm",

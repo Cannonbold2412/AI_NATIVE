@@ -2,10 +2,10 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
+import { fetchPlugins, normalizePluginList } from '@/api/pluginApi'
 import { fetchDashboard } from '@/api/productApi'
 import { AppShell } from '@/components/layout/AppLayout'
 import {
-  ActivityTimeline,
   EmptyState,
   ErrorState,
   GlobalCreateMenu,
@@ -14,8 +14,9 @@ import {
   StatusBadge,
 } from '@/components/product/ProductPrimitives'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowRight, PackageCheck } from 'lucide-react'
+import { ArrowRight, CircleAlert, PackageCheck, ShieldCheck } from 'lucide-react'
 
 function formatTime(value: unknown) {
   const n = typeof value === 'number' ? value : 0
@@ -25,7 +26,10 @@ function formatTime(value: unknown) {
 
 export function DashboardPage() {
   const q = useQuery({ queryKey: ['dashboard'], queryFn: fetchDashboard, staleTime: 30_000 })
+  const pluginsQ = useQuery({ queryKey: ['plugins'], queryFn: fetchPlugins, staleTime: 10_000 })
   const stats = q.data?.stats
+  const plugins = normalizePluginList(pluginsQ.data)
+  const criticalPlugins = plugins.filter((p) => p.auth == null || p.status === 'error' || p.workflows.some((w) => w.status === 'error')).length
 
   return (
     <AppShell
@@ -65,7 +69,7 @@ export function DashboardPage() {
                       description="Record a browser flow to create the first saved skill."
                       action={
                         <Button asChild size="sm">
-                          <Link href="/recordings/new">Start recording</Link>
+                          <Link href="/plugins">Create plugin</Link>
                         </Button>
                       }
                     />
@@ -118,21 +122,35 @@ export function DashboardPage() {
             <section className="grid gap-4 xl:grid-cols-2">
               <Card className="border-white/8 bg-white/[0.03] shadow-none">
                 <CardHeader className="border-b border-white/8">
-                  <CardTitle className="text-white">Active jobs</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-white">
+                    <ShieldCheck className="size-4 text-sky-300" />
+                    Plugin health
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="p-3">
-                  {q.data.active_jobs.length === 0 ? (
-                    <EmptyState title="No active jobs" />
-                  ) : (
-                    <ActivityTimeline
-                      rows={q.data.active_jobs.map((job) => ({
-                        id: job.job_id,
-                        title: `${job.kind} is ${job.status}`,
-                        detail: job.resource_id ?? job.job_id,
-                        at: formatTime(job.updated_at),
-                      }))}
-                    />
-                  )}
+                <CardContent className="space-y-2 p-3">
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-white/8 bg-black/20 p-3">
+                    <p className="text-sm text-zinc-300">
+                      {plugins.length} plugin{plugins.length === 1 ? '' : 's'} tracked
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={criticalPlugins > 0 ? 'border-red-500/25 bg-red-500/10 text-red-200' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'}
+                    >
+                      {criticalPlugins > 0 ? `${criticalPlugins} critical` : 'All healthy'}
+                    </Badge>
+                  </div>
+                  <Button asChild variant="outline" className="w-full justify-between border-white/10 bg-white/[0.04] text-zinc-200">
+                    <Link href="/plugin-health">
+                      Open plugin health
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </Button>
+                  {criticalPlugins > 0 ? (
+                    <p className="flex items-center gap-1.5 text-xs text-red-300">
+                      <CircleAlert className="size-3.5" />
+                      Review plugins missing auth or with workflow errors.
+                    </p>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -145,8 +163,8 @@ export function DashboardPage() {
                 </CardHeader>
                 <CardContent className="grid gap-2 p-3">
                   <Button asChild className="justify-between">
-                    <Link href="/recordings/new">
-                      Record workflow
+                    <Link href="/plugins">
+                      Create plugin
                       <ArrowRight className="size-4" />
                     </Link>
                   </Button>

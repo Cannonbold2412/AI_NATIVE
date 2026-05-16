@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any
 
@@ -20,6 +21,7 @@ def _merge_step_shell(step: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
     for key in (
         "target",
         "signals",
+        "url_state",
         "validation",
         "recovery",
         "confidence_protocol",
@@ -49,6 +51,28 @@ def _merge_step_shell(step: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
     return out
 
 
+def _validate_url_state_patch(raw: Any) -> None:
+    if raw is None:
+        return
+    if not isinstance(raw, dict):
+        raise ValueError("url_state_must_be_object")
+    for phase in ("before", "after"):
+        block = raw.get(phase)
+        if block is None:
+            continue
+        if not isinstance(block, dict):
+            raise ValueError(f"url_state_{phase}_must_be_object")
+        pattern = block.get("url_pattern")
+        if pattern in (None, ""):
+            continue
+        if not isinstance(pattern, str):
+            raise ValueError(f"url_state_{phase}_pattern_must_be_string")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"url_state_{phase}_pattern_invalid_regex") from exc
+
+
 def _coerce_scroll_delta(raw: Any) -> int:
     if raw is None:
         raise ValueError("scroll_amount_required")
@@ -60,6 +84,9 @@ def _coerce_scroll_delta(raw: Any) -> int:
 
 def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: dict[str, Any]) -> None:
     """Raise ValueError with a human-readable message if the patch is not allowed."""
+    if "url_state" in patch:
+        _validate_url_state_patch(patch.get("url_state"))
+
     merged = _merge_step_shell(step, patch)
 
     if "intent" in patch:
@@ -71,7 +98,7 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
 
     act = action_name(merged).lower()
     if act == "navigate":
-        invalid_keys = sorted(set(patch) - {"intent", "action", "url", "validation", "recovery"})
+        invalid_keys = sorted(set(patch) - {"intent", "action", "url", "url_state", "validation", "recovery"})
         if invalid_keys:
             raise ValueError("navigate_step_allows_only_url_intent_validation_recovery")
         action_patch = patch.get("action")
@@ -83,7 +110,7 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
             raise ValueError("navigate_url_must_be_http_url")
         return
     if act == "scroll":
-        invalid_keys = sorted(set(patch) - {"intent", "action"})
+        invalid_keys = sorted(set(patch) - {"intent", "action", "url_state"})
         if invalid_keys:
             raise ValueError("scroll_step_allows_only_intent_and_action")
         action_patch = patch.get("action")

@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.services.skill_pack_builder import (
+from app.services.skill_pack.compiler import (
     SkillPackBuildUserError,
     append_workflow_to_skill_package,
     build_skill_package,
@@ -162,7 +162,7 @@ class SkillPackBundleRootBody(BaseModel):
 class SkillPackExportBody(BaseModel):
     name: str = Field(default="generated_skill", min_length=1)
     bundle_name: str | None = Field(default="default")
-    skill_md: str = Field(..., min_length=1)
+    skill_md: str = Field(default="")
     inputs_json: str = Field(..., min_length=2)
     manifest_json: str = Field(..., min_length=2)
     execution_json: str = Field(..., min_length=2)

@@ -321,6 +321,10 @@
       },
       page,
       state_probe: { before },
+      url_state: {
+        before: { url: location.href, title: document.title || "" },
+        after: null,
+      },
     };
   }
 
@@ -337,6 +341,9 @@
       after,
     };
     delete payload.state_probe;
+    if (payload.url_state) {
+      payload.url_state.after = { url: location.href, title: document.title || "" };
+    }
     return report(payload);
   }
 

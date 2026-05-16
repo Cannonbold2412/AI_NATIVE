@@ -153,9 +153,9 @@ def generate_anchors_for_step_or_raise(
         raise VisionAnchorGenerationError("llm_disabled", step_index=step_index)
     if not settings.llm_anchor_vision:
         raise VisionAnchorGenerationError("llm_anchor_vision_disabled", step_index=step_index)
-    if not str(settings.llm_endpoint or "").strip():
+    if not str(settings.llm_vision_endpoint or "").strip():
         raise VisionAnchorGenerationError("llm_endpoint_unset", step_index=step_index)
-    if not supports_multimodal_chat():
+    if not supports_multimodal_chat(task="anchor_vision"):
         raise VisionAnchorGenerationError("llm_endpoint_not_multimodal_capable", step_index=step_index)
 
     visual = ev.get("visual") if isinstance(ev.get("visual"), dict) else {}
@@ -275,7 +275,7 @@ def generate_anchors_from_image_bytes(
     """
     if not settings.llm_enabled or not settings.llm_anchor_vision:
         return []
-    if not str(settings.llm_endpoint or "").strip():
+    if not str(settings.llm_vision_endpoint or "").strip():
         return []
     if not supports_multimodal_chat():
         return []

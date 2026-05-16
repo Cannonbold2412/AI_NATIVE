@@ -29,7 +29,7 @@ import {
   Layers,
   Menu,
   Package,
-  Radio,
+  Puzzle,
   Rocket,
   Search,
   Settings,
@@ -43,16 +43,15 @@ const navGroups = [
     label: 'Operate',
     items: [
       { to: '/', label: 'Dashboard', icon: Home, exact: true },
-      { to: '/recordings/new', label: 'Recorder', icon: Radio, exact: false },
-      { to: '/skills', label: 'Workflows', icon: BookOpen, exact: false },
+      { to: '/plugins', label: 'Plugins', icon: Puzzle, exact: false },
+      { to: '/plugin-health', label: 'Plugin Health', icon: BookOpen, exact: false },
       { to: '/packages', label: 'Packages', icon: FolderKanban, exact: false },
     ],
   },
   {
     label: 'Build',
     items: [
-      { to: '/skill-pack-builder', label: 'Skill Pack Builder', icon: Package, exact: false },
-      { to: '/jobs', label: 'Jobs', icon: Hammer, exact: false },
+      { to: '/build', label: 'Build Plugin', icon: Hammer, exact: false },
     ],
   },
   {
@@ -302,14 +301,6 @@ export function AppShell({ title, description, actions, mainClassName, children 
                 </label>
               </div>
               {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-              <Button
-                asChild
-                size="sm"
-                variant="outline"
-                className="hidden border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] sm:inline-flex"
-              >
-                <Link href="/recordings/new">Create</Link>
-              </Button>
               <div className="hidden min-w-0 max-w-44 items-center gap-2 rounded-lg border border-white/8 bg-white/[0.03] px-2.5 py-1.5 md:flex">
                 <BriefcaseBusiness className="size-3.5 shrink-0 text-zinc-500" />
                 <span className="truncate text-xs text-zinc-300">{meQ.data?.workspace.name ?? 'Local workspace'}</span>

@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from app.api.routes import CompileBody, compile_skill
 from app.api.skill_pack_routes import SkillPackBuildBody
 from app.services.jobs import enqueue_job, job_store
-from app.services.skill_pack_builder import build_skill_package
+from app.services.skill_pack.compiler import build_skill_package
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
