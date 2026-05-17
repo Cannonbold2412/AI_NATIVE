@@ -49,3 +49,9 @@ class Plugin(BaseModel):
     last_published_version: str | None = None
     last_published_at: float | None = None
     last_commit_sha: str | None = None
+    # Shared-runtime publish metadata (v2 manifest).
+    # `package_id` is the org-scoped identifier used by `conxa install` (e.g. "acme/hr-onboarding").
+    # Falls back to `slug` at build time when unset.
+    package_id: str | None = None
+    visibility: Literal["public", "private", "local"] = "private"
+    tags: list[str] = Field(default_factory=list)

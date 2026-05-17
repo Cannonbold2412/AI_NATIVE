@@ -234,7 +234,7 @@ function PublishDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-400">Claude Code MCP install</Label>
+              <Label className="text-xs text-zinc-400">Install with conxa</Label>
               <div className="relative rounded-lg border border-white/8 bg-black/30 p-3 font-mono text-xs text-zinc-300">
                 <pre className="whitespace-pre-wrap break-all">{result.install_snippet}</pre>
                 <Button

@@ -218,6 +218,15 @@ def _validate_public_artifact(repo_dir: Path) -> None:
     runtime_dir = repo_dir / "runtime"
     if runtime_dir.exists():
         raise ValueError("Public artifact contains runtime/ — Conxa runtime internals must not be published.")
+    # Shared-runtime migration: published plugins are data-only. The Claude Code
+    # marketplace shim (.claude-plugin/) and bootstrap.js are gone — installs go
+    # through `npx -y conxa install <plugin_id>`.
+    claude_plugin_dir = repo_dir / ".claude-plugin"
+    if claude_plugin_dir.exists():
+        raise ValueError("Public artifact contains .claude-plugin/ — marketplace shim is no longer supported.")
+    bootstrap_js = repo_dir / "bootstrap.js"
+    if bootstrap_js.exists():
+        raise ValueError("Public artifact contains bootstrap.js — marketplace shim is no longer supported.")
 
 
 def _publish_locked(
@@ -314,20 +323,6 @@ def _publish_locked(
             except (json.JSONDecodeError, OSError):
                 pass
 
-        claude_dir = Path(tmpdir) / ".claude-plugin"
-        claude_dir.mkdir(parents=True, exist_ok=True)
-        for meta_file in (claude_dir / "plugin.json", claude_dir / "marketplace.json"):
-            if meta_file.is_file():
-                try:
-                    meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                    meta["version"] = new_version
-                    meta["description"] = description
-                    if "plugins" in meta and isinstance(meta["plugins"], list) and meta["plugins"]:
-                        meta["plugins"][0]["version"] = new_version
-                    meta_file.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-                except (json.JSONDecodeError, OSError):
-                    pass
-
         # ── 6. Write / append CHANGELOG.md ────────────────────────────────────
         changelog_file = Path(tmpdir) / "CHANGELOG.md"
         entry_lines = [
@@ -362,10 +357,11 @@ def _publish_locked(
         last_commit_sha=commit_sha,
     )
 
-    install_snippet = (
-        f"# In Claude Code: Settings → MCP Servers → Add from GitHub\n"
-        f"# GitHub URL: {html_url}"
-    )
+    # Prefer the v2 manifest `id` (org-scoped) for the install snippet; fall
+    # back to plugin.slug if the build hasn't been refreshed since the M1
+    # migration. Either form works with `npx conxa install`.
+    package_id = getattr(plugin, "package_id", None) or plugin.slug
+    install_snippet = f"npx -y conxa install {package_id}"
 
     return PublishResult(
         repo_url=html_url,
