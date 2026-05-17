@@ -707,6 +707,14 @@ def _copy_plugin_templates(
         if src.exists():
             shutil.copy2(str(src), str(claude_dir / js_name))
 
+    # runtime/ bundle — whichever plugin is installed first on a fresh machine
+    # runs cli.js init(), which copies these files to ~/.conxa/runtime/.
+    runtime_src = templates / "runtime"
+    runtime_dst = bundle_root / "runtime"
+    if runtime_dst.exists():
+        shutil.rmtree(runtime_dst)
+    shutil.copytree(str(runtime_src), str(runtime_dst))
+
 
 
 
@@ -878,24 +886,37 @@ def build_plugin(
         skill_slugs.append(wf.slug)
         _log(f"Workflow {wf.name!r} compiled")
 
-    # ── 2. Write plugin.json ──────────────────────────────────────────────
+    # ── 2. Write plugin.json (v2 manifest for shared-runtime `conxa` CLI) ──
     var_pattern = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
     protected_url_vars = var_pattern.findall(plugin.protected_url)
 
+    package_id = getattr(plugin, "package_id", None) or bundle_slug
+    visibility = getattr(plugin, "visibility", "private")
+    tags = list(getattr(plugin, "tags", []) or [])
+    repository_url = getattr(plugin, "repository_url", None)
+
     plugin_config = {
+        "package_format": 2,
+        "id": package_id,
         "slug": bundle_slug,
         "name": plugin.name,
         "version": version,
+        "visibility": visibility,
+        "tags": tags,
         "target_url": plugin.target_url,
         "protected_url": plugin.protected_url,
         "protected_url_vars": protected_url_vars,
+        "auth_requirements": {"kind": "cookie", "manual_login": True},
         "skills": [{"slug": s, "path": f"skills/{s}"} for s in skill_slugs],
+        "runtime_min_version": "1.0.0",
         "compatibility": {"conxa_runtime": ">=1.0.0"},
     }
+    if repository_url:
+        plugin_config["source"] = {"kind": "git+https", "repository_url": repository_url}
     (bundle_root / "plugin.json").write_text(
         json.dumps(plugin_config, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    _log("Written plugin.json", skills=skill_slugs)
+    _log("Written plugin.json", skills=skill_slugs, package_id=package_id, visibility=visibility)
 
     # ── 3. Copy plugin templates (Claude.md, index.md, .gitignore, .claude-plugin/) ─
     _copy_plugin_templates(

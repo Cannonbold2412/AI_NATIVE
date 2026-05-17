@@ -525,3 +525,12 @@ class TestSavedSkillJsonBuild:
         assert sessions_read == []  # saved skill used — no session events needed
         assert (tmp_path / ".claude-plugin" / "plugin.json").is_file()
         assert (tmp_path / ".claude-plugin" / "marketplace.json").is_file()
+
+        # v2 manifest fields written by build_plugin
+        manifest = json.loads((tmp_path / "plugin.json").read_text(encoding="utf-8"))
+        assert manifest["package_format"] == 2
+        assert manifest["id"]  # falls back to bundle slug when package_id unset
+        assert manifest["visibility"] == "private"
+        assert manifest["tags"] == []
+        assert manifest["auth_requirements"] == {"kind": "cookie", "manual_login": True}
+        assert manifest["runtime_min_version"] == "1.0.0"
