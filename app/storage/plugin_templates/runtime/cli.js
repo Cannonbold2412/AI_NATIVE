@@ -4,11 +4,16 @@
  * cli.js — Conxa runtime manager
  *
  * Commands:
- *   init                Bootstrap ~/.conxa/runtime/ (idempotent)
- *   install <dir>       Install a plugin from a local directory
- *   uninstall <slug>    Remove an installed plugin
- *   list                Print all installed plugins
- *   discover            Scan ~/.claude/plugins/marketplaces/ and install new plugins
+ *   init                       Bootstrap ~/.conxa/runtime/ (idempotent)
+ *   install <ref>              Install a plugin. <ref> is a local dir, "owner/repo",
+ *                              "owner/repo@v1.0.0", or an https git URL. Resolver
+ *                              chain: installed → cache → git → registry.
+ *   uninstall <slug>           Remove an installed plugin
+ *   list                       Print all installed plugins
+ *   search <query>             Search installed + cached + registry plugins
+ *   registry login <url> <tok> Save credentials for a private registry
+ *   registry logout <url>      Remove credentials for a registry
+ *   discover                   (Legacy) scan ~/.claude/plugins/marketplaces/
  */
 const fs   = require("fs");
 const os   = require("os");
@@ -145,7 +150,7 @@ function init() {
 
 // ─── install ──────────────────────────────────────────────────────────────────
 
-function install(pluginDir) {
+function _installFromLocalDir(pluginDir) {
   if (!pluginDir) throw new Error("install: plugin directory path required");
   const absDir = path.resolve(pluginDir);
   if (!fs.existsSync(absDir)) throw new Error(`Plugin directory not found: ${absDir}`);
@@ -206,6 +211,72 @@ function install(pluginDir) {
 
   process.stderr.write(`[conxa] Plugin '${slug}' installed. Skills: ${skillsList.map(s => s.slug).join(", ")}\n`);
   return entry;
+}
+
+// `install <ref>` — accept a local dir, git ref, or registry plugin_id.
+// Local dirs install directly; everything else resolves through the chain
+// (cache → git → registry) which stages a directory under ~/.conxa/cache/
+// before delegating to _installFromLocalDir.
+async function install(ref) {
+  if (!ref) throw new Error("install: <ref> required (local dir, owner/repo, or plugin_id)");
+  if (fs.existsSync(ref) && fs.statSync(ref).isDirectory()) {
+    return _installFromLocalDir(ref);
+  }
+  // Look in cache first (already downloaded). cache.stagedDir() takes a
+  // plugin_id+version pair; we accept either "id" or "id@version".
+  const at = ref.lastIndexOf("@");
+  const id = at > 0 ? ref.slice(0, at) : ref;
+  const ver = at > 0 ? ref.slice(at + 1) : null;
+  const cache = require("./resolver/cache");
+  const staged = cache.stagedDir(id, ver);
+  if (staged) return _installFromLocalDir(staged);
+  // git resolver handles owner/repo and full https URLs. It stages into cache/
+  // and returns the staged directory path.
+  const git = require("./resolver/git");
+  const resolved = await git.resolve(ref);
+  if (resolved && resolved.staged_dir) return _installFromLocalDir(resolved.staged_dir);
+  // Registry resolver is contract-only today; falls through when no hosted
+  // registry is configured. When implemented it would download a tarball into
+  // cache/ and return the staged path.
+  throw new Error(`install: could not resolve '${ref}'`);
+}
+
+// ─── search ───────────────────────────────────────────────────────────────────
+
+async function search(query) {
+  const results = await require("./search").search(query, 20);
+  if (results.length === 0) {
+    process.stderr.write(`[conxa] No matches for '${query}'.\n`);
+    return [];
+  }
+  for (const r of results) {
+    const tags = (r.tags || []).join(",") || "—";
+    process.stderr.write(`  ${r.plugin_id || r.slug}  v${r.version}  [${r.source}]  ${r.name}  (tags: ${tags})\n`);
+  }
+  return results;
+}
+
+// ─── registry login / logout ──────────────────────────────────────────────────
+
+function registryLogin(url, token, name) {
+  if (!url || !token) throw new Error("registry login: <url> <token> required");
+  const { getRegistryAuth, writeRegistryAuth } = require("./config");
+  const auth = getRegistryAuth();
+  const regs = Array.isArray(auth.registries) ? auth.registries : [];
+  const idx = regs.findIndex(r => r.url === url);
+  const entry = { name: name || url, url, token };
+  if (idx >= 0) regs[idx] = entry; else regs.push(entry);
+  writeRegistryAuth({ registries: regs });
+  process.stderr.write(`[conxa] Saved credentials for ${url}\n`);
+}
+
+function registryLogout(url) {
+  if (!url) throw new Error("registry logout: <url> required");
+  const { getRegistryAuth, writeRegistryAuth } = require("./config");
+  const auth = getRegistryAuth();
+  const regs = Array.isArray(auth.registries) ? auth.registries.filter(r => r.url !== url) : [];
+  writeRegistryAuth({ registries: regs });
+  process.stderr.write(`[conxa] Removed credentials for ${url}\n`);
 }
 
 // ─── uninstall ────────────────────────────────────────────────────────────────
@@ -273,21 +344,29 @@ function discover() {
 
 if (require.main === module) {
   const [,, cmd, ...rest] = process.argv;
-  try {
-    switch (cmd) {
-      case "init":      init();             break;
-      case "install":   install(rest[0]);   break;
-      case "uninstall": uninstall(rest[0]); break;
-      case "list":      list();             break;
-      case "discover":  discover();         break;
-      default:
-        process.stderr.write("Usage: cli.js <init|install <dir>|uninstall <slug>|list|discover>\n");
-        process.exit(1);
+  (async () => {
+    try {
+      switch (cmd) {
+        case "init":      init();                  break;
+        case "install":   await install(rest[0]);  break;
+        case "uninstall": uninstall(rest[0]);      break;
+        case "list":      list();                  break;
+        case "search":    await search(rest.join(" ")); break;
+        case "registry":
+          if (rest[0] === "login")       registryLogin(rest[1], rest[2], rest[3]);
+          else if (rest[0] === "logout") registryLogout(rest[1]);
+          else throw new Error("registry: login <url> <token> | logout <url>");
+          break;
+        case "discover":  discover();              break;
+        default:
+          process.stderr.write("Usage: cli.js <init|install <ref>|uninstall <slug>|list|search <q>|registry login|registry logout|discover>\n");
+          process.exit(1);
+      }
+    } catch (e) {
+      process.stderr.write(`[conxa] Error: ${e.message}\n`);
+      process.exit(1);
     }
-  } catch (e) {
-    process.stderr.write(`[conxa] Error: ${e.message}\n`);
-    process.exit(1);
-  }
+  })();
 }
 
-module.exports = { init, install, uninstall, list, discover };
+module.exports = { init, install, uninstall, list, search, registryLogin, registryLogout, discover };

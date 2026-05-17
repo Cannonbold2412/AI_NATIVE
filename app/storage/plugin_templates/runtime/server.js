@@ -120,6 +120,50 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         required: ["slug"],
       },
     },
+    {
+      name: "search_registry",
+      description: "Search installed, cached, and registry plugins. Returns lightweight metadata only — no execution steps or images. Runtime handles ranking internally.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query (matches name, description, tags, slug)" },
+          limit: { type: "integer", description: "Max results (default 20, capped at 50)" },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "get_skill_metadata",
+      description: "Fetch the manifest (plugin.json) for an un-installed plugin. Used to preview before install_plugin.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          plugin_id: { type: "string", description: "Plugin id from search_registry (e.g. 'acme/hr')" },
+        },
+        required: ["plugin_id"],
+      },
+    },
+    {
+      name: "install_plugin",
+      description: "Install a plugin into ~/.conxa/plugins/. plugin_ref is a plugin_id, owner/repo, owner/repo@version, or absolute path.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          plugin_ref: { type: "string" },
+          version:    { type: "string", description: "Optional version override" },
+        },
+        required: ["plugin_ref"],
+      },
+    },
+    {
+      name: "uninstall_plugin",
+      description: "Remove an installed plugin and its data from ~/.conxa/plugins/.",
+      inputSchema: {
+        type: "object",
+        properties: { slug: { type: "string", description: "Installed plugin slug" } },
+        required: ["slug"],
+      },
+    },
   ];
   console.error(`[ListTools] Registering ${tools.length} tools`);
   return { tools };
@@ -168,6 +212,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       "SKILLS:",
       JSON.stringify(skills, null, 2),
     ].join("\n") }] };
+  }
+
+  // ── search_registry ──────────────────────────────────────────────────────
+  if (name === "search_registry") {
+    const query = String((args && args.query) || "").trim();
+    const limit = Number.isInteger(args && args.limit) ? args.limit : 20;
+    if (!query) return { content: [{ type: "text", text: "search_registry: query is required" }] };
+    const search = require("./search");
+    const results = await search.search(query, limit);
+    return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+  }
+
+  // ── get_skill_metadata ───────────────────────────────────────────────────
+  if (name === "get_skill_metadata") {
+    const pluginId = String((args && args.plugin_id) || "").trim();
+    if (!pluginId) return { content: [{ type: "text", text: "get_skill_metadata: plugin_id is required" }] };
+    const search = require("./search");
+    const manifest = await search.getManifest(pluginId);
+    if (!manifest) return { content: [{ type: "text", text: `Plugin not found: ${pluginId}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(manifest, null, 2) }] };
+  }
+
+  // ── install_plugin ───────────────────────────────────────────────────────
+  if (name === "install_plugin") {
+    const ref     = String((args && args.plugin_ref) || "").trim();
+    const version = (args && args.version) ? String(args.version) : null;
+    if (!ref) return { content: [{ type: "text", text: "install_plugin: plugin_ref is required" }] };
+    const cli = require("./cli");
+    try {
+      const installRef = version && !ref.includes("@") ? `${ref}@${version}` : ref;
+      const entry = await cli.install(installRef);
+      return { content: [{ type: "text", text: `Installed ${entry.slug} v${entry.version}. Skills: ${(entry.skills || []).map(s => s.slug).join(", ")}` }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: `install_plugin failed: ${e.message}` }] };
+    }
+  }
+
+  // ── uninstall_plugin ─────────────────────────────────────────────────────
+  if (name === "uninstall_plugin") {
+    const slug = String((args && args.slug) || "").trim();
+    if (!slug) return { content: [{ type: "text", text: "uninstall_plugin: slug is required" }] };
+    const cli = require("./cli");
+    try {
+      cli.uninstall(slug);
+      return { content: [{ type: "text", text: `Uninstalled ${slug}` }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: `uninstall_plugin failed: ${e.message}` }] };
+    }
   }
 
   // ── read_skill_files ─────────────────────────────────────────────────────
