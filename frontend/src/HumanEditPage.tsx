@@ -386,7 +386,7 @@ export function HumanEditPage() {
         actions={
           <>
             <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
-              <Link href="/">
+              <Link href="/dashboard">
                 <Home className="size-3.5" />
                 Home
               </Link>
@@ -658,7 +658,7 @@ export function HumanEditPage() {
             </Button>
           )}
           <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]" asChild>
-            <Link href="/" title="Start a new recording (home)">
+            <Link href="/dashboard" title="Start a new recording (home)">
               <Home className="size-3.5" />
               <span className="hidden sm:inline">New recording</span>
             </Link>

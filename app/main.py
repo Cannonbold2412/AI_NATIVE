@@ -7,6 +7,7 @@ from app.api.job_routes import router as job_router
 from app.api.plugin_routes import router as plugin_router
 from app.api.product_routes import router as product_router
 from app.api.publish_routes import router as publish_router
+from app.api.razorpay_routes import router as razorpay_router
 from app.api.routes import router
 from app.api.run_routes import router as run_router
 from app.api.security import ProductionRequestMiddleware
@@ -42,6 +43,7 @@ app.include_router(v1_alias_router, prefix="/api/v1")
 app.include_router(plugin_router, prefix="/api/v1")
 app.include_router(run_router, prefix="/api/v1")
 app.include_router(publish_router, prefix="/api/v1")
+app.include_router(razorpay_router, prefix="/api/v1")
 
 
 @app.get("/")

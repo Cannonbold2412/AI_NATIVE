@@ -141,7 +141,7 @@ function SidebarRail({
       )}
     >
       <div className="flex items-center gap-3 border-b border-white/8 px-4 py-4">
-        <Link href="/" className={cn('flex min-w-0 items-center gap-3', collapsed && 'justify-center')}>
+        <Link href="/dashboard" className={cn('flex min-w-0 items-center gap-3', collapsed && 'justify-center')}>
           <ProductMark />
           <div className={cn('min-w-0', collapsed && 'hidden')}>
             <p className="truncate text-sm font-semibold text-white">AI Skill Platform</p>

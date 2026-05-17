@@ -92,6 +92,11 @@ class Settings(BaseSettings):
         validation_alias="GITHUB_OAUTH_FRONTEND_ORIGIN",
     )
 
+    # Razorpay payment gateway. These intentionally do not use the SKILL_ prefix.
+    razorpay_key_id: str = Field(default="", validation_alias="RAZORPAY_KEY_ID")
+    razorpay_key_secret: str = Field(default="", validation_alias="RAZORPAY_KEY_SECRET")
+    razorpay_webhook_secret: str = Field(default="", validation_alias="RAZORPAY_WEBHOOK_SECRET")
+
     @field_validator("package_bundle_root", mode="before")
     @classmethod
     def _strip_package_bundle_root(cls, value: object) -> str:
