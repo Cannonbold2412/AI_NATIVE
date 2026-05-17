@@ -39,9 +39,13 @@ class TestRenderReadme:
         assert "create-service" in md
         assert "deploy" in md
 
-    def test_contains_mcp_install_instructions(self):
+    def test_contains_install_snippet(self):
         md = _render_readme("Test", "test_slug", "https://test.com", [])
-        assert "MCP" in md or "mcpServers" in md
+        assert "npx -y conxa install" in md
+
+    def test_install_snippet_uses_package_id_when_given(self):
+        md = _render_readme("Test", "test_slug", "https://test.com", [], package_id="acme/x")
+        assert "npx -y conxa install acme/x" in md
 
     def test_contains_auth_reference(self):
         md = _render_readme("Test", "test_slug", "https://test.com", [])
@@ -523,8 +527,10 @@ class TestSavedSkillJsonBuild:
         assert "{{service_name}}" in execution_raw
         assert "conxa-db" not in execution_raw
         assert sessions_read == []  # saved skill used — no session events needed
-        assert (tmp_path / ".claude-plugin" / "plugin.json").is_file()
-        assert (tmp_path / ".claude-plugin" / "marketplace.json").is_file()
+
+        # Data-only artifact: marketplace shim and runtime/ never ship.
+        assert not (tmp_path / ".claude-plugin").exists()
+        assert not (tmp_path / "runtime").exists()
 
         # v2 manifest fields written by build_plugin
         manifest = json.loads((tmp_path / "plugin.json").read_text(encoding="utf-8"))
@@ -534,3 +540,7 @@ class TestSavedSkillJsonBuild:
         assert manifest["tags"] == []
         assert manifest["auth_requirements"] == {"kind": "cookie", "manual_login": True}
         assert manifest["runtime_min_version"] == "1.0.0"
+
+        # Per-plugin Claude.md gets the new npx install snippet.
+        claude_md = (tmp_path / "Claude.md").read_text(encoding="utf-8")
+        assert "npx -y conxa install" in claude_md

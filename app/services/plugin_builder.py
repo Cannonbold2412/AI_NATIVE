@@ -634,6 +634,7 @@ def _copy_plugin_templates(
     target_url: str,
     version: str,
     skill_slugs: list[str],
+    package_id: str | None = None,
 ) -> None:
     """Copy plugin-side templates into bundle_root with substitutions."""
     templates = _templates_dir()
@@ -649,6 +650,8 @@ def _copy_plugin_templates(
         (bundle_root / "auth").mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(creds_src), str(bundle_root / "auth" / "credentials.example.json"))
 
+    install_id = package_id or plugin_slug
+
     # Claude.md (from template)
     skills_list = "\n".join(f"- `{s}`" for s in skill_slugs)
     (bundle_root / "Claude.md").write_text(
@@ -656,6 +659,7 @@ def _copy_plugin_templates(
             "Claude.md.tmpl",
             plugin_name=plugin_name,
             slug=plugin_slug,
+            plugin_id=install_id,
             target_url=target_url,
             skills_list=skills_list,
         ),
@@ -675,45 +679,10 @@ def _copy_plugin_templates(
         encoding="utf-8",
     )
 
-    # .claude-plugin/plugin.json — points to bootstrap.js shim via relative path
-    # so the published GitHub repo works regardless of where it's cloned.
-    claude_dir = bundle_root / ".claude-plugin"
-    claude_dir.mkdir(parents=True, exist_ok=True)
-    plugin_json_text = _render_plugin_template(
-        ".claude-plugin/plugin.json.tmpl",
-        plugin_name=_to_claude_plugin_name(plugin_name),
-        version=version,
-        description=f"Conxa plugin for {plugin_name}",
-        bootstrap_js=".claude-plugin/bootstrap.js",
-    )
-    (claude_dir / "plugin.json").write_text(plugin_json_text, encoding="utf-8")
-
-    # .claude-plugin/marketplace.json
-    marketplace = {
-        "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-        "name": f"{_to_claude_plugin_name(plugin_name)}-marketplace",
-        "version": version,
-        "description": f"Claude Code marketplace for {plugin_name}",
-        "owner": {"name": "Conxa"},
-        "plugins": [{"name": _to_claude_plugin_name(plugin_name), "description": f"Conxa plugin for {plugin_name}", "version": version, "source": "./", "category": "productivity"}],
-    }
-    (claude_dir / "marketplace.json").write_text(json.dumps(marketplace, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    # .claude-plugin/ gets only the two allowed files: bootstrap.js + cli.js
-    for js_name in ("bootstrap.js", "cli.js"):
-        src = templates / "plugin" / ".claude-plugin" / js_name
-        if not src.exists():
-            src = templates / "runtime" / js_name
-        if src.exists():
-            shutil.copy2(str(src), str(claude_dir / js_name))
-
-    # runtime/ bundle — whichever plugin is installed first on a fresh machine
-    # runs cli.js init(), which copies these files to ~/.conxa/runtime/.
-    runtime_src = templates / "runtime"
-    runtime_dst = bundle_root / "runtime"
-    if runtime_dst.exists():
-        shutil.rmtree(runtime_dst)
-    shutil.copytree(str(runtime_src), str(runtime_dst))
+    # Published artifact is data-only. The shared-runtime model installs via
+    # `npx -y conxa install <plugin_id>`; runtime/ and .claude-plugin/ are
+    # never shipped to consumers. See _validate_public_artifact in
+    # github_publisher.py which rejects either if present.
 
 
 
@@ -726,7 +695,11 @@ def _clean_stale_artifacts(bundle_root: Path) -> None:
         "plugin.config.json",  # renamed to plugin.json
         "schema.json",         # removed from build output
     ]
-    stale_dirs = ["execution", "node_modules", "auth/login", "runtime", "runtime/node_modules"]
+    stale_dirs = [
+        "execution", "node_modules", "auth/login",
+        "runtime", "runtime/node_modules",
+        ".claude-plugin",  # old marketplace shim, removed in shared-runtime migration
+    ]
     for name in stale_files:
         p = bundle_root / name
         if p.exists():
@@ -745,8 +718,15 @@ def _clean_stale_artifacts(bundle_root: Path) -> None:
 # ─────────────────────────────────────────────────
 
 
-def _render_readme(plugin_name: str, plugin_slug: str, target_url: str, skill_slugs: list[str]) -> str:
+def _render_readme(
+    plugin_name: str,
+    plugin_slug: str,
+    target_url: str,
+    skill_slugs: list[str],
+    package_id: str | None = None,
+) -> str:
     skills_md = "\n".join(f"- `{s}` — see `skills/{s}/SKILL.md`" for s in skill_slugs)
+    install_id = package_id or plugin_slug
     return f"""\
 # {plugin_name}
 
@@ -754,13 +734,12 @@ Automate [{target_url}]({target_url}) with Claude using this Conxa plugin.
 
 ## Install
 
-Add to **Claude Code** via the marketplace:
-
 ```
-/plugin marketplace add github.com/<your-org>/{plugin_slug}
+npx -y conxa install {install_id}
 ```
 
-The shared Conxa runtime installs automatically on first use.
+This installs the plugin into the shared Conxa runtime (`~/.conxa/`). One MCP
+server (`conxa`) serves every installed plugin — no per-plugin MCP setup.
 
 ## Available Skills
 
@@ -918,7 +897,7 @@ def build_plugin(
     )
     _log("Written plugin.json", skills=skill_slugs, package_id=package_id, visibility=visibility)
 
-    # ── 3. Copy plugin templates (Claude.md, index.md, .gitignore, .claude-plugin/) ─
+    # ── 3. Copy plugin templates (Claude.md, index.md, .gitignore, auth/example) ─
     _copy_plugin_templates(
         bundle_root,
         plugin_name=plugin.name,
@@ -926,12 +905,13 @@ def build_plugin(
         target_url=plugin.target_url,
         version=version,
         skill_slugs=skill_slugs,
+        package_id=package_id,
     )
     _log("Copied plugin templates")
 
     # ── 4. Write README.md and LICENSE ────────────────────────────────────
     (bundle_root / "README.md").write_text(
-        _render_readme(plugin.name, bundle_slug, plugin.target_url, skill_slugs),
+        _render_readme(plugin.name, bundle_slug, plugin.target_url, skill_slugs, package_id=package_id),
         encoding="utf-8",
     )
     _log("Written README.md")
