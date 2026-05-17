@@ -707,6 +707,14 @@ def _copy_plugin_templates(
         if src.exists():
             shutil.copy2(str(src), str(claude_dir / js_name))
 
+    # runtime/ bundle — whichever plugin is installed first on a fresh machine
+    # runs cli.js init(), which copies these files to ~/.conxa/runtime/.
+    runtime_src = templates / "runtime"
+    runtime_dst = bundle_root / "runtime"
+    if runtime_dst.exists():
+        shutil.rmtree(runtime_dst)
+    shutil.copytree(str(runtime_src), str(runtime_dst))
+
 
 
 
