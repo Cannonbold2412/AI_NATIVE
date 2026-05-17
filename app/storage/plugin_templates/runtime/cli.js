@@ -13,7 +13,6 @@
  *   search <query>             Search installed + cached + registry plugins
  *   registry login <url> <tok> Save credentials for a private registry
  *   registry logout <url>      Remove credentials for a registry
- *   discover                   (Legacy) scan ~/.claude/plugins/marketplaces/
  */
 const fs   = require("fs");
 const os   = require("os");
@@ -27,8 +26,6 @@ const REGISTRY_PATH   = path.join(CONXA_HOME, "registry.json");
 const CONXA_CLAUDE_MD = path.join(CONXA_HOME, "CLAUDE.md");
 const CONXA_INDEX_MD  = path.join(CONXA_HOME, "index.md");
 const VERSION_JSON    = path.join(RUNTIME_DIR, "version.json");
-
-const CLAUDE_PLUGINS_DIR = path.join(os.homedir(), ".claude", "plugins", "marketplaces");
 
 // ─── Registry helpers ─────────────────────────────────────────────────────────
 
@@ -314,32 +311,6 @@ function list() {
   }
 }
 
-// ─── discover ─────────────────────────────────────────────────────────────────
-
-function discover() {
-  if (!fs.existsSync(CLAUDE_PLUGINS_DIR)) return;
-  const reg = readRegistry();
-  let found = 0;
-  for (const market of fs.readdirSync(CLAUDE_PLUGINS_DIR)) {
-    const marketDir = path.join(CLAUDE_PLUGINS_DIR, market);
-    if (!fs.statSync(marketDir).isDirectory()) continue;
-    const cfgPath = path.join(marketDir, "plugin.json");
-    if (!fs.existsSync(cfgPath)) continue;
-    let cfg;
-    try { cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8")); } catch (_) { continue; }
-    const slug = cfg.slug;
-    if (!slug) continue;
-    if (reg[slug]) continue;
-    try {
-      install(marketDir);
-      found++;
-    } catch (e) {
-      process.stderr.write(`[conxa] discover: failed to install ${marketDir}: ${e.message}\n`);
-    }
-  }
-  if (found > 0) process.stderr.write(`[conxa] discover: installed ${found} new plugin(s)\n`);
-}
-
 // ─── CLI entry point ──────────────────────────────────────────────────────────
 
 if (require.main === module) {
@@ -357,9 +328,8 @@ if (require.main === module) {
           else if (rest[0] === "logout") registryLogout(rest[1]);
           else throw new Error("registry: login <url> <token> | logout <url>");
           break;
-        case "discover":  discover();              break;
         default:
-          process.stderr.write("Usage: cli.js <init|install <ref>|uninstall <slug>|list|search <q>|registry login|registry logout|discover>\n");
+          process.stderr.write("Usage: cli.js <init|install <ref>|uninstall <slug>|list|search <q>|registry login|registry logout>\n");
           process.exit(1);
       }
     } catch (e) {
@@ -369,4 +339,4 @@ if (require.main === module) {
   })();
 }
 
-module.exports = { init, install, uninstall, list, search, registryLogin, registryLogout, discover };
+module.exports = { init, install, uninstall, list, search, registryLogin, registryLogout };

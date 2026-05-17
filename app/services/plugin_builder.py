@@ -67,13 +67,6 @@ def _to_bundle_slug(text: str) -> str:
     return slug[:40]
 
 
-def _to_claude_plugin_name(text: str) -> str:
-    name = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    if not name or not name[0].isalpha():
-        name = f"p-{name}"
-    return name[:64]
-
-
 def _is_login_step(step: dict[str, Any]) -> bool:
     """Heuristic: step touches a login page or login-related element."""
     page_url = str((step.get("page") or {}).get("url") or "").lower()
