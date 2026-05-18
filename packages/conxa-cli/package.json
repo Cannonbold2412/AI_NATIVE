@@ -1,5 +1,5 @@
 {
-  "name": "conxa",
+  "name": "@conxa/cli",
   "version": "1.0.0",
   "description": "Conxa CLI — install and manage shared-runtime automation plugins",
   "license": "MIT",
