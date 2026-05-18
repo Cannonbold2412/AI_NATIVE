@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 "use strict";
+
+// Require Node >=20
+const _nodeMajor = parseInt(process.version.slice(1), 10);
+if (_nodeMajor < 20) {
+  process.stderr.write(`[conxa] Node.js ${process.version} is too old — requires >=20. Update Node and run: npx -y @kiran_nandi_123/conxa init\n`);
+  process.exit(1);
+}
+
 const { Server }              = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
@@ -12,20 +20,124 @@ const _PID_FILE = path.join(os.homedir(), ".conxa", "runtime", "server.pid");
 try { fs.writeFileSync(_PID_FILE, String(process.pid)); } catch (_) {}
 const _cleanPid = () => { try { fs.unlinkSync(_PID_FILE); } catch (_) {} };
 process.on("exit", _cleanPid);
-process.on("SIGINT",  () => process.exit(0));
-process.on("SIGTERM", () => process.exit(0));
 
 const { getPluginConfig, getPluginDir, getAuthJson, getRegistry } = require("./config");
-const { getCachedBrowser, isAuthenticated, getAuthContext, gracefulShutdown } = require("./browser");
+const { getCachedBrowser, holdBrowser, releaseBrowserHold, isAuthenticated, getAuthContext, gracefulShutdown } = require("./browser");
 const {
   appendRecoveryEvent, interpolate, enrichStepsWithRecovery,
   waitForUrlState, runPlan, runSkill, checkRetryBudget, clearRetryBudget,
 } = require("./run");
 
+// ─── Version helpers ──────────────────────────────────────────────────────────
+
+const CONXA_HOME   = path.join(os.homedir(), ".conxa");
+const VERSION_JSON = path.join(CONXA_HOME, "runtime", "version.json");
+const UPDATE_CHECK = path.join(CONXA_HOME, "last_update_check.json");
+const NPM_PACKAGE  = "@kiran_nandi_123/conxa";
+const ONE_DAY_MS   = 24 * 60 * 60 * 1000;
+
+function _semverGte(installed, required) {
+  // Strip leading 'v', split on '.', ignore pre-release suffix (pre-release < release)
+  const parse = v => String(v || "0").replace(/^v/i, "").split(".").map((p, i) =>
+    i < 3 ? (parseInt(p, 10) || 0) : 0
+  );
+  const hasPre = v => /[-+]/.test(String(v || "").replace(/^v/i, ""));
+  const a = parse(installed), b = parse(required);
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i];
+  }
+  // Equal version numbers: pre-release is less than release
+  return !hasPre(installed) || hasPre(required);
+}
+
+function _installedVersion() {
+  try { return JSON.parse(fs.readFileSync(VERSION_JSON, "utf8")).version; } catch (_) { return null; }
+}
+
+function _shouldCheckToday() {
+  try {
+    const { last_check } = JSON.parse(fs.readFileSync(UPDATE_CHECK, "utf8"));
+    return (Date.now() - last_check) > ONE_DAY_MS;
+  } catch (_) { return true; }
+}
+
+let _needsRestart = false;
+
+function _startupUpdateCheck() {
+  if (!_shouldCheckToday()) return;
+  const https = require("https");
+  const req = https.get(`https://registry.npmjs.org/${NPM_PACKAGE}/latest`, { timeout: 5000 }, (res) => {
+    let data = "";
+    res.on("data", chunk => { data += chunk; });
+    res.on("end", () => {
+      try {
+        fs.writeFileSync(UPDATE_CHECK, JSON.stringify({ last_check: Date.now() }));
+        const latest = JSON.parse(data).version;
+        const installed = _installedVersion();
+        if (!latest || !installed || installed === latest) return;
+        console.error(`[conxa] Auto-updating runtime v${installed} → v${latest}...`);
+        const { spawn } = require("child_process");
+        const proc = spawn(
+          process.execPath, ["-e", `require("child_process").execFileSync(process.execPath,[require.resolve("${NPM_PACKAGE}/lib/cli.js"),"init"],{stdio:"inherit"})`],
+          { detached: true, stdio: "ignore" }
+        );
+        proc.unref();
+        _needsRestart = true;
+        console.error(`[conxa] Update running in background. Restart Claude Code Desktop to apply v${latest}.`);
+      } catch (_) {}
+    });
+  });
+  req.on("error", () => {});
+  req.on("timeout", () => req.destroy());
+}
+
+_startupUpdateCheck();
+
+async function _pluginUpdateCheck() {
+  if (!_shouldCheckToday()) return;
+  const registry = getRegistry();
+  const https = require("https");
+  for (const [slug, entry] of Object.entries(registry)) {
+    const ref = entry.source_ref;
+    if (!ref || !/^[^/]+\/[^/]+$/.test(ref.split("@")[0])) continue;
+    if (ref.includes("@")) continue; // version-pinned — don't auto-update
+    const ownerRepo = ref.split("@")[0];
+    const [owner, repo] = ownerRepo.split("/");
+    await new Promise((resolve) => {
+      const url = `https://raw.githubusercontent.com/${owner}/${repo}/main/plugin.json`;
+      const req = https.get(url, { timeout: 5000 }, (res) => {
+        let data = "";
+        res.on("data", chunk => { data += chunk; });
+        res.on("end", () => {
+          try {
+            const latest = JSON.parse(data).version;
+            if (!latest || latest === entry.version) return resolve();
+            console.error(`[conxa] Plugin update available: ${slug} v${entry.version} → v${latest}. Run: conxa install ${ownerRepo}`);
+            resolve();
+          } catch (_) { resolve(); }
+        });
+      });
+      req.on("error", () => resolve());
+      req.on("timeout", () => { req.destroy(); resolve(); });
+    });
+  }
+}
+
+_pluginUpdateCheck().catch(() => {});
+
 // ─── Registry helpers ─────────────────────────────────────────────────────────
 
-// Returns { slug → { pluginSlug, skill, skillDir } } for fast lookup
+let _skillIndexCache = null;
+let _skillIndexMtime = 0;
+
+// Returns { slug → { pluginSlug, skill, skillDir } } — cached until registry.json changes
 function buildSkillIndex() {
+  const { REGISTRY_PATH } = require("./config");
+  try {
+    const mtime = fs.existsSync(REGISTRY_PATH) ? fs.statSync(REGISTRY_PATH).mtimeMs : 0;
+    if (_skillIndexCache && mtime === _skillIndexMtime) return _skillIndexCache;
+    _skillIndexMtime = mtime;
+  } catch (_) {}
   const registry = getRegistry();
   const index = {};
   for (const [pluginSlug, entry] of Object.entries(registry)) {
@@ -35,7 +147,15 @@ function buildSkillIndex() {
       index[key] = { pluginSlug, skill, skillDir: path.join(pluginDir, skill.path || `skills/${skill.slug}`) };
     }
   }
+  _skillIndexCache = index;
   return index;
+}
+
+function invalidateSkillIndex() { _skillIndexCache = null; }
+
+function _restartNotice() {
+  if (!_needsRestart) return null;
+  return "⚠️ Conxa runtime update is installing in the background. Restart Claude Code Desktop to apply it, then retry.";
 }
 
 function resolveSkill(pluginSlug, skillSlug, index) {
@@ -49,12 +169,14 @@ function resolveSkill(pluginSlug, skillSlug, index) {
         return v;
     }
   }
-  // Slug-only: match across all plugins
-  for (const v of Object.values(index)) {
-    if (v.skill.slug === skillSlug || v.skill.slug.replace(/-/g, "_") === skillSlug.replace(/-/g, "_"))
-      return v;
-  }
-  return null;
+  // Slug-only: match across all plugins — warn if ambiguous
+  const norm = s => s.replace(/-/g, "_");
+  const matches = Object.values(index).filter(v =>
+    v.skill.slug === skillSlug || norm(v.skill.slug) === norm(skillSlug)
+  );
+  if (matches.length > 1)
+    console.error(`[conxa] Warning: skill "${skillSlug}" matches multiple plugins (${matches.map(v => v.pluginSlug).join(", ")}) — using first match. Specify plugin: to disambiguate.`);
+  return matches[0] || null;
 }
 
 // ─── MCP server ───────────────────────────────────────────────────────────────
@@ -169,9 +291,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
 });
 
+
+function _checkPluginRuntimeVersion(pluginSlug) {
+  try {
+    const pluginDir = getPluginDir(pluginSlug);
+    const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, "plugin.json"), "utf8"));
+    const minVer = manifest.runtime_min_version;
+    if (!minVer) return null;
+    const installed = _installedVersion();
+    if (!installed || _semverGte(installed, minVer)) return null;
+    return `Plugin "${pluginSlug}" requires conxa runtime >=${minVer} (installed: ${installed}). Run: npx -y ${NPM_PACKAGE} install ${pluginSlug}`;
+  } catch (_) { return null; }
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const skillIndex = buildSkillIndex();
+
+  // Surface restart notice on first call after a background update completes
+  const restartMsg = _restartNotice();
+  if (restartMsg) return { content: [{ type: "text", text: restartMsg }] };
 
   // ── list_skills ───────────────────────────────────────────────────────────
   if (name === "list_skills") {
@@ -243,7 +382,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       const installRef = version && !ref.includes("@") ? `${ref}@${version}` : ref;
       const entry = await cli.install(installRef);
-      return { content: [{ type: "text", text: `Installed ${entry.slug} v${entry.version}. Skills: ${(entry.skills || []).map(s => s.slug).join(", ")}` }] };
+      invalidateSkillIndex();
+      return { content: [{ type: "text", text: `Installed ${entry.slug} v${entry.version}. Skills: ${(entry.skills || []).map(s => s.slug).join(", ")}. Call list_skills to see available skills.` }] };
     } catch (e) {
       return { content: [{ type: "text", text: `install_plugin failed: ${e.message}` }] };
     }
@@ -256,6 +396,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const cli = require("./cli");
     try {
       cli.uninstall(slug);
+      invalidateSkillIndex();
       return { content: [{ type: "text", text: `Uninstalled ${slug}` }] };
     } catch (e) {
       return { content: [{ type: "text", text: `uninstall_plugin failed: ${e.message}` }] };
@@ -312,6 +453,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const found     = resolveSkill(pluginArg, slug, skillIndex);
       if (!found) return { content: [{ type: "text", text: `Skill not found: ${slug}. Call list_skills.` }] };
       const { skillDir, pluginSlug } = found;
+      const versionErr = _checkPluginRuntimeVersion(pluginSlug);
+      if (versionErr) return { content: [{ type: "text", text: versionErr }] };
       const rawExec = fs.existsSync(path.join(skillDir, "execution.json"))
         ? JSON.parse(fs.readFileSync(path.join(skillDir, "execution.json"), "utf8")) : null;
       const rawRec  = fs.existsSync(path.join(skillDir, "recovery.json"))
@@ -329,6 +472,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Determine which plugin to use for auth (first skill's plugin)
     const primaryPlugin = resolved[0].pluginSlug;
+    const uniquePlugins = [...new Set(resolved.map(r => r.pluginSlug))];
+    if (uniquePlugins.length > 1)
+      console.error(`[execute_plan] Warning: plan spans ${uniquePlugins.length} plugins (${uniquePlugins.join(", ")}) — only ${primaryPlugin} auth context will be used`);
 
     // ── Layer 0: Retry budget gate ────────────────────────────────────────
     if (resumeFrom > 0) {
@@ -344,6 +490,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     } catch (authErr) {
       return { content: [{ type: "text", text: String(authErr) }] };
     }
+    holdBrowser(primaryPlugin);
 
     const runtimeLog = { consoleErrors: [], pageErrors: [], failedRequests: [] };
     const page = await _context.newPage();
@@ -399,8 +546,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ── Success ───────────────────────────────────────────────────────────
       const authJson = getAuthJson(primaryPlugin);
       const state = await _context.storageState();
-      fs.mkdirSync(path.dirname(authJson), { recursive: true });
-      fs.writeFileSync(authJson, JSON.stringify(state, null, 2));
+      fs.mkdirSync(path.dirname(authJson), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(authJson, JSON.stringify(state, null, 2), { encoding: "utf8", mode: 0o600 });
       const shot = await page.screenshot({ type: "png" }).catch(() => null);
       const url  = page.url();
       await page.close().catch(() => {});
@@ -411,6 +558,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       console.error(`[execute_plan] Done. URL: ${url}`);
       const content = [{ type: "text", text: `Done. URL: ${url}` }];
       if (shot) content.push({ type: "image", data: shot.toString("base64"), mimeType: "image/png" });
+      releaseBrowserHold(primaryPlugin);
       return { content };
 
     } catch (err) {
@@ -500,6 +648,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (runtimeLog.failedRequests.length > 0) l5.push(`Failed requests:\n${JSON.stringify(runtimeLog.failedRequests,null, 2)}`);
       content.push({ type: "text", text: l5.join("\n") });
 
+      releaseBrowserHold(primaryPlugin);
       return { content };
     }
   }

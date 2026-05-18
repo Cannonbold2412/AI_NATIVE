@@ -2,11 +2,26 @@
 
 ## Install
 
+Paste the right prompt into Claude Code Desktop — Claude runs it automatically. No terminal needed.
+
+**Windows** — paste this into Claude:
 ```
-npx -y conxa install {{plugin_id}}
+Run this command in PowerShell: & ([scriptblock]::Create((irm 'https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.ps1'))) '{{plugin_id}}'
 ```
 
-This installs the plugin into the shared Conxa runtime (`~/.conxa/`). The runtime exposes a single `conxa` MCP server; all installed plugins are accessible through it.
+**Mac** — paste this into Claude:
+```
+Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {{plugin_id}}
+```
+
+**Linux** — paste this into Claude:
+```
+Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {{plugin_id}}
+```
+
+After Claude finishes, restart Claude Code Desktop once. That's it.
+
+**Already have another conxa plugin installed?** Just tell Claude: *"Install the {{plugin_name}} plugin: {{plugin_id}}"* — no command, no restart needed.
 
 ## ⚠️ MANDATORY RULES
 

@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import {
-  BookOpen,
   BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
@@ -28,7 +27,6 @@ import {
   Home,
   Layers,
   Menu,
-  Package,
   Puzzle,
   Rocket,
   Search,
@@ -42,16 +40,10 @@ const navGroups = [
   {
     label: 'Operate',
     items: [
-      { to: '/', label: 'Dashboard', icon: Home, exact: true },
+      { to: '/dashboard', label: 'Dashboard', icon: Home, exact: false },
       { to: '/plugins', label: 'Plugins', icon: Puzzle, exact: false },
-      { to: '/plugin-health', label: 'Plugin Health', icon: BookOpen, exact: false },
-      { to: '/packages', label: 'Packages', icon: FolderKanban, exact: false },
-    ],
-  },
-  {
-    label: 'Build',
-    items: [
       { to: '/build', label: 'Build Plugin', icon: Hammer, exact: false },
+      { to: '/packages', label: 'Packages', icon: FolderKanban, exact: false },
     ],
   },
   {

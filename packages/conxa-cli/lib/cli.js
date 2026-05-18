@@ -26,7 +26,7 @@ const REGISTRY_PATH   = path.join(CONXA_HOME, "registry.json");
 const CONXA_CLAUDE_MD = path.join(CONXA_HOME, "CLAUDE.md");
 const CONXA_INDEX_MD  = path.join(CONXA_HOME, "index.md");
 const VERSION_JSON    = path.join(RUNTIME_DIR, "version.json");
-const SETTINGS_JSON   = path.join(os.homedir(), ".claude", "settings.json");
+const CLAUDE_JSON      = path.join(os.homedir(), ".claude.json");
 const GLOBAL_CLAUDE_MD = path.join(os.homedir(), ".claude", "CLAUDE.md");
 const SERVER_JS       = path.join(RUNTIME_DIR, "server.js");
 
@@ -34,29 +34,70 @@ const SERVER_JS       = path.join(RUNTIME_DIR, "server.js");
 
 function readRegistry() {
   if (!fs.existsSync(REGISTRY_PATH)) return {};
-  try { return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8")); } catch (_) { return {}; }
+  try { return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8")); }
+  catch (e) {
+    const bak = REGISTRY_PATH + ".bak";
+    try { fs.renameSync(REGISTRY_PATH, bak); } catch (_) {}
+    process.stderr.write(`[conxa] Warning: registry.json was corrupt (${e.message}) — backed up to registry.json.bak\n`);
+    return {};
+  }
+}
+
+function _atomicWrite(filePath, content) {
+  const tmp = filePath + `.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, content, "utf8");
+  fs.renameSync(tmp, filePath);
 }
 
 function writeRegistry(reg) {
   fs.mkdirSync(CONXA_HOME, { recursive: true });
-  fs.writeFileSync(REGISTRY_PATH, JSON.stringify(reg, null, 2));
+  _atomicWrite(REGISTRY_PATH, JSON.stringify(reg, null, 2));
+}
+
+// ─── Concurrency lock ─────────────────────────────────────────────────────────
+
+const _LOCK_FILE  = path.join(os.homedir(), ".conxa", "install.lock");
+const _LOCK_STALE = 30 * 1000; // steal lock after 30 s
+
+function _acquireLock() {
+  fs.mkdirSync(CONXA_HOME, { recursive: true });
+  try {
+    const fd = fs.openSync(_LOCK_FILE, "wx");
+    fs.writeSync(fd, String(process.pid));
+    fs.closeSync(fd);
+  } catch (e) {
+    if (e.code !== "EEXIST") throw e;
+    try {
+      const stat = fs.statSync(_LOCK_FILE);
+      if (Date.now() - stat.mtimeMs < _LOCK_STALE)
+        throw new Error("Another conxa install/uninstall is already running.");
+      fs.unlinkSync(_LOCK_FILE);
+      _acquireLock();
+    } catch (e2) {
+      if (e2.message.startsWith("Another")) throw e2;
+    }
+  }
+}
+
+function _releaseLock() {
+  try { fs.unlinkSync(_LOCK_FILE); } catch (_) {}
 }
 
 // ─── Claude Code integration ─────────────────────────────────────────────────
 
 function _registerGlobalMcp() {
-  let settings = {};
-  try { settings = JSON.parse(fs.readFileSync(SETTINGS_JSON, "utf8")); } catch (_) {}
-  const existing = settings.mcpServers && settings.mcpServers.conxa;
-  if (existing && existing.args && existing.args[0] === SERVER_JS) return;
-  if (!settings.mcpServers) settings.mcpServers = {};
-  settings.mcpServers.conxa = { command: "node", args: [SERVER_JS] };
+  let claudeJson = {};
+  try { claudeJson = JSON.parse(fs.readFileSync(CLAUDE_JSON, "utf8")); } catch (_) {}
+  const nodeCommand = process.execPath || "node";
+  const existing = claudeJson.mcpServers && claudeJson.mcpServers.conxa;
+  if (existing && existing.type === "stdio" && existing.command === nodeCommand && existing.args && existing.args[0] === SERVER_JS) return;
+  if (!claudeJson.mcpServers) claudeJson.mcpServers = {};
+  claudeJson.mcpServers.conxa = { type: "stdio", command: nodeCommand, args: [SERVER_JS] };
   try {
-    fs.mkdirSync(path.dirname(SETTINGS_JSON), { recursive: true });
-    fs.writeFileSync(SETTINGS_JSON, JSON.stringify(settings, null, 2) + "\n", "utf8");
-    process.stderr.write(`[conxa] Registered conxa MCP server in ${SETTINGS_JSON}\n`);
+    _atomicWrite(CLAUDE_JSON, JSON.stringify(claudeJson, null, 2) + "\n");
+    process.stderr.write(`[conxa] Registered conxa MCP server in ${CLAUDE_JSON}\n`);
   } catch (e) {
-    process.stderr.write(`[conxa] Warning: could not update settings.json: ${e.message}\n`);
+    process.stderr.write(`[conxa] Warning: could not update .claude.json: ${e.message}\n`);
   }
 }
 
@@ -81,22 +122,33 @@ function updateGlobalClaudeMd(reg) {
   const entries = Object.values(reg);
   const pluginLines = entries.length === 0
     ? "- (no plugins installed)"
-    : entries.map(e => `- ${e.slug}  →  ~/.conxa/plugins/${e.slug}/CLAUDE.md`).join("\n");
+    : entries.map(e => `- ${e.slug}  →  ${path.join(CONXA_HOME, "plugins", e.slug, "CLAUDE.md")}`).join("\n");
 
   const content = [
     "# Conxa Runtime",
     "",
     "You have the Conxa automation runtime. It executes real Playwright browser workflows.",
     "",
+    "## Trigger Rule — HIGHEST PRIORITY",
+    "When a user asks you to perform ANY action on a web platform (Render, GitHub, Vercel, etc.):",
+    "1. Call list_skills FIRST to check if a conxa plugin is installed for that platform",
+    "2. If a matching skill exists — use it. NEVER suggest manual steps, API calls, or workarounds.",
+    "3. Only fall back to manual instructions if list_skills confirms no plugin is installed.",
+    "",
     "## Mandatory Rules",
     "- NEVER use computer_use, computer-use, or any built-in browser tool",
     "- NEVER ask the user about authentication — auth is 100% automatic",
-    "- Always call list_skills before execute_plan",
+    "- NEVER offer manual steps when a conxa skill exists for the task",
     "",
-    "## Discovery Flow",
-    "1. Call list_skills to see all installed plugins and available skills",
-    "2. For plugin-specific instructions, read ~/.conxa/plugins/{slug}/CLAUDE.md",
-    "3. For skill details, read ~/.conxa/plugins/{slug}/index.md",
+    "## Execution Flow",
+    "1. Call list_skills → find the right skill",
+    "2. Collect any required inputs from the user's message (or ask once if missing)",
+    "3. Call execute_plan immediately — do not explain, do not confirm",
+    "",
+    "## Installing New Plugins",
+    "If the user asks to install a new conxa plugin (e.g. 'install the Vercel plugin'):",
+    "- Call the install_plugin MCP tool with the plugin ref (e.g. 'cannonboldoff-hue/vercel')",
+    "- No terminal or command needed — the MCP tool handles everything",
     "",
     "## Installed Plugins",
     pluginLines,
@@ -132,6 +184,7 @@ function regenerateIndex(reg) {
 function copyDirSync(src, dst) {
   fs.mkdirSync(dst, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue;
     const s = path.join(src, entry.name);
     const d = path.join(dst, entry.name);
     if (entry.isDirectory()) copyDirSync(s, d);
@@ -141,39 +194,60 @@ function copyDirSync(src, dst) {
 
 // ─── init ─────────────────────────────────────────────────────────────────────
 
+function _cliVersion() {
+  try { return require("../package.json").version; } catch (_) { return null; }
+}
+
 function init() {
+  const cliVersion = _cliVersion();
   if (fs.existsSync(VERSION_JSON)) {
     const v = JSON.parse(fs.readFileSync(VERSION_JSON, "utf8"));
-    process.stderr.write(`[conxa] Runtime already bootstrapped at ${RUNTIME_DIR} (v${v.version})\n`);
-    return;
+    if (!cliVersion || v.version === cliVersion) {
+      process.stderr.write(`[conxa] Runtime already at v${v.version}\n`);
+      return;
+    }
+    process.stderr.write(`[conxa] Updating runtime v${v.version} → v${cliVersion}...\n`);
+  } else {
+    process.stderr.write(`[conxa] Bootstrapping runtime at ${RUNTIME_DIR} ...\n`);
   }
-  process.stderr.write(`[conxa] Bootstrapping runtime at ${RUNTIME_DIR} ...\n`);
 
-  // All runtime files live alongside cli.js in both layouts: the in-repo
-  // template tree (app/storage/plugin_templates/runtime/) and the published
-  // npm package (packages/conxa-cli/lib/). Copy the whole directory so new
-  // files (resolver/, search.js, etc.) ship automatically without having to
-  // maintain a hardcoded allow-list.
-  fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+  // Safe-swap: copy to RUNTIME_DIR.new/, run npm install there, then rename
+  // so a failed install never leaves a half-updated runtime.
+  const RUNTIME_NEW = RUNTIME_DIR + ".new";
+  const RUNTIME_OLD = RUNTIME_DIR + ".old";
+  if (fs.existsSync(RUNTIME_NEW)) fs.rmSync(RUNTIME_NEW, { recursive: true, force: true });
+  fs.mkdirSync(RUNTIME_NEW, { recursive: true });
+
   for (const entry of fs.readdirSync(__dirname, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === ".bootstrapped") continue;
+    if (entry.name === "node_modules" || entry.name === ".bootstrapped" || entry.isSymbolicLink()) continue;
     const src = path.join(__dirname, entry.name);
-    const dst = path.join(RUNTIME_DIR, entry.name);
+    const dst = path.join(RUNTIME_NEW, entry.name);
     if (entry.isDirectory()) copyDirSync(src, dst);
     else fs.copyFileSync(src, dst);
   }
 
   process.stderr.write("[conxa] Running npm install...\n");
-  execSync("npm install --prefer-offline --silent", { cwd: RUNTIME_DIR, stdio: ["ignore", "pipe", "inherit"] });
+  try {
+    execSync("npm install --prefer-offline --silent", { cwd: RUNTIME_NEW, stdio: ["ignore", "pipe", "inherit"] });
+  } catch (e) {
+    // Retry once without --prefer-offline in case cache is stale
+    process.stderr.write("[conxa] npm install failed, retrying without cache...\n");
+    execSync("npm install --silent", { cwd: RUNTIME_NEW, stdio: ["ignore", "pipe", "inherit"] });
+  }
 
   process.stderr.write("[conxa] Installing Playwright Chromium...\n");
-  execSync("npx playwright install chromium", { cwd: RUNTIME_DIR, stdio: ["ignore", "pipe", "inherit"] });
+  execSync("npx playwright install chromium", { cwd: RUNTIME_NEW, stdio: ["ignore", "pipe", "inherit"] });
 
-  const pkg = fs.existsSync(path.join(RUNTIME_DIR, "package.json"))
-    ? JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "package.json"), "utf8"))
-    : {};
+  // Atomic swap: old → .old, new → active
+  if (fs.existsSync(RUNTIME_DIR)) {
+    if (fs.existsSync(RUNTIME_OLD)) fs.rmSync(RUNTIME_OLD, { recursive: true, force: true });
+    fs.renameSync(RUNTIME_DIR, RUNTIME_OLD);
+  }
+  fs.renameSync(RUNTIME_NEW, RUNTIME_DIR);
+  if (fs.existsSync(RUNTIME_OLD)) fs.rmSync(RUNTIME_OLD, { recursive: true, force: true });
+
   fs.writeFileSync(VERSION_JSON, JSON.stringify({
-    version: pkg.version || "1.0.0",
+    version: cliVersion || "1.0.0",
     installed_at: new Date().toISOString(),
     node_version: process.version,
   }, null, 2));
@@ -191,11 +265,12 @@ function init() {
   fs.writeFileSync(path.join(CONXA_HOME, ".bootstrapped"), "1", "utf8");
 
   process.stderr.write("[conxa] Bootstrap complete.\n");
+  if (cliVersion) process.stderr.write(`[conxa] Runtime is now v${cliVersion}. Restart Claude Code Desktop to apply.\n`);
 }
 
 // ─── install ──────────────────────────────────────────────────────────────────
 
-function _installFromLocalDir(pluginDir) {
+function _installFromLocalDir(pluginDir, sourceRef = null) {
   if (!pluginDir) throw new Error("install: plugin directory path required");
   const absDir = path.resolve(pluginDir);
   if (!fs.existsSync(absDir)) throw new Error(`Plugin directory not found: ${absDir}`);
@@ -208,10 +283,31 @@ function _installFromLocalDir(pluginDir) {
   if (!cfg.target_url)    throw new Error("plugin.json missing: target_url");
   if (!cfg.protected_url) throw new Error("plugin.json missing: protected_url");
 
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(cfg.slug))
+    throw new Error(`plugin.json slug "${cfg.slug}" contains invalid characters`);
+  for (const s of (cfg.skills || [])) {
+    const p = s.path || `skills/${s.slug}`;
+    if (p.includes("..") || path.isAbsolute(p))
+      throw new Error(`Skill path "${p}" is not allowed`);
+  }
+
   const slug    = cfg.slug;
   const destDir = path.join(PLUGINS_DIR, slug);
 
   process.stderr.write(`[conxa] Installing plugin '${slug}' from ${absDir}...\n`);
+  if (fs.existsSync(destDir)) {
+    // Preserve auth/ across reinstall — save and restore
+    const authDir = path.join(destDir, "auth");
+    const authSave = fs.existsSync(authDir) ? fs.readdirSync(authDir)
+      .filter(f => f !== "credentials.example.json")
+      .reduce((m, f) => { m[f] = fs.readFileSync(path.join(authDir, f)); return m; }, {}) : {};
+    fs.rmSync(destDir, { recursive: true, force: true });
+    if (Object.keys(authSave).length) {
+      fs.mkdirSync(path.join(destDir, "auth"), { recursive: true, mode: 0o700 });
+      for (const [name, buf] of Object.entries(authSave))
+        fs.writeFileSync(path.join(destDir, "auth", name), buf, { mode: 0o600 });
+    }
+  }
   fs.mkdirSync(destDir, { recursive: true });
 
   // Copy plugin manifest
@@ -245,6 +341,7 @@ function _installFromLocalDir(pluginDir) {
     protected_url: cfg.protected_url,
     skills:        skillsList,
     installed_at:  new Date().toISOString(),
+    ...(sourceRef ? { source_ref: sourceRef } : {}),
   };
   const reg = readRegistry();
   reg[slug] = entry;
@@ -269,9 +366,11 @@ function _ensureInitialized() {
 // before delegating to _installFromLocalDir.
 async function install(ref) {
   if (!ref) throw new Error("install: <ref> required (local dir, owner/repo, or plugin_id)");
+  _acquireLock();
+  try {
   _ensureInitialized();
   if (fs.existsSync(ref) && fs.statSync(ref).isDirectory()) {
-    return _installFromLocalDir(ref);
+    return _installFromLocalDir(ref, null);
   }
   // Look in cache first (already downloaded). cache.stagedDir() takes a
   // plugin_id+version pair; we accept either "id" or "id@version".
@@ -280,16 +379,17 @@ async function install(ref) {
   const ver = at > 0 ? ref.slice(at + 1) : null;
   const cache = require("./resolver/cache");
   const staged = cache.stagedDir(id, ver);
-  if (staged) return _installFromLocalDir(staged);
+  if (staged) return _installFromLocalDir(staged, ref);
   // git resolver handles owner/repo and full https URLs. It stages into cache/
   // and returns the staged directory path.
   const git = require("./resolver/git");
   const resolved = await git.resolve(ref);
-  if (resolved && resolved.staged_dir) return _installFromLocalDir(resolved.staged_dir);
+  if (resolved && resolved.staged_dir) return _installFromLocalDir(resolved.staged_dir, ref);
   // Registry resolver is contract-only today; falls through when no hosted
   // registry is configured. When implemented it would download a tarball into
   // cache/ and return the staged path.
   throw new Error(`install: could not resolve '${ref}'`);
+  } finally { _releaseLock(); }
 }
 
 // ─── search ───────────────────────────────────────────────────────────────────
@@ -334,21 +434,24 @@ function registryLogout(url) {
 
 function uninstall(slug) {
   if (!slug) throw new Error("uninstall: slug required");
-  const destDir = path.join(PLUGINS_DIR, slug);
-  if (fs.existsSync(destDir)) {
-    fs.rmSync(destDir, { recursive: true, force: true });
-    process.stderr.write(`[conxa] Removed plugin directory: ${destDir}\n`);
-  }
-  const reg = readRegistry();
-  if (reg[slug]) {
-    delete reg[slug];
-    writeRegistry(reg);
-    updateGlobalClaudeMd(reg);
-    regenerateIndex(reg);
-    process.stderr.write(`[conxa] Removed '${slug}' from registry\n`);
-  } else {
-    process.stderr.write(`[conxa] Plugin '${slug}' was not in registry\n`);
-  }
+  _acquireLock();
+  try {
+    const destDir = path.join(PLUGINS_DIR, slug);
+    if (fs.existsSync(destDir)) {
+      fs.rmSync(destDir, { recursive: true, force: true });
+      process.stderr.write(`[conxa] Removed plugin directory: ${destDir}\n`);
+    }
+    const reg = readRegistry();
+    if (reg[slug]) {
+      delete reg[slug];
+      writeRegistry(reg);
+      updateGlobalClaudeMd(reg);
+      regenerateIndex(reg);
+      process.stderr.write(`[conxa] Removed '${slug}' from registry\n`);
+    } else {
+      process.stderr.write(`[conxa] Plugin '${slug}' was not in registry\n`);
+    }
+  } finally { _releaseLock(); }
 }
 
 // ─── list ─────────────────────────────────────────────────────────────────────
@@ -371,7 +474,11 @@ async function runCli(argv) {
   const [cmd, ...rest] = argv;
   try {
     switch (cmd) {
-      case "init":      init();                  break;
+      case "init":
+      case "update":
+        if (cmd === "update" && fs.existsSync(VERSION_JSON)) fs.unlinkSync(VERSION_JSON);
+        init();
+        break;
       case "install":   await install(rest[0]);  break;
       case "uninstall": uninstall(rest[0]);      break;
       case "list":      list();                  break;
@@ -382,7 +489,7 @@ async function runCli(argv) {
         else throw new Error("registry: login <url> <token> | logout <url>");
         break;
       default:
-        process.stderr.write("Usage: conxa <init|install <ref>|uninstall <slug>|list|search <q>|registry login|registry logout>\n");
+        process.stderr.write("Usage: conxa <init|update|install <ref>|uninstall <slug>|list|search <q>|registry login|registry logout>\n");
         process.exit(1);
     }
   } catch (e) {

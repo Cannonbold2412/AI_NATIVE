@@ -158,7 +158,7 @@ export function PluginHealthPage() {
 
   return (
     <AppShell
-      title="Plugin health"
+      title="Dashboard"
       description="Readiness checks for auth, workflow compile state, and latest build output."
       mainClassName="overflow-y-auto"
       actions={
