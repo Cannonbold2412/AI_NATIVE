@@ -1,4 +1,4 @@
-"""FastAPI entrypoint — mounts recorder + future compiler/update-step routes."""
+"""FastAPI entrypoint."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.job_routes import router as job_router
 from app.api.plugin_routes import router as plugin_router
 from app.api.product_routes import router as product_router
-from app.api.publish_routes import router as publish_router
 from app.api.razorpay_routes import router as razorpay_router
 from app.api.routes import router
 from app.api.run_routes import router as run_router
@@ -30,13 +29,6 @@ app.add_middleware(
 )
 app.add_middleware(ProductionRequestMiddleware)
 
-# Legacy local endpoints remain available during the migration.
-app.include_router(router)
-app.include_router(skill_pack_router)
-app.include_router(workflow_router)
-
-# Production API surface. Existing resources are mounted under /api/v1 and
-# additional plain aliases expose /recordings, /packages, /jobs, and /audit-events.
 app.include_router(router, prefix="/api/v1")
 app.include_router(skill_pack_router, prefix="/api/v1")
 app.include_router(workflow_router, prefix="/api/v1")
@@ -45,7 +37,6 @@ app.include_router(product_router, prefix="/api/v1")
 app.include_router(v1_alias_router, prefix="/api/v1")
 app.include_router(plugin_router, prefix="/api/v1")
 app.include_router(run_router, prefix="/api/v1")
-app.include_router(publish_router, prefix="/api/v1")
 app.include_router(razorpay_router, prefix="/api/v1")
 app.include_router(skillpack_update_router, prefix="/api/v1")
 app.include_router(skillpack_auth_router, prefix="/api/v1")

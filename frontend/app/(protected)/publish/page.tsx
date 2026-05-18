@@ -1,5 +1,5 @@
-import { PublishPage } from '@/PublishPage'
+import { redirect } from 'next/navigation'
 
 export default function PublishRoute() {
-  return <PublishPage />
+  redirect('/build')
 }

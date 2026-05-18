@@ -61,11 +61,6 @@ export type Plugin = {
   installer: PluginInstaller | null
   created_at: number
   updated_at: number
-  repository_url: string | null
-  repository_private: boolean
-  last_published_version: string | null
-  last_published_at: number | null
-  last_commit_sha: string | null
 }
 
 export type PluginsResponse = { plugins: Plugin[] }
@@ -291,68 +286,6 @@ export function fetchRuns(pluginId?: string, since?: number): Promise<RunsRespon
 
 export function fetchRun(runId: string): Promise<{ run: Run }> {
   return apiFetch(`/runs/${encodeURIComponent(runId)}`).then((r) => json<{ run: Run }>(r))
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GitHub publish
-// ─────────────────────────────────────────────────────────────────────────────
-
-export type GithubStatus = {
-  connected: boolean
-  login: string | null
-  scopes: string[] | null
-}
-
-export type PublishPreview = {
-  plugin_id: string
-  current_version: string
-  next_versions: { patch: string; minor: string; major: string }
-  repo_status: 'linked' | 'unlinked'
-  repo_url: string | null
-  last_published_version: string | null
-  last_commit_sha: string | null
-  bundle_files: string[]
-  has_build: boolean
-}
-
-export type PublishResult = {
-  repo_url: string
-  version: string
-  commit_sha: string
-  install_snippet: string
-}
-
-export type PublishPayload = {
-  version_bump?: 'patch' | 'minor' | 'major' | null
-  manual_version?: string | null
-  changelog?: string
-  create_repo?: boolean
-  repo_name?: string | null
-  private?: boolean
-}
-
-export function getGithubStatus(): Promise<GithubStatus> {
-  return apiFetch('/integrations/github/status').then((r) => json<GithubStatus>(r))
-}
-
-export function disconnectGithub(): Promise<{ disconnected: boolean }> {
-  return apiFetch('/integrations/github/disconnect', { method: 'POST' }).then((r) =>
-    json<{ disconnected: boolean }>(r),
-  )
-}
-
-export function previewPublish(pluginId: string): Promise<PublishPreview> {
-  return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/publish/preview`).then((r) =>
-    json<PublishPreview>(r),
-  )
-}
-
-export function publishPlugin(pluginId: string, payload: PublishPayload): Promise<PublishResult> {
-  return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/publish`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then((r) => json<PublishResult>(r))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

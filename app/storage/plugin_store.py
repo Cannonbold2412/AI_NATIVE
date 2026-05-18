@@ -180,20 +180,3 @@ def set_installer(
     return save_plugin(plugin)
 
 
-def update_publish_metadata(
-    plugin_id: str,
-    *,
-    repository_url: str,
-    repository_private: bool,
-    last_published_version: str,
-    last_commit_sha: str,
-) -> Plugin | None:
-    plugin = get_plugin(plugin_id)
-    if plugin is None:
-        return None
-    plugin.repository_url = repository_url
-    plugin.repository_private = repository_private
-    plugin.last_published_version = last_published_version
-    plugin.last_published_at = time.time()
-    plugin.last_commit_sha = last_commit_sha
-    return save_plugin(plugin)

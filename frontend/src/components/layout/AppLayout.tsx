@@ -28,7 +28,6 @@ import {
   Layers,
   Menu,
   Puzzle,
-  Rocket,
   Search,
   Settings,
   Users,
@@ -45,10 +44,6 @@ const navGroups = [
       { to: '/build', label: 'Build Plugin', icon: Hammer, exact: false },
       { to: '/packages', label: 'Packages', icon: FolderKanban, exact: false },
     ],
-  },
-  {
-    label: 'Release',
-    items: [{ to: '/publish', label: 'Publish & Deploy', icon: Rocket, exact: false }],
   },
   {
     label: 'Manage',
