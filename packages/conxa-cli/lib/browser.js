@@ -6,19 +6,36 @@ const { getPluginConfig, getPluginDir, getAuthJson } = require("./config");
 
 // ─── Browser cache (per-slug, 5-min idle timeout) ────────────────────────────
 
-const _cache = new Map(); // slug → { browser, context, idleTimer }
+const _cache    = new Map();  // slug → { browser, context, idleTimer }
+const _holds    = new Map();  // slug → hold count
+const _inflight = new Map();  // slug → Promise<{browser,context}> (dedup concurrent launches)
 const BROWSER_IDLE_MS = 5 * 60 * 1000;
+const BROWSER_MAX     = 5;
 
 function _scheduleCleanup(slug) {
   const entry = _cache.get(slug);
   if (!entry) return;
   clearTimeout(entry.idleTimer);
   entry.idleTimer = setTimeout(async () => {
+    if ((_holds.get(slug) || 0) > 0) {
+      _scheduleCleanup(slug); // still held — defer
+      return;
+    }
     console.error(`[browser-cache] Idle timeout for ${slug} — closing browser`);
     const b = entry.browser;
     _cache.delete(slug);
     if (b) await b.close().catch(() => {});
   }, BROWSER_IDLE_MS);
+  entry.idleTimer.unref?.();
+}
+
+function holdBrowser(slug) {
+  _holds.set(slug, (_holds.get(slug) || 0) + 1);
+}
+
+function releaseBrowserHold(slug) {
+  const n = (_holds.get(slug) || 0) - 1;
+  if (n <= 0) _holds.delete(slug); else _holds.set(slug, n);
 }
 
 async function getCachedBrowser(slug) {
@@ -33,11 +50,35 @@ async function getCachedBrowser(slug) {
       _cache.delete(slug);
     }
   }
-  const { browser, context } = await getAuthContext(slug, false);
-  _cache.set(slug, { browser, context, idleTimer: null });
-  _scheduleCleanup(slug);
-  console.error(`[browser-cache] Launched new browser for ${slug}`);
-  return { browser, context, cached: false };
+  // Dedup concurrent launch requests for the same slug
+  if (_inflight.has(slug)) {
+    console.error(`[browser-cache] Waiting for in-flight browser launch for ${slug}`);
+    return _inflight.get(slug);
+  }
+  const launch = (async () => {
+    try {
+      const { browser, context } = await getAuthContext(slug, false);
+      // Evict LRU entry if at capacity (skip held browsers)
+      if (_cache.size >= BROWSER_MAX) {
+        for (const [evictSlug, evictEntry] of _cache.entries()) {
+          if ((_holds.get(evictSlug) || 0) > 0) continue;
+          clearTimeout(evictEntry.idleTimer);
+          _cache.delete(evictSlug);
+          if (evictEntry.browser) evictEntry.browser.close().catch(() => {});
+          console.error(`[browser-cache] Evicted ${evictSlug} (cache limit ${BROWSER_MAX})`);
+          break;
+        }
+      }
+      _cache.set(slug, { browser, context, idleTimer: null });
+      _scheduleCleanup(slug);
+      console.error(`[browser-cache] Launched new browser for ${slug}`);
+      return { browser, context, cached: false };
+    } finally {
+      _inflight.delete(slug);
+    }
+  })();
+  _inflight.set(slug, launch);
+  return launch;
 }
 
 // ─── Session management ───────────────────────────────────────────────────────
@@ -76,6 +117,9 @@ async function getAuthContext(slug, headless) {
     console.error(`[auth:${slug}] No auth.json — starting manual login`);
   }
 
+  const isCI = process.env.CI || process.env.DISPLAY === "" || (!process.env.DISPLAY && process.platform === "linux");
+  if (isCI) throw new Error(`[auth:${slug}] Cannot open login browser in headless/CI environment. Pre-generate auth.json and place it at ${authJson}`);
+
   console.error(`[auth:${slug}] Opening login browser — waiting for user to authenticate...`);
   const loginBrowser = await chromium.launch({ headless: false });
   const loginCtx     = await loginBrowser.newContext();
@@ -92,8 +136,8 @@ async function getAuthContext(slug, headless) {
   }
 
   const state = await loginCtx.storageState();
-  fs.mkdirSync(path.dirname(authJson), { recursive: true });
-  fs.writeFileSync(authJson, JSON.stringify(state, null, 2));
+  fs.mkdirSync(path.dirname(authJson), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(authJson, JSON.stringify(state, null, 2), { encoding: "utf8", mode: 0o600 });
   console.error(`[auth:${slug}] Session saved to auth.json — closing login browser`);
   await loginBrowser.close();
 
@@ -126,4 +170,4 @@ async function gracefulShutdown() {
   process.exit(0);
 }
 
-module.exports = { getCachedBrowser, isAuthenticated, getAuthContext, gracefulShutdown };
+module.exports = { getCachedBrowser, holdBrowser, releaseBrowserHold, isAuthenticated, getAuthContext, gracefulShutdown };

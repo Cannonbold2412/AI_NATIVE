@@ -121,8 +121,13 @@ def add_workflow(plugin_id: str, name: str, session_id: str) -> tuple[Plugin, Pl
         return None
     wf_id = str(uuid.uuid4())
     import re
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "workflow"
-    slug = f"{slug}-{wf_id[:8]}"
+    base_slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "workflow"
+    existing_slugs = {w.slug for w in plugin.workflows}
+    slug = base_slug
+    counter = 2
+    while slug in existing_slugs:
+        slug = f"{base_slug}-{counter}"
+        counter += 1
     wf = PluginWorkflow(
         id=wf_id,
         slug=slug,

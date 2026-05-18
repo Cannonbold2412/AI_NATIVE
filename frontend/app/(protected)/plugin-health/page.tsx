@@ -1,5 +1,5 @@
-import { PluginHealthPage } from '@/PluginHealthPage'
+import { redirect } from 'next/navigation'
 
 export default function PluginHealthRoute() {
-  return <PluginHealthPage />
+  redirect('/dashboard')
 }

@@ -12,6 +12,8 @@ __pycache__/
 .coverage.*
 htmlcov/
 build/
+!frontend/app/(protected)/build/
+!frontend/app/(protected)/build/page.tsx
 dist/
 *.egg-info/
 

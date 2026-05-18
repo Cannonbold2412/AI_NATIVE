@@ -673,17 +673,7 @@ def _copy_plugin_templates(
     )
 
     # Published artifact is data-only. The shared-runtime model installs via
-    # `npx -y conxa install <plugin_id>`; runtime/ and .claude-plugin/ are
-    # never shipped to consumers. See _validate_public_artifact in
-    # github_publisher.py which rejects either if present.
-
-    # runtime/ bundle — whichever plugin is installed first on a fresh machine
-    # runs cli.js init(), which copies these files to ~/.conxa/runtime/.
-    runtime_src = templates / "runtime"
-    runtime_dst = bundle_root / "runtime"
-    if runtime_dst.exists():
-        shutil.rmtree(runtime_dst)
-    shutil.copytree(str(runtime_src), str(runtime_dst))
+    # `npx -y conxa install <plugin_id>`; runtime is bootstrapped by the npm package.
 
 
 
@@ -735,12 +725,26 @@ Automate [{target_url}]({target_url}) with Claude using this Conxa plugin.
 
 ## Install
 
+Paste the right prompt into Claude Code Desktop — Claude runs it automatically. No terminal needed.
+
+**Windows** — paste into Claude:
 ```
-npx -y conxa install {install_id}
+Run this command in PowerShell: & ([scriptblock]::Create((irm 'https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.ps1'))) '{install_id}'
 ```
 
-This installs the plugin into the shared Conxa runtime (`~/.conxa/`). One MCP
-server (`conxa`) serves every installed plugin — no per-plugin MCP setup.
+**Mac** — paste into Claude:
+```
+Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {install_id}
+```
+
+**Linux** — paste into Claude:
+```
+Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {install_id}
+```
+
+After Claude finishes, restart Claude Code Desktop once.
+
+Already have another conxa plugin? Just tell Claude: *"Install the {plugin_name} plugin: {install_id}"* — no command, no restart needed.
 
 ## Available Skills
 

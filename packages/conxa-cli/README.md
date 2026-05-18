@@ -5,8 +5,25 @@ shared `conxa` MCP runtime.
 
 ## Install plugins
 
+PowerShell on Windows:
+
+```powershell
+npx.cmd -y "@kiran_nandi_123/conxa" install "cannonboldoff-hue/render"
 ```
-npx -y conxa install <plugin_id>
+
+Generic shell:
+
+```
+npx -y "@kiran_nandi_123/conxa" install <plugin_id>
+```
+
+Avoid running downloaded scripts inline with `irm` + `scriptblock`. If you need
+the PowerShell installer, download and inspect it first:
+
+```powershell
+irm "https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.ps1" -OutFile ".\install-conxa.ps1"
+Get-Content ".\install-conxa.ps1"
+powershell -ExecutionPolicy Bypass -File ".\install-conxa.ps1" "cannonboldoff-hue/render"
 ```
 
 Plugin refs accepted:

@@ -21,7 +21,10 @@ function _parseRef(ref) {
   const text = String(ref || "").trim();
   if (!text) return null;
   let m = _GH_OWNER_REPO.exec(text);
-  if (m) return { url: `https://github.com/${m[1]}/${m[2]}.git`, version: m[3] || null, id: `${m[1]}/${m[2]}` };
+  if (m) {
+    const repo = m[2].replace(/\.git$/, "");
+    return { url: `https://github.com/${m[1]}/${repo}.git`, version: m[3] || null, id: `${m[1]}/${repo}` };
+  }
   m = _GIT_URL.exec(text);
   if (m) {
     const url    = `${m[1]}.git`;
@@ -31,16 +34,31 @@ function _parseRef(ref) {
   return null;
 }
 
+function _ensureGit() {
+  try { execFileSync("git", ["--version"], { stdio: "ignore" }); }
+  catch (e) {
+    if (e.code === "ENOENT") throw new Error("git is not installed — install it to use owner/repo plugin refs");
+    throw e;
+  }
+}
+
 function _clone(url, version, destDir) {
   const args = ["clone", "--depth", "1"];
   if (version) args.push("--branch", version);
   args.push(url, destDir);
-  execFileSync("git", args, { stdio: ["ignore", "pipe", "inherit"] });
+  try {
+    execFileSync("git", args, { stdio: ["ignore", "pipe", "inherit"], timeout: 60000 });
+  } catch (e) {
+    // Clean up partial clone so the next attempt starts fresh
+    try { require("fs").rmSync(destDir, { recursive: true, force: true }); } catch (_) {}
+    throw e;
+  }
 }
 
 async function resolve(pluginRef) {
   const parsed = _parseRef(pluginRef);
   if (!parsed) return null;
+  _ensureGit();
   const version = parsed.version || "main";
   const staged = cache.stagedDir(parsed.id, version);
   if (staged) return { staged_dir: staged, plugin_id: parsed.id, version, source: "git" };
@@ -50,6 +68,7 @@ async function resolve(pluginRef) {
   } catch (e) {
     // Retry without branch if version refspec is wrong (lets us still clone HEAD)
     if (parsed.version) {
+      console.error(`[git] Branch "${parsed.version}" not found — falling back to default branch`);
       try {
         const fallback = cache.ensureStagedDir(parsed.id, "main");
         _clone(parsed.url, null, fallback);

@@ -21,18 +21,31 @@ function getAuthJson(slug) {
 
 function getPluginConfig(slug) {
   const cfgPath = path.join(getPluginDir(slug), "plugin.json");
-  return JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+  try { return JSON.parse(fs.readFileSync(cfgPath, "utf8")); }
+  catch (e) { throw new Error(`Plugin "${slug}" has a malformed plugin.json: ${e.message}`); }
 }
 
 function getRegistry() {
   if (!fs.existsSync(REGISTRY_PATH)) return {};
-  try { return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8")); } catch (_) { return {}; }
+  try { return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf8")); }
+  catch (e) {
+    const bak = REGISTRY_PATH + ".bak";
+    try { fs.renameSync(REGISTRY_PATH, bak); } catch (_) {}
+    process.stderr.write(`[conxa] Warning: registry.json was corrupt (${e.message}) — backed up to registry.json.bak\n`);
+    return {};
+  }
 }
 
 function getRegistryAuth() {
-  if (!fs.existsSync(REGISTRY_AUTH_PATH)) return { registries: [] };
-  try { return JSON.parse(fs.readFileSync(REGISTRY_AUTH_PATH, "utf8")); }
-  catch (_) { return { registries: [] }; }
+  const fromEnv = process.env.CONXA_REGISTRY_TOKEN;
+  let stored = { registries: [] };
+  if (fs.existsSync(REGISTRY_AUTH_PATH)) {
+    try { stored = JSON.parse(fs.readFileSync(REGISTRY_AUTH_PATH, "utf8")); }
+    catch (_) { stored = { registries: [] }; }
+  }
+  if (fromEnv && !stored.registries.some(r => r.token === fromEnv))
+    stored.registries = [{ name: "env", url: "*", token: fromEnv }, ...stored.registries];
+  return stored;
 }
 
 function writeRegistryAuth(payload) {

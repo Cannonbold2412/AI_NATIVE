@@ -1,6 +1,6 @@
 {
   "name": "@kiran_nandi_123/conxa",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "description": "Conxa CLI — install and manage shared-runtime automation plugins",
   "license": "MIT",
   "bin": {
@@ -10,6 +10,7 @@
   "files": [
     "bin/",
     "lib/",
+    "scripts/",
     "README.md",
     "LICENSE"
   ],

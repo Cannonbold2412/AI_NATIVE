@@ -5,14 +5,17 @@ const { CONXA_HOME } = require("./config");
 
 // ─── Retry budget (L0) ────────────────────────────────────────────────────────
 
-const _retryBudget     = new Map();
+const _retryBudget     = new Map(); // key → { count, ts }
 const RETRY_BUDGET_MAX = 5;
+const RETRY_BUDGET_TTL = 10 * 60 * 1000; // reset after 10 min idle
 
 function checkRetryBudget(slug, stepIndex) {
-  const key      = `${slug}:${stepIndex}`;
-  const attempts = (_retryBudget.get(key) || 0) + 1;
-  _retryBudget.set(key, attempts);
-  if (attempts > RETRY_BUDGET_MAX) {
+  const key  = `${slug}:${stepIndex}`;
+  const now  = Date.now();
+  const prev = _retryBudget.get(key);
+  const count = (prev && now - prev.ts < RETRY_BUDGET_TTL) ? prev.count + 1 : 1;
+  _retryBudget.set(key, { count, ts: now });
+  if (count > RETRY_BUDGET_MAX) {
     appendRecoveryEvent({ event: "retry_budget_exhausted", slug, step_index: stepIndex });
     console.error(`[recovery] L0 budget exhausted for ${key}`);
     return false;
@@ -32,8 +35,10 @@ const RECOVERY_LOG_MAX = 10 * 1024 * 1024;
 
 function appendRecoveryEvent(event) {
   try {
-    if (fs.existsSync(RECOVERY_LOG) && fs.statSync(RECOVERY_LOG).size > RECOVERY_LOG_MAX)
+    if (fs.existsSync(RECOVERY_LOG) && fs.statSync(RECOVERY_LOG).size > RECOVERY_LOG_MAX) {
+      if (fs.existsSync(RECOVERY_LOG + ".1")) fs.renameSync(RECOVERY_LOG + ".1", RECOVERY_LOG + ".2");
       fs.renameSync(RECOVERY_LOG, RECOVERY_LOG + ".1");
+    }
     fs.appendFileSync(RECOVERY_LOG, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
   } catch (_) {}
 }
@@ -224,9 +229,8 @@ async function runPlan(page, steps, inputs, startFrom, slug) {
   for (let i = startFrom; i < steps.length; i++) {
     const step = steps[i];
 
-    // Settle: wait for DOM + network before each step
+    // Settle: wait for DOM before each step
     await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-    await page.waitForLoadState("networkidle",      { timeout: 3000 }).catch(() => {});
 
     // Pre-step screenshot (interactive steps only)
     const isInteractive = INTERACTIVE.has(step.type);
