@@ -357,11 +357,11 @@ def _publish_locked(
         last_commit_sha=commit_sha,
     )
 
-    # Prefer the v2 manifest `id` (org-scoped) for the install snippet; fall
-    # back to plugin.slug if the build hasn't been refreshed since the M1
-    # migration. Either form works with `npx conxa install`.
-    package_id = getattr(plugin, "package_id", None) or plugin.slug
-    install_snippet = f"npx -y @kiran_nandi_123/conxa install {package_id}"
+    # Install id must be `owner/repo` — that's what the git resolver in the
+    # conxa CLI accepts. Derive it from the GitHub URL we just pushed to so
+    # the snippet works regardless of plugin slug / package_id.
+    install_id = html_url.rstrip("/").split("github.com/", 1)[-1]
+    install_snippet = f"npx -y @kiran_nandi_123/conxa install {install_id}"
 
     return PublishResult(
         repo_url=html_url,
