@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import settings
-from app.models.plugin import Plugin, PluginWorkflow, PluginAuth, PluginBuild
+from app.models.plugin import Plugin, PluginWorkflow, PluginAuth, PluginBuild, PluginInstaller
 
 
 def _plugins_dir() -> Path:
@@ -121,8 +121,13 @@ def add_workflow(plugin_id: str, name: str, session_id: str) -> tuple[Plugin, Pl
         return None
     wf_id = str(uuid.uuid4())
     import re
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "workflow"
-    slug = f"{slug}-{wf_id[:8]}"
+    base_slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "workflow"
+    existing_slugs = {w.slug for w in plugin.workflows}
+    slug = base_slug
+    counter = 2
+    while slug in existing_slugs:
+        slug = f"{base_slug}-{counter}"
+        counter += 1
     wf = PluginWorkflow(
         id=wf_id,
         slug=slug,
@@ -150,6 +155,27 @@ def set_build(plugin_id: str, output_path: str, version: str = "0.1.0") -> Plugi
         last_built_at=time.time(),
         output_path=output_path,
         version=version,
+    )
+    return save_plugin(plugin)
+
+
+def set_installer(
+    plugin_id: str,
+    *,
+    installer_path: str,
+    filename: str,
+    version: str,
+    runtime_version: str,
+) -> Plugin | None:
+    plugin = get_plugin(plugin_id)
+    if plugin is None:
+        return None
+    plugin.installer = PluginInstaller(
+        built_at=time.time(),
+        installer_path=installer_path,
+        filename=filename,
+        version=version,
+        runtime_version=runtime_version,
     )
     return save_plugin(plugin)
 

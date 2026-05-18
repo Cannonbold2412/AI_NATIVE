@@ -532,6 +532,58 @@ async def post_execute_skill(plugin_id: str, skill_slug: str, body: ExecuteSkill
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.post("/{plugin_id}/build-installer/stream")
+async def post_build_installer_stream(plugin_id: str) -> StreamingResponse:
+    """Build a Windows installer EXE and stream progress via SSE."""
+    plugin = _plugin_or_404(plugin_id)
+    if plugin.build is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Plugin must be built first. Call /build/stream before building the installer.",
+        )
+    from app.services.plugin_builder import _plugin_bundle_slug
+    company_slug = _plugin_bundle_slug(plugin_id, plugin.name)
+
+    q: SimpleQueue[tuple[str, Any]] = SimpleQueue()
+
+    def runner() -> None:
+        try:
+            from app.services.installer_builder import build_installer
+            result = build_installer(plugin_id, company_slug=company_slug, realtime_sink=lambda e: q.put(("log", e)))
+            q.put(("ok", result))
+        except Exception as exc:
+            q.put(("fail", {"message": str(exc)}))
+
+    asyncio.get_running_loop().run_in_executor(None, runner)
+
+    async def events() -> AsyncIterator[bytes]:
+        while True:
+            kind, data = await asyncio.to_thread(q.get)
+            if kind == "log":
+                yield _sse_line({"event": "log", "entry": data})
+            elif kind == "ok":
+                yield _sse_line({"event": "done", "result": data})
+                return
+            else:
+                yield _sse_line({"event": "error", "message": data.get("message", "Installer build failed")})
+                return
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=dict(_SSE_HEADERS))
+
+
+@router.get("/{plugin_id}/installer/download")
+def get_download_installer(plugin_id: str) -> StreamingResponse:
+    """Download the compiled installer EXE."""
+    plugin = _plugin_or_404(plugin_id)
+    if plugin.installer is None:
+        raise HTTPException(status_code=404, detail="Installer not built yet. Call build-installer/stream first.")
+    p = Path(plugin.installer.installer_path)
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="Installer file missing. Rebuild required.")
+    headers = {"Content-Disposition": f'attachment; filename="{p.name}"'}
+    return StreamingResponse(open(p, "rb"), media_type="application/octet-stream", headers=headers)  # noqa: SIM115
+
+
 @router.get("/{plugin_id}/download")
 def get_download_plugin(plugin_id: str) -> StreamingResponse:
     plugin = _plugin_or_404(plugin_id)
