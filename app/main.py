@@ -12,6 +12,9 @@ from app.api.routes import router
 from app.api.run_routes import router as run_router
 from app.api.security import ProductionRequestMiddleware
 from app.api.skill_pack_routes import router as skill_pack_router
+from app.api.skillpack_update_routes import router as skillpack_update_router
+from app.api.skillpack_update_routes import auth_router as skillpack_auth_router
+from app.api.skillpack_update_routes import telemetry_router as skillpack_telemetry_router
 from app.api.v1_alias_routes import router as v1_alias_router
 from app.api.workflow_routes import router as workflow_router
 from app.config import settings
@@ -44,6 +47,9 @@ app.include_router(plugin_router, prefix="/api/v1")
 app.include_router(run_router, prefix="/api/v1")
 app.include_router(publish_router, prefix="/api/v1")
 app.include_router(razorpay_router, prefix="/api/v1")
+app.include_router(skillpack_update_router, prefix="/api/v1")
+app.include_router(skillpack_auth_router, prefix="/api/v1")
+app.include_router(skillpack_telemetry_router, prefix="/api/v1")
 
 
 @app.get("/")

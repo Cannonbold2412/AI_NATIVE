@@ -29,6 +29,14 @@ class PluginBuild(BaseModel):
     version: str = "0.1.0"
 
 
+class PluginInstaller(BaseModel):
+    built_at: float
+    installer_path: str
+    filename: str
+    version: str
+    runtime_version: str
+
+
 class Plugin(BaseModel):
     id: str
     slug: str
@@ -49,6 +57,7 @@ class Plugin(BaseModel):
     last_published_version: str | None = None
     last_published_at: float | None = None
     last_commit_sha: str | None = None
+    installer: PluginInstaller | None = None
     # Shared-runtime publish metadata (v2 manifest).
     # `package_id` is the org-scoped identifier used by `conxa install` (e.g. "acme/hr-onboarding").
     # Falls back to `slug` at build time when unset.

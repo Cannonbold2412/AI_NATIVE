@@ -1,4 +1,4 @@
-import { apiFetch } from '@/lib/apiBase'
+import { apiFetch, apiUrl } from '@/lib/apiBase'
 
 async function json<T>(response: Response): Promise<T> {
   const raw = (await response.text()).trim()
@@ -38,6 +38,14 @@ export type PluginBuild = {
   version: string
 }
 
+export type PluginInstaller = {
+  built_at: number
+  installer_path: string
+  filename: string
+  version: string
+  runtime_version: string
+}
+
 export type Plugin = {
   id: string
   slug: string
@@ -50,6 +58,7 @@ export type Plugin = {
   auth: PluginAuth | null
   workflows: PluginWorkflow[]
   build: PluginBuild | null
+  installer: PluginInstaller | null
   created_at: number
   updated_at: number
   repository_url: string | null
@@ -344,4 +353,27 @@ export function publishPlugin(pluginId: string, payload: PublishPayload): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then((r) => json<PublishResult>(r))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Installer build + download
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type InstallerBuildResult = {
+  installer_path: string
+  filename: string
+  company: string
+  plugin_id: string
+  version: string
+  runtime_version: string
+}
+
+/** Returns a raw Response for SSE streaming — same pattern as buildPlugin(). */
+export function buildInstaller(pluginId: string): Promise<Response> {
+  return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/build-installer/stream`, { method: 'POST' })
+}
+
+/** Returns the URL to download the compiled installer EXE. */
+export function installerDownloadUrl(pluginId: string): string {
+  return apiUrl(`/plugins/${encodeURIComponent(pluginId)}/installer/download`)
 }

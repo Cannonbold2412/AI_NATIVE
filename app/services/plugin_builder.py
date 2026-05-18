@@ -1,4 +1,4 @@
-﻿"""Plugin-first build pipeline.
+"""Plugin-first build pipeline.
 
 Compiles a Plugin entity (auth session + N workflow sessions) into a
 GitHub-ready plugin folder:
@@ -28,7 +28,9 @@ captured locally at runtime (via `conxa auth <plugin>`) and is gitignored.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import shutil
 import time
@@ -589,6 +591,152 @@ def _build_workflow_from_saved_skill(
 
 
 # ─────────────────────────────────────────────────
+# skill-packs/{company}/ output format
+# ─────────────────────────────────────────────────
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    h.update(path.read_bytes())
+    return h.hexdigest()
+
+
+def _write_skill_packs_format(
+    *,
+    bundle_root: Path,
+    bundle_slug: str,
+    plugin_name: str,
+    target_url: str,
+    protected_url: str,
+    skill_slugs: list[str],
+    version: str,
+    conxa_api_url: str = "",
+) -> None:
+    """Write the skill-packs/{company}/ layout alongside the legacy build output.
+
+    This format is consumed by runtime.exe (the new installer-distributed MCP server).
+    The legacy skills/ layout is kept untouched for backward compatibility.
+    """
+    from app.config import settings
+
+    company      = bundle_slug
+    api_base     = conxa_api_url or os.environ.get("CONXA_API_URL", "https://api.conxa.io")
+    skill_packs  = settings.data_dir / "skill-packs" / company
+
+    skill_packs.mkdir(parents=True, exist_ok=True)
+
+    written_slugs: list[str] = []
+    for slug in skill_slugs:
+        src_dir  = bundle_root / "skills" / slug
+        dest_dir = skill_packs / slug
+        if not src_dir.is_dir():
+            continue
+
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy execution.json, recovery.json and visuals unchanged
+        for fname in ("execution.json", "recovery.json"):
+            src = src_dir / fname
+            if src.is_file():
+                shutil.copy2(src, dest_dir / fname)
+
+        if (src_dir / "visuals").is_dir():
+            dest_visuals = dest_dir / "visuals"
+            if dest_visuals.exists():
+                shutil.rmtree(dest_visuals)
+            shutil.copytree(src_dir / "visuals", dest_visuals)
+
+        # inputs.json (rename from input.json)
+        input_src = src_dir / "input.json"
+        if input_src.is_file():
+            shutil.copy2(input_src, dest_dir / "inputs.json")
+
+        # validation.json — extract from execution plan if available
+        exec_path = dest_dir / "execution.json"
+        if exec_path.is_file():
+            try:
+                exec_data = json.loads(exec_path.read_text(encoding="utf-8"))
+                steps = exec_data if isinstance(exec_data, list) else exec_data.get("steps") or exec_data.get("execution_plan") or []
+                validation_data = {
+                    "url_states": [
+                        {"step": i + 1, **s["url_state"]}
+                        for i, s in enumerate(steps)
+                        if isinstance(s, dict) and s.get("url_state")
+                    ]
+                }
+                (dest_dir / "validation.json").write_text(
+                    json.dumps(validation_data, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
+            except Exception:
+                pass
+
+        # Compute checksums over the files we wrote
+        checksums: dict[str, str] = {}
+        for fname in ("execution.json", "recovery.json", "inputs.json"):
+            p = dest_dir / fname
+            if p.is_file():
+                checksums[fname] = _sha256_file(p)
+
+        # Read name/description from input.json or SKILL.md fallback
+        skill_name = slug.replace("_", " ").title()
+        description = ""
+        inputs_p = dest_dir / "inputs.json"
+        if inputs_p.is_file():
+            try:
+                idata = json.loads(inputs_p.read_text(encoding="utf-8"))
+                description = idata.get("description", "")
+            except Exception:
+                pass
+        if not description:
+            md_p = src_dir / "SKILL.md"
+            if md_p.is_file():
+                first = next((l.lstrip("# ").strip() for l in md_p.read_text(encoding="utf-8").splitlines() if l.strip()), "")
+                description = first
+
+        inputs_required: list[str] = []
+        if inputs_p.is_file():
+            try:
+                idata = json.loads(inputs_p.read_text(encoding="utf-8"))
+                if "required" in idata:
+                    inputs_required = list(idata["required"])
+                elif "inputs" in idata and isinstance(idata["inputs"], list):
+                    inputs_required = [i["name"] for i in idata["inputs"] if isinstance(i, dict) and "name" in i]
+            except Exception:
+                pass
+
+        manifest = {
+            "slug":             slug,
+            "name":             skill_name,
+            "description":      description,
+            "version":          version,
+            "required_runtime": ">=1.0.0",
+            "company":          company,
+            "target_url":       target_url,
+            "inputs_required":  inputs_required,
+            "checksum":         checksums,
+        }
+        (dest_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        written_slugs.append(slug)
+
+    # pack.json at company root
+    pack = {
+        "company":            company,
+        "company_display":    plugin_name,
+        "skill_pack_version": version,
+        "required_runtime":   ">=1.0.0",
+        "target_url":         target_url,
+        "protected_url":      protected_url,
+        "skills":             written_slugs,
+        "sync_endpoint":      f"{api_base}/skill-packs/{company}/delta",
+        "built_at":           datetime.now(timezone.utc).isoformat(),
+    }
+    (skill_packs / "pack.json").write_text(
+        json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+# ─────────────────────────────────────────────────
 # Plugin output directory helpers
 # ─────────────────────────────────────────────────
 
@@ -926,7 +1074,22 @@ def build_plugin(
         license_path.write_text(_render_license(), encoding="utf-8")
         _log("Written LICENSE")
 
-    # ── 5. Persist build record ────────────────────────────────────────────
+    # ── 5. Write skill-packs/{company}/ format (for installer runtime) ────────
+    try:
+        _write_skill_packs_format(
+            bundle_root=bundle_root,
+            bundle_slug=bundle_slug,
+            plugin_name=plugin.name,
+            target_url=plugin.target_url,
+            protected_url=plugin.protected_url,
+            skill_slugs=skill_slugs,
+            version=version,
+        )
+        _log("Written skill-packs format", company=bundle_slug, skills=skill_slugs)
+    except Exception as exc:
+        _log(f"Warning: skill-packs format write failed — {exc}", warning=True)
+
+    # ── 6. Persist build record ────────────────────────────────────────────
     set_build(plugin_id, output_path=str(bundle_root), version=version)
 
     return {
