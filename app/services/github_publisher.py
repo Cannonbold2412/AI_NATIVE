@@ -361,7 +361,7 @@ def _publish_locked(
     # back to plugin.slug if the build hasn't been refreshed since the M1
     # migration. Either form works with `npx conxa install`.
     package_id = getattr(plugin, "package_id", None) or plugin.slug
-    install_snippet = f"npx -y conxa install {package_id}"
+    install_snippet = f"npx -y @kiran_nandi_123/conxa install {package_id}"
 
     return PublishResult(
         repo_url=html_url,
