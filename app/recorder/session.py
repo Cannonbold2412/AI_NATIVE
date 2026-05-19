@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 import threading
 import time
 import uuid
@@ -12,6 +13,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, SimpleQueue
 from typing import Any
+
+if os.environ.get("SKILL_ENVIRONMENT") == "production" or os.environ.get("RENDER"):
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
 from playwright.sync_api import sync_playwright
 
