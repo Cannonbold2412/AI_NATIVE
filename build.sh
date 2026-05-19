@@ -2,10 +2,6 @@
 # Backend build script for Render.
 set -euo pipefail
 
-echo "=== Installing NSIS ==="
-apt-get update -qq
-apt-get install -y nsis
-
 echo "=== Installing Python dependencies ==="
 pip install --upgrade pip
 pip install -r requirements.txt
