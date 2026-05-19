@@ -7,6 +7,6 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 echo "=== Installing Playwright Chromium ==="
-playwright install --with-deps chromium
+playwright install chromium
 
 echo "=== Build complete ==="
