@@ -23,6 +23,8 @@ services:
         value: https://github.com/Cannonbold2412/AI_NATIVE/releases/download
       - key: CONXA_RUNTIME_VERSION
         value: v1.0.0
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
       - key: SKILL_CORS_PREVIEW_ORIGIN_REGEX
         value: "https://.*\\.vercel\\.app"
       # Secrets — set these in the Render Dashboard after first deploy
@@ -67,7 +69,8 @@ services:
       - key: GITHUB_OAUTH_CLIENT_SECRET
         sync: false
       - key: GITHUB_OAUTH_REDIRECT_URI
-        sync: false
+        value: https://conxa-backend.onrender.com/api/v1/integrations/github/callback
+      # Set to your Vercel app URL after frontend is deployed, e.g. https://conxa.vercel.app
       - key: GITHUB_OAUTH_FRONTEND_ORIGIN
         sync: false
 

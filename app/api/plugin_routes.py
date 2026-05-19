@@ -105,6 +105,14 @@ def _sse_line(payload: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n".encode()
 
 
+async def _start_recorder_session(sess: Any) -> None:
+    try:
+        await sess.start()
+    except RuntimeError as exc:
+        registry.pop(sess.session_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # Plugin CRUD
 # ---------------------------------------------------------------------------
@@ -177,7 +185,7 @@ async def post_start_auth_record(plugin_id: str, body: StartAuthRecordBody) -> d
     )
     # Tag the session so finalize knows it is an auth session.
     sess._auth_plugin_id = plugin_id  # type: ignore[attr-defined]
-    await sess.start()
+    await _start_recorder_session(sess)
     return {
         "session_id": sess.session_id,
         "plugin_id": plugin_id,
@@ -285,7 +293,11 @@ async def post_start_workflow_record(plugin_id: str, body: StartWorkflowRecordBo
         start_url=start_url,
         storage_state_path=str(storage_state_path),
     )
-    await sess.start()
+    try:
+        await _start_recorder_session(sess)
+    except HTTPException:
+        remove_workflow(plugin_id, wf.id)
+        raise
 
     # Update workflow with the real session_id now that the session exists.
     refreshed = get_plugin(plugin_id)

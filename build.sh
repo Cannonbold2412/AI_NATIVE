@@ -3,10 +3,11 @@
 set -euo pipefail
 
 echo "=== Installing Python dependencies ==="
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 echo "=== Installing Playwright Chromium ==="
-playwright install chromium
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-0}"
+python -m playwright install chromium
 
 echo "=== Build complete ==="

@@ -75,7 +75,7 @@ def format_startup_error(exc: Exception) -> str:
     if "Executable doesn't exist" in message:
         return (
             "Playwright browser binaries are missing. "
-            "Run `.venv\\Scripts\\playwright install chromium` and restart the API server."
+            "Run `python -m playwright install chromium` and restart the API server."
         )
     return message
 
