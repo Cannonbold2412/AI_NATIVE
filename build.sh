@@ -3,8 +3,8 @@
 set -euo pipefail
 
 echo "=== Installing NSIS ==="
-sudo apt-get update -qq
-sudo apt-get install -y nsis
+apt-get update -qq
+apt-get install -y nsis
 
 echo "=== Installing Python dependencies ==="
 pip install --upgrade pip
