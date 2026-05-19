@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { fetchAuditEvents, fetchMe } from '@/api/productApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { ActivityTimeline, ErrorState, LoadingState } from '@/components/product/ProductPrimitives'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -15,7 +15,8 @@ export function SettingsPage() {
   const auditQ = useQuery({ queryKey: ['auditEvents'], queryFn: () => fetchAuditEvents(50) })
 
   return (
-    <AppShell title="Settings" description="Account, workspace, API environment, audit activity, and danger-zone controls." mainClassName="overflow-y-auto">
+    <div className="h-full overflow-y-auto">
+      <PageHeader title="Settings" description="Account, workspace, API environment, audit activity, and danger-zone controls." />
       <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-4 sm:px-6 xl:grid-cols-2">
         <Card className="border-white/8 bg-white/[0.03] shadow-none">
           <CardHeader className="border-b border-white/8">
@@ -60,6 +61,6 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
+    </div>
   )
 }

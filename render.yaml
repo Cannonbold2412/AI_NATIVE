@@ -1,0 +1,83 @@
+services:
+  - type: web
+    name: conxa-backend
+    runtime: python
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: bash build.sh
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    disk:
+      name: conxa-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 10
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: SKILL_ENVIRONMENT
+        value: production
+      - key: SKILL_HOST
+        value: "0.0.0.0"
+      - key: SKILL_AUTH_REQUIRED
+        value: "true"
+      - key: MAKENSIS_PATH
+        value: makensis
+      - key: CONXA_RUNTIME_CDN_URL
+        value: https://github.com/Cannonbold2412/AI_NATIVE/releases/download
+      - key: CONXA_RUNTIME_VERSION
+        value: v1.0.0
+      - key: SKILL_CORS_PREVIEW_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
+      # Secrets — set these in the Render Dashboard after first deploy
+      - key: SKILL_DATABASE_URL
+        sync: false
+      - key: SKILL_CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: SKILL_APP_URL
+        sync: false
+      - key: SKILL_CLERK_ISSUER
+        sync: false
+      - key: SKILL_CLERK_JWKS_URL
+        sync: false
+      - key: SKILL_CLERK_AUTHORIZED_PARTIES
+        sync: false
+      - key: SKILL_LLM_PACK_ENDPOINT
+        sync: false
+      - key: SKILL_LLM_PACK_API_KEY
+        sync: false
+      - key: SKILL_LLM_PACK_MODEL
+        sync: false
+      - key: SKILL_LLM_VISION_ENDPOINT
+        sync: false
+      - key: SKILL_LLM_VISION_API_KEY
+        sync: false
+      - key: SKILL_LLM_VISION_MODEL
+        sync: false
+      - key: SKILL_LLM_TEXT_ENDPOINT
+        sync: false
+      - key: SKILL_LLM_TEXT_API_KEY
+        sync: false
+      - key: SKILL_LLM_TEXT_MODEL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: GITHUB_OAUTH_CLIENT_ID
+        sync: false
+      - key: GITHUB_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_OAUTH_REDIRECT_URI
+        sync: false
+      - key: GITHUB_OAUTH_FRONTEND_ORIGIN
+        sync: false
+
+databases:
+  - name: conxa-db
+    plan: free
+    region: oregon
+    databaseName: ai_native
+    user: ai_native_user

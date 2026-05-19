@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPlugins, fetchRuns, normalizePluginList, type Plugin, type Run } from '@/api/pluginApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -157,19 +157,19 @@ export function PluginHealthPage() {
   const criticalCount = rows.filter((row) => row.level === 'critical').length
 
   return (
-    <AppShell
-      title="Dashboard"
-      description="Readiness checks for auth, workflow compile state, and latest build output."
-      mainClassName="overflow-y-auto"
-      actions={
-        <Button asChild size="sm" variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
-          <Link href="/plugins">
-            Open plugins
-            <ArrowRight className="size-3.5" />
-          </Link>
-        </Button>
-      }
-    >
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title="Dashboard"
+        description="Readiness checks for auth, workflow compile state, and latest build output."
+        actions={
+          <Button asChild size="sm" variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
+            <Link href="/plugins">
+              Open plugins
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
+        }
+      />
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6">
         <section className="grid gap-3 sm:grid-cols-3">
           <Card className="border-white/8 bg-white/[0.03] shadow-none">
@@ -246,6 +246,6 @@ export function PluginHealthPage() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
+    </div>
   )
 }

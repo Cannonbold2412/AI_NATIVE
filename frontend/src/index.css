@@ -6,6 +6,15 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Status colors */
+  --status-ok: oklch(0.74 0.17 160);      /* emerald-400 */
+  --status-warn: oklch(0.78 0.15 75);     /* amber-400 */
+  --status-error: oklch(0.64 0.22 25);    /* red-400 */
+
+  /* Border scale */
+  --border-subtle: oklch(1 0 0 / 8%);    /* border-white/8 */
+  --border-default: oklch(1 0 0 / 10%);  /* border-white/10 */
+
   /* Theme tokens: light defaults; .dark in html overrides via .dark block below */
   --background: oklch(0.18 0.01 285);
   --foreground: oklch(0.96 0 0);

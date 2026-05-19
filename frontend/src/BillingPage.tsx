@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { listPlans, createRazorpaySubscription, verifyRazorpaySubscription, type Plan } from '@/api/razorpayApi'
 import { fetchSubscription } from '@/api/productApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CreditCard, CheckCircle } from 'lucide-react'
@@ -97,7 +97,8 @@ export function BillingPage() {
   }
 
   return (
-    <AppShell title="Billing" description="Choose your plan and manage your subscription." mainClassName="overflow-y-auto">
+    <div className="h-full overflow-y-auto">
+      <PageHeader title="Billing" description="Choose your plan and manage your subscription." />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-4 sm:px-6">
         <div>
           <h2 className="mb-1 text-lg font-semibold text-white">Subscription Plans</h2>
@@ -178,6 +179,6 @@ export function BillingPage() {
           </p>
         </div>
       </div>
-    </AppShell>
+    </div>
   )
 }

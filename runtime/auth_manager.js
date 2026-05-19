@@ -24,7 +24,7 @@ function _getKeytar() {
   } catch (e) {
     // keytar unavailable — fall back to plaintext file (dev/testing only)
     _keytar = {
-      _file: path.join(process.env.CONXA_DIR || require("os").homedir() + "/.conxa", "cache", ".keytar.json"),
+      _file: path.join(process.env.CONXA_DATA_DIR || require("os").homedir() + "/.conxa", "cache", ".keytar.json"),
       _load() {
         try { return JSON.parse(fs.readFileSync(this._file, "utf8")); } catch (_) { return {}; }
       },

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { deleteSkillPackage, fetchSkillList, renameSkill, type SkillSummary } from './api/workflowApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -120,24 +120,24 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
   }
 
   return (
-    <AppShell
-      title={pageTitle}
-      description={pageDescription}
-      mainClassName="overflow-y-auto"
-      actions={
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
-          onClick={() => void q.refetch()}
-          disabled={q.isFetching}
-        >
-          <RefreshCw className={cn('size-3.5', q.isFetching && 'animate-spin')} />
-          Refresh
-        </Button>
-      }
-    >
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title={pageTitle}
+        description={pageDescription}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
+            onClick={() => void q.refetch()}
+            disabled={q.isFetching}
+          >
+            <RefreshCw className={cn('size-3.5', q.isFetching && 'animate-spin')} />
+            Refresh
+          </Button>
+        }
+      />
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5">
         <section className="overflow-hidden rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
           <div className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(19rem,0.9fr)] lg:items-end">
@@ -513,6 +513,6 @@ export function SkillLibraryPage({ mode }: { mode: Mode }) {
           </form>
         </DialogContent>
       </Dialog>
-    </AppShell>
+    </div>
   )
 }

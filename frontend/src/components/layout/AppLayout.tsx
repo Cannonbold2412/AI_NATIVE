@@ -27,6 +27,7 @@ import {
   Home,
   Layers,
   Menu,
+  PackageCheck,
   Puzzle,
   Search,
   Settings,
@@ -43,6 +44,7 @@ const navGroups = [
       { to: '/plugins', label: 'Plugins', icon: Puzzle, exact: false },
       { to: '/build', label: 'Build Plugin', icon: Hammer, exact: false },
       { to: '/packages', label: 'Packages', icon: FolderKanban, exact: false },
+      { to: '/build-installer', label: 'Build Installer', icon: PackageCheck, exact: false },
     ],
   },
   {

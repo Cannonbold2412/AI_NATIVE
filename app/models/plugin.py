@@ -42,6 +42,7 @@ class Plugin(BaseModel):
     slug: str
     name: str
     owner_user_id: str = "local"
+    workspace_id: str = ""
     target_url: str
     protected_url: str
     protected_url_marker_text: str = ""

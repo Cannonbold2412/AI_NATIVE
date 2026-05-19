@@ -16,6 +16,76 @@ async function json<T>(response: Response): Promise<T> {
   return raw ? (JSON.parse(raw) as T) : ({} as T)
 }
 
+async function streamErrorMessage(response: Response): Promise<string> {
+  const raw = (await response.text()).trim()
+  if (!raw) return response.statusText || 'Request failed'
+  try {
+    const parsed = JSON.parse(raw) as { detail?: unknown; message?: unknown }
+    const detail = parsed.detail ?? parsed.message
+    if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  } catch {
+    // keep raw
+  }
+  return raw
+}
+
+export async function readPluginSse<T = unknown>(
+  response: Response,
+  onLog: (message: string) => void,
+): Promise<T | null> {
+  if (!response.ok) {
+    throw new Error(await streamErrorMessage(response))
+  }
+  if (!response.body) throw new Error('No response body')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+
+    for (;;) {
+      const sep = buffer.indexOf('\n\n')
+      if (sep === -1) break
+      const block = buffer.slice(0, sep)
+      buffer = buffer.slice(sep + 2)
+      const dataLines = block
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+      if (dataLines.length === 0) continue
+
+      let parsed: {
+        event?: string
+        entry?: { message?: unknown }
+        message?: unknown
+        result?: T
+      }
+      try {
+        parsed = JSON.parse(dataLines.join('\n'))
+      } catch {
+        continue
+      }
+
+      if (parsed.event === 'log') {
+        const message = parsed.entry?.message
+        onLog(typeof message === 'string' ? message : JSON.stringify(parsed.entry ?? {}))
+      } else if (parsed.event === 'done') {
+        return parsed.result ?? null
+      } else if (parsed.event === 'error') {
+        const message = typeof parsed.message === 'string' && parsed.message.trim() ? parsed.message.trim() : 'Build failed'
+        throw new Error(message)
+      }
+    }
+
+    if (done) break
+  }
+
+  throw new Error('Build stream ended before a completion event.')
+}
+
 export type PluginWorkflow = {
   id: string
   slug: string

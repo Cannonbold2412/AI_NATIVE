@@ -4,7 +4,7 @@ import { type ChangeEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useRecordingSession } from './hooks/useRecordingSession'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -73,27 +73,27 @@ export function HomePage() {
   const metricHighlights = metricEntries.slice(0, 3)
 
   return (
-    <AppShell
-      title="New recording"
-      description="Record a browser workflow, compile it into a package, and move into review without leaving the workspace."
-      mainClassName="overflow-y-auto"
-      actions={
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
-          >
-            <Link href="/edit">
-              <Pencil className="size-3.5" />
-              Edit Skill
-            </Link>
-          </Button>
-          <FlowStatusBadge isCompiling={isCompiling} isRecording={isRecording} />
-        </>
-      }
-    >
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title="New recording"
+        description="Record a browser workflow, compile it into a package, and move into review without leaving the workspace."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
+            >
+              <Link href="/edit">
+                <Pencil className="size-3.5" />
+                Edit Skill
+              </Link>
+            </Button>
+            <FlowStatusBadge isCompiling={isCompiling} isRecording={isRecording} />
+          </>
+        }
+      />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5">
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_20rem]">
           <Card className="overflow-hidden border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] shadow-none">
@@ -298,6 +298,6 @@ export function HomePage() {
           </Card>
         </section>
       </div>
-    </AppShell>
+    </div>
   )
 }

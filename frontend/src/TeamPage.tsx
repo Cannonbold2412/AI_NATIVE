@@ -1,22 +1,25 @@
 'use client'
 
-import { OrganizationSwitcher } from '@clerk/nextjs'
-import { AppShell } from '@/components/layout/AppLayout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { OrganizationProfile } from '@clerk/nextjs'
+import { PageHeader } from '@/components/layout/PageHeader'
 
 export function TeamPage() {
   return (
-    <AppShell title="Team" description="Workspace membership and organization controls." mainClassName="overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-4 sm:px-6">
-        <Card className="border-white/8 bg-white/[0.03] shadow-none">
-          <CardHeader className="border-b border-white/8">
-            <CardTitle className="text-white">Members</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <OrganizationSwitcher hidePersonal afterSelectOrganizationUrl="/" afterCreateOrganizationUrl="/" />
-          </CardContent>
-        </Card>
+    <div className="h-full overflow-y-auto">
+      <PageHeader title="Team" description="Workspace membership and organization controls." />
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6 sm:px-6">
+        <OrganizationProfile
+          routing="hash"
+          appearance={{
+            elements: {
+              rootBox: 'w-full',
+              card: 'bg-transparent border border-white/8 shadow-none',
+              navbar: 'hidden',
+              pageScrollBox: 'p-0',
+            },
+          }}
+        />
       </div>
-    </AppShell>
+    </div>
   )
 }

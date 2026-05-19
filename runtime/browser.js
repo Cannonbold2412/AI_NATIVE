@@ -4,8 +4,15 @@ const fs   = require("fs");
 const path = require("path");
 const os   = require("os");
 
-const CONXA_DIR   = process.env.CONXA_DIR || path.join(os.homedir(), ".conxa");
-const SESSIONS_DIR = path.join(CONXA_DIR, "cache", "sessions");
+const CONXA_DIR      = process.env.CONXA_DIR || (
+  process.platform === "win32" ? "C:\\Program Files\\Conxa" : path.join(os.homedir(), ".conxa")
+);
+const CONXA_DATA_DIR = process.env.CONXA_DATA_DIR || (
+  process.platform === "win32"
+    ? path.join(os.homedir(), "AppData", "Roaming", "Conxa")
+    : path.join(os.homedir(), ".conxa")
+);
+const SESSIONS_DIR = path.join(CONXA_DATA_DIR, "cache", "sessions");
 
 // ─── Browser cache (per-company, 5-min idle timeout) ─────────────────────────
 
@@ -23,20 +30,25 @@ function _scheduleCleanup(company) {
   }, IDLE_MS);
 }
 
-async function getCachedBrowser(company) {
-  const entry = _cache.get(company);
-  if (entry && entry.browser && entry.context) {
-    try {
-      entry.context.pages(); // throws if closed
-      _scheduleCleanup(company);
-      return { browser: entry.browser, context: entry.context, cached: true };
-    } catch (_) {
-      _cache.delete(company);
+async function getCachedBrowser(company, authManager, opts = {}) {
+  const headless = opts.headless !== false; // default true
+  if (headless) {
+    const entry = _cache.get(company);
+    if (entry && entry.browser && entry.context) {
+      try {
+        entry.context.pages(); // throws if closed
+        _scheduleCleanup(company);
+        return { browser: entry.browser, context: entry.context, cached: true };
+      } catch (_) {
+        _cache.delete(company);
+      }
     }
   }
-  const result = await getAuthContext(company);
-  _cache.set(company, { browser: result.browser, context: result.context, idleTimer: null });
-  _scheduleCleanup(company);
+  const result = await getAuthContext(company, authManager, { headless });
+  if (headless) {
+    _cache.set(company, { browser: result.browser, context: result.context, idleTimer: null });
+    _scheduleCleanup(company);
+  }
   return { ...result, cached: false };
 }
 
@@ -49,7 +61,8 @@ function _isAuthenticated(page, protectedUrl) {
   } catch (_) { return false; }
 }
 
-async function getAuthContext(company, authManager) {
+async function getAuthContext(company, authManager, opts = {}) {
+  const headless = opts.headless !== false; // default true
   // Resolve pack config for this company
   const packPath = path.join(CONXA_DIR, "skill-packs", company, "pack.json");
   let pack = {};
@@ -64,7 +77,7 @@ async function getAuthContext(company, authManager) {
       if (token) {
         const stored = authManager.loadDecryptedSession(company, token, SESSIONS_DIR);
         if (stored) {
-          const browser  = await chromium.launch({ headless: true });
+          const browser  = await chromium.launch({ headless });
           const context  = await browser.newContext({ storageState: stored });
           if (protectedUrl) {
             const page = await context.newPage();
@@ -90,7 +103,7 @@ async function getAuthContext(company, authManager) {
     let stored;
     try { stored = JSON.parse(fs.readFileSync(rawSessionPath, "utf8")); } catch (_) {}
     if (stored) {
-      const browser  = await chromium.launch({ headless: true });
+      const browser  = await chromium.launch({ headless });
       const context  = await browser.newContext({ storageState: stored });
       if (protectedUrl) {
         const page = await context.newPage();
@@ -147,7 +160,7 @@ async function getAuthContext(company, authManager) {
     fs.writeFileSync(path.join(SESSIONS_DIR, `${company}_raw_state.json`), JSON.stringify(state, null, 2), { mode: 0o600 });
   }
 
-  const browser  = await chromium.launch({ headless: true });
+  const browser  = await chromium.launch({ headless });
   const context  = await browser.newContext({ storageState: state });
   return { browser, context, sessionSource: "new" };
 }

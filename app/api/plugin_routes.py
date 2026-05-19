@@ -16,13 +16,14 @@ from pathlib import Path
 from queue import SimpleQueue
 from typing import Any, AsyncIterator, Callable
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.models.plugin import Plugin
 from app.recorder.session import registry
+from app.services.saas import principal_from_request, ensure_principal
 from app.storage.plugin_store import (
     add_workflow,
     create_plugin,
@@ -109,31 +110,41 @@ def _sse_line(payload: dict[str, Any]) -> bytes:
 # ---------------------------------------------------------------------------
 
 @router.post("")
-def post_create_plugin(body: CreatePluginBody) -> dict[str, Any]:
+def post_create_plugin(body: CreatePluginBody, request: Request) -> dict[str, Any]:
+    principal = principal_from_request(request)
+    ensure_principal(principal)
     plugin = create_plugin(
         name=body.name,
         target_url=body.target_url,
         protected_url=body.protected_url,
         protected_url_marker_text=body.protected_url_marker_text,
+        workspace_id=principal.workspace_id,
     )
     return {"plugin": plugin.model_dump(mode="json")}
 
 
 @router.get("")
-def get_list_plugins() -> dict[str, Any]:
-    plugins = list_plugins()
+def get_list_plugins(request: Request) -> dict[str, Any]:
+    principal = principal_from_request(request)
+    plugins = list_plugins(workspace_id=principal.workspace_id)
     return {"plugins": [p.model_dump(mode="json") for p in plugins]}
 
 
 @router.get("/{plugin_id}")
-def get_plugin_detail(plugin_id: str) -> dict[str, Any]:
-    plugin = _plugin_or_404(plugin_id)
+def get_plugin_detail(plugin_id: str, request: Request) -> dict[str, Any]:
+    principal = principal_from_request(request)
+    plugin = get_plugin(plugin_id, workspace_id=principal.workspace_id)
+    if plugin is None:
+        raise HTTPException(status_code=404, detail="Plugin not found.")
     return {"plugin": plugin.model_dump(mode="json")}
 
 
 @router.delete("/{plugin_id}")
-def delete_plugin_endpoint(plugin_id: str) -> dict[str, Any]:
-    plugin = _plugin_or_404(plugin_id)
+def delete_plugin_endpoint(plugin_id: str, request: Request) -> dict[str, Any]:
+    principal = principal_from_request(request)
+    plugin = get_plugin(plugin_id, workspace_id=principal.workspace_id)
+    if plugin is None:
+        raise HTTPException(status_code=404, detail="Plugin not found.")
     # Remove built output if present.
     if plugin.build and plugin.build.output_path:
         out_path = Path(plugin.build.output_path)

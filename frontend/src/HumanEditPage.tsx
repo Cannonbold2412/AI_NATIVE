@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import type { WorkflowResponse } from './types/workflow'
 import {
   deleteStep,
@@ -380,20 +380,21 @@ export function HumanEditPage() {
 
   if (!skillId) {
     return (
-      <AppShell
-        title="Edit Skill"
-        description="After recording compiles into a skill, open it here — your edits overwrite that same skill package (same id/title)."
-        actions={
-          <>
-            <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
-              <Link href="/dashboard">
-                <Home className="size-3.5" />
-                Home
-              </Link>
-            </Button>
-          </>
-        }
-      >
+      <div className="h-full overflow-y-auto">
+        <PageHeader
+          title="Edit Skill"
+          description="After recording compiles into a skill, open it here — your edits overwrite that same skill package (same id/title)."
+          actions={
+            <>
+              <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
+                <Link href="/dashboard">
+                  <Home className="size-3.5" />
+                  Home
+                </Link>
+              </Button>
+            </>
+          }
+        />
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
             <Card className="border-white/8 bg-white/[0.035] shadow-none">
@@ -537,16 +538,14 @@ export function HumanEditPage() {
             </Card>
           </section>
         </div>
-      </AppShell>
+      </div>
     )
   }
 
   if (q.isLoading) {
     return (
-      <AppShell
-        title="Edit Skill"
-        description="Preparing the workflow editor and loading steps."
-      >
+      <div className="h-full overflow-y-auto">
+        <PageHeader title="Edit Skill" description="Preparing the workflow editor and loading steps." />
         <div className="flex flex-1 flex-col gap-4 px-4 py-4 md:px-6">
           <div className="bg-muted/15 border-border/60 max-w-2xl rounded-lg border p-4 shadow-sm">
             <Skeleton className="mb-2 h-4 w-32" />
@@ -558,15 +557,13 @@ export function HumanEditPage() {
             <Skeleton className="h-full min-h-[220px] rounded-lg md:min-h-0" />
           </div>
         </div>
-      </AppShell>
+      </div>
     )
   }
   if (q.isError) {
     return (
-      <AppShell
-        title="Edit Skill"
-        description="The skill could not be opened."
-      >
+      <div className="h-full overflow-y-auto">
+        <PageHeader title="Edit Skill" description="The skill could not be opened." />
         <main className="flex flex-1 items-center justify-center p-6">
           <Card className="max-w-md border-red-500/20 bg-red-500/5 shadow-none">
             <CardHeader>
@@ -589,7 +586,7 @@ export function HumanEditPage() {
             </CardContent>
           </Card>
         </main>
-      </AppShell>
+      </div>
     )
   }
   if (!q.data) return null
@@ -606,7 +603,8 @@ export function HumanEditPage() {
   } as CSSProperties
 
   return (
-    <AppShell
+    <div className="flex h-full min-h-0 flex-col">
+    <PageHeader
       title={`Skill: ${skillTitle}`}
       description={
         skillId ? (
@@ -706,10 +704,10 @@ export function HumanEditPage() {
           </span>
         </div>
       }
-    >
+    />
       <div
         ref={splitPaneRef}
-        className="relative grid h-full min-h-0 w-full min-w-0 grid-cols-1 overflow-hidden border-t border-white/8 md:min-h-0 md:[grid-template-columns:var(--workflow-pane-width)_minmax(0,1fr)_var(--tools-pane-width)] md:items-stretch"
+        className="relative grid flex-1 min-h-0 w-full min-w-0 grid-cols-1 overflow-hidden border-t border-white/8 md:min-h-0 md:[grid-template-columns:var(--workflow-pane-width)_minmax(0,1fr)_var(--tools-pane-width)] md:items-stretch"
         style={splitPaneStyle}
       >
         <WorkflowViewer
@@ -918,6 +916,6 @@ export function HumanEditPage() {
           </ScrollArea>
         </aside>
       </div>
-    </AppShell>
+    </div>
   )
 }

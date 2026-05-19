@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Download, FileJson, Pencil } from 'lucide-react'
 import { fetchSkillDocument } from './api/workflowApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -49,11 +49,11 @@ export function SkillJsonPage() {
   }, [q.data, skillId])
 
   return (
-    <AppShell
-      title={skillTitle}
-      description={`Skill JSON - ${skillId || 'unknown id'}`}
-      mainClassName="overflow-y-auto"
-      actions={
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title={skillTitle}
+        description={`Skill JSON - ${skillId || 'unknown id'}`}
+        actions={
         <>
           <Button variant="outline" size="sm" asChild className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]">
             <Link href="/skills">Back to library</Link>
@@ -78,7 +78,7 @@ export function SkillJsonPage() {
           </Button>
         </>
       }
-    >
+      />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
         <Card className="border-white/8 bg-white/[0.035] shadow-none">
           <CardHeader className="border-b border-white/8">
@@ -109,6 +109,6 @@ export function SkillJsonPage() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
+    </div>
   )
 }

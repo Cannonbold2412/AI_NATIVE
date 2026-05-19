@@ -36,6 +36,7 @@ class Principal:
     workspace_id: str
     workspace_slug: str
     workspace_name: str
+    role: str = "owner"
     email: str | None = None
     name: str | None = None
     auth_provider: str = "local"
@@ -53,7 +54,7 @@ class Principal:
             "id": self.workspace_id,
             "slug": self.workspace_slug,
             "name": self.workspace_name,
-            "role": "owner",
+            "role": self.role,
         }
 
 
@@ -146,11 +147,13 @@ def principal_from_request(request: Request) -> Principal:
     subject = str(auth["subject"])
     org_id = str(auth.get("org_id") or f"personal_{subject}")
     workspace_slug = _slug_from_org_id(org_id)
+    org_role = str(auth.get("org_role") or claims.get("org_role") or "basic_member")
     return Principal(
         user_id=subject,
         workspace_id=org_id,
         workspace_slug=workspace_slug,
         workspace_name=str(claims.get("org_name") or claims.get("azp") or "Workspace"),
+        role=org_role,
         email=str(claims.get("email") or claims.get("primary_email_address") or "") or None,
         name=str(claims.get("name") or claims.get("full_name") or "") or None,
         auth_provider="clerk",

@@ -14,6 +14,7 @@ from typing import Any
 
 from app.config import settings
 from app.models.plugin import Plugin, PluginWorkflow, PluginAuth, PluginBuild, PluginInstaller
+from app.services.saas import LOCAL_WORKSPACE_ID
 
 
 def _plugins_dir() -> Path:
@@ -44,7 +45,13 @@ def _write_raw(plugin: Plugin) -> None:
     )
 
 
-def create_plugin(name: str, target_url: str, protected_url: str, protected_url_marker_text: str = "") -> Plugin:
+def _migrate_workspace(raw: dict) -> dict:
+    if not raw.get("workspace_id"):
+        raw["workspace_id"] = LOCAL_WORKSPACE_ID
+    return raw
+
+
+def create_plugin(name: str, target_url: str, protected_url: str, protected_url_marker_text: str = "", workspace_id: str = "") -> Plugin:
     import re
     slug_base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "plugin"
     plugin_id = str(uuid.uuid4())
@@ -53,6 +60,7 @@ def create_plugin(name: str, target_url: str, protected_url: str, protected_url_
         id=plugin_id,
         slug=f"{slug_base}-{plugin_id[:8]}",
         name=name,
+        workspace_id=workspace_id or LOCAL_WORKSPACE_ID,
         target_url=target_url,
         protected_url=protected_url,
         protected_url_marker_text=protected_url_marker_text,
@@ -64,24 +72,32 @@ def create_plugin(name: str, target_url: str, protected_url: str, protected_url_
     return plugin
 
 
-def get_plugin(plugin_id: str) -> Plugin | None:
+def get_plugin(plugin_id: str, workspace_id: str = "") -> Plugin | None:
     raw = _read_raw(plugin_id)
     if raw is None:
         return None
     try:
-        return Plugin.model_validate(raw)
+        raw = _migrate_workspace(raw)
+        plugin = Plugin.model_validate(raw)
+        if workspace_id and plugin.workspace_id != workspace_id:
+            return None
+        return plugin
     except Exception:
         return None
 
 
-def list_plugins() -> list[Plugin]:
+def list_plugins(workspace_id: str = "") -> list[Plugin]:
     out: list[Plugin] = []
     base = _plugins_dir()
     paths = sorted(base.glob("*.json"), key=lambda p: p.stat().st_mtime_ns, reverse=True)
     for path in paths:
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-            out.append(Plugin.model_validate(raw))
+            raw = _migrate_workspace(raw)
+            plugin = Plugin.model_validate(raw)
+            if workspace_id and plugin.workspace_id != workspace_id:
+                continue
+            out.append(plugin)
         except Exception:
             continue
     return out

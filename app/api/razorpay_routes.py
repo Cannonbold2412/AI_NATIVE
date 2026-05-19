@@ -12,6 +12,7 @@ import razorpay
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.config import settings
+from app.services.rbac import require_admin
 from app.services.saas import Principal, ensure_principal, principal_from_request, upsert_billing
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
@@ -125,8 +126,9 @@ def list_plans() -> dict[str, Any]:
 
 
 @router.post("/create")
-async def create_subscription(body: dict[str, str]) -> dict[str, Any]:
+async def create_subscription(body: dict[str, str], principal: Principal = Depends(current_principal)) -> dict[str, Any]:
     """Create a Razorpay subscription for a tier. Returns subscription_id."""
+    require_admin(principal)
     tier = body.get("tier", "").lower()
     if tier not in ["basic", "pro"]:
         raise HTTPException(status_code=400, detail="tier must be 'basic' or 'pro'")

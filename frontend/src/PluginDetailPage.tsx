@@ -16,7 +16,7 @@ import {
   type Plugin,
   type Run,
 } from '@/api/pluginApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -850,30 +850,30 @@ export function PluginDetailPage({ pluginId }: { pluginId: string }) {
 
   if (q.isLoading) {
     return (
-      <AppShell title="Plugin" mainClassName="overflow-y-auto">
+      <div className="h-full overflow-y-auto">
+        <PageHeader title="Plugin" />
         <p className="px-6 py-6 text-sm text-zinc-500">Loading…</p>
-      </AppShell>
+      </div>
     )
   }
 
   if (q.isError || !q.data) {
     return (
-      <AppShell title="Plugin" mainClassName="overflow-y-auto">
+      <div className="h-full overflow-y-auto">
+        <PageHeader title="Plugin" />
         <p className="px-6 py-6 text-sm text-red-400">{(q.error as Error)?.message ?? 'Not found'}</p>
-      </AppShell>
+      </div>
     )
   }
 
   const plugin = q.data.plugin
 
   return (
-    <AppShell
-      title={plugin.name}
-      description={
-        <span className="truncate font-mono text-xs text-zinc-500">{plugin.target_url}</span>
-      }
-      mainClassName="overflow-y-auto"
-    >
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title={plugin.name}
+        description={<span className="truncate font-mono text-xs text-zinc-500">{plugin.target_url}</span>}
+      />
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
         {/* Status bar */}
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 text-xs text-zinc-400">
@@ -948,6 +948,6 @@ export function PluginDetailPage({ pluginId }: { pluginId: string }) {
           </TabsContent>
         </Tabs>
       </div>
-    </AppShell>
+    </div>
   )
 }

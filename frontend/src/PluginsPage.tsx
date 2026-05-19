@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createPlugin, deletePlugin, fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -166,12 +166,12 @@ export function PluginsPage() {
   })
 
   return (
-    <AppShell
-      title="Plugins"
-      description="Each plugin bundles auth + workflows for one web app."
-      actions={<CreatePluginDialog onCreated={refetch} />}
-      mainClassName="overflow-y-auto"
-    >
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title="Plugins"
+        description="Each plugin bundles auth + workflows for one web app."
+        actions={<CreatePluginDialog onCreated={refetch} />}
+      />
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6">
         {/* Search + filter bar */}
         {plugins.length > 0 ? (
@@ -259,6 +259,6 @@ export function PluginsPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </div>
   )
 }

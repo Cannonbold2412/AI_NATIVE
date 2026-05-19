@@ -12,7 +12,7 @@ import {
   renameStoredSkillPackage,
   type SkillPackageSummary,
 } from '@/api/workflowApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -136,12 +136,6 @@ function defaultSkillPackageActiveKey(keys: string[]): string | null {
   const ordered = orderedSkillPackageKeys(keys)
   const preferred = ordered.find((k) => k === 'plugin.config.json' || k === 'README.md' || k.endsWith('/SKILL.md'))
   return preferred ?? ordered[0] ?? null
-}
-
-function previewPathForKey(bundleRoot: string, bundleName: string, key: string | null): string {
-  const base = `root/${bundleRoot}/${bundleName}`
-  if (!key) return 'Select a file to preview'
-  return `${base}/${key}`
 }
 
 function isImageVisualKey(key: string): boolean {
@@ -465,6 +459,7 @@ export function SkillPackagesPage() {
       ? base64DecodedBytes(activeSource)
       : new Blob([activeSource]).size
     : 0
+
   async function handleDownload(packageName: string) {
     setDownloadingName(packageName)
     try {
@@ -614,33 +609,33 @@ export function SkillPackagesPage() {
   }, [isResizingStructurePane])
 
   return (
-    <AppShell
-      title="Skill packages"
-      description="Review generated workflow bundles, inspect the file set, and export ZIP archives from one production-ready workspace."
-      mainClassName="min-w-0 overflow-x-hidden overflow-y-auto"
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-300">
-            {bundleRootDisplay}/
-          </Badge>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={cn(
-              'cursor-pointer border-white/10 bg-white/[0.04] text-zinc-200',
-              ROW_TRANSITION,
-              'hover:bg-white/[0.08]',
-            )}
-            onClick={() => void q.refetch()}
-            disabled={q.isFetching}
-          >
-            <RefreshCw className={cn('size-3.5', q.isFetching && 'animate-spin motion-reduce:animate-none')} />
-            Refresh
-          </Button>
-        </div>
-      }
-    >
+    <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto">
+      <PageHeader
+        title="Packages"
+        description="Inspect Build Plugin output and export generated package ZIP archives."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-300">
+              {bundleRootDisplay}/
+            </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(
+                'cursor-pointer border-white/10 bg-white/[0.04] text-zinc-200',
+                ROW_TRANSITION,
+                'hover:bg-white/[0.08]',
+              )}
+              onClick={() => void q.refetch()}
+              disabled={q.isFetching}
+            >
+              <RefreshCw className={cn('size-3.5', q.isFetching && 'animate-spin motion-reduce:animate-none')} />
+              Refresh
+            </Button>
+          </div>
+        }
+      />
       <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4">
         {q.isLoading ? (
           <div className="flex min-h-[min(640px,calc(100vh-9rem))] min-w-0 flex-col gap-3 md:flex-row md:items-stretch">
@@ -680,7 +675,7 @@ export function SkillPackagesPage() {
               <div className="space-y-2">
                 <p className="text-lg font-semibold tracking-tight text-white">No packages yet</p>
                 <p className="text-sm leading-relaxed text-zinc-500">
-                  Generate a package in Skill Pack Builder. Saved workflow bundles appear here for review, validation, and ZIP export.
+                  Use Build Plugin to generate a package. Saved workflow bundles appear here for review and ZIP export.
                 </p>
               </div>
             </div>
@@ -928,7 +923,7 @@ export function SkillPackagesPage() {
                 </div>
               </div>
 
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-2 sm:p-3">
                 {filesQ.isError ? (
                   <div className="rounded-2xl border border-red-500/25 bg-red-500/[0.06] p-4 text-sm text-red-100">
                     {errorMessage(filesQ.error, 'Could not load package files.')}
@@ -1135,6 +1130,6 @@ export function SkillPackagesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppShell>
+    </div>
   )
 }

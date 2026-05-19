@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { cancelJob, fetchJobs } from '@/api/productApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { DataTable, EmptyState, ErrorState, LoadingState, StatusBadge } from '@/components/product/ProductPrimitives'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, XCircle } from 'lucide-react'
@@ -27,17 +27,17 @@ export function JobsPage() {
   }
 
   return (
-    <AppShell
-      title="Jobs"
-      description="Queued, running, completed, failed, and canceled worker-backed operations."
-      mainClassName="overflow-y-auto"
-      actions={
-        <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.04] text-zinc-200" onClick={() => void q.refetch()}>
-          <RefreshCw className="size-3.5" />
-          Refresh
-        </Button>
-      }
-    >
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title="Jobs"
+        description="Queued, running, completed, failed, and canceled worker-backed operations."
+        actions={
+          <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.04] text-zinc-200" onClick={() => void q.refetch()}>
+            <RefreshCw className="size-3.5" />
+            Refresh
+          </Button>
+        }
+      />
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6">
         {q.isLoading ? <LoadingState label="Loading jobs" /> : null}
         {q.isError ? <ErrorState message={(q.error as Error).message} /> : null}
@@ -78,6 +78,6 @@ export function JobsPage() {
           </DataTable>
         ) : null}
       </div>
-    </AppShell>
+    </div>
   )
 }

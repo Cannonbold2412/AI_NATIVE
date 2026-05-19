@@ -11,7 +11,7 @@ import {
   SkillPackBuildRequestError,
   type SkillPackageSummary,
 } from '@/api/workflowApi'
-import { AppShell } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -556,19 +556,19 @@ export function SkillPackBuilderPage() {
   }
 
   return (
-    <AppShell
-      title="Skill Pack Builder"
-      description="Build workflow folders inside a named package: output/skill_package/<package_name>/workflows/<workflow_slug>. Append adds another workflow folder to an existing named package."
-      mainClassName="overflow-y-auto"
-      actions={
-        result && createdWorkflowNames.length === 1 ? (
-          <Button type="button" size="sm" onClick={() => void handleZipDownload()}>
-            <Download className="size-3.5" />
-            Download ZIP
-          </Button>
-        ) : null
-      }
-    >
+    <div className="h-full overflow-y-auto">
+      <PageHeader
+        title="Skill Pack Builder"
+        description="Build workflow folders inside a named package."
+        actions={
+          result && createdWorkflowNames.length === 1 ? (
+            <Button type="button" size="sm" onClick={() => void handleZipDownload()}>
+              <Download className="size-3.5" />
+              Download ZIP
+            </Button>
+          ) : null
+        }
+      />
       <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
         <Card className="border-white/8 bg-white/[0.035] shadow-none">
           <CardHeader className="border-b border-white/8">
@@ -917,6 +917,6 @@ export function SkillPackBuilderPage() {
           </Card>
         ) : null}
       </div>
-    </AppShell>
+    </div>
   )
 }

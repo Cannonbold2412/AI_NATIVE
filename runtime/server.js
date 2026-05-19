@@ -6,23 +6,29 @@ const os     = require("os");
 const https  = require("https");
 const semver = require("semver");
 
-// ─── 1. Resolve CONXA_DIR ─────────────────────────────────────────────────────
+// ─── 1. Resolve CONXA_DIR (install, read-only) and CONXA_DATA_DIR (user-writable) ─
 const CONXA_DIR = process.env.CONXA_DIR || (
   process.platform === "win32"
     ? "C:\\Program Files\\Conxa"
     : path.join(os.homedir(), ".conxa")
 );
+const CONXA_DATA_DIR = process.env.CONXA_DATA_DIR || (
+  process.platform === "win32"
+    ? path.join(os.homedir(), "AppData", "Roaming", "Conxa")
+    : path.join(os.homedir(), ".conxa")
+);
 
 const SKILL_PACKS_DIR = path.join(CONXA_DIR, "skill-packs");
-const CACHE_DIR       = path.join(CONXA_DIR, "cache");
+const CACHE_DIR       = path.join(CONXA_DATA_DIR, "cache");
 const SESSIONS_DIR    = path.join(CACHE_DIR, "sessions");
-const LOG_FILE        = path.join(CONXA_DIR, "logs", "runtime.log");
+const LOG_FILE        = path.join(CONXA_DATA_DIR, "logs", "runtime.log");
 const RUNTIME_VERSION = require("./package.json").version;
 
 // ─── 2. Playwright browser path (MUST precede any playwright require) ─────────
 process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(CONXA_DIR, "chromium");
-// Override session dir for browser.js
-process.env.CONXA_DIR = CONXA_DIR;
+// Pass both dirs to browser.js
+process.env.CONXA_DIR      = CONXA_DIR;
+process.env.CONXA_DATA_DIR = CONXA_DATA_DIR;
 
 // ─── 3. Handle CLI flags (--install-playwright, --register-mcp, etc.) ─────────
 const [,, ...cliArgs] = process.argv;
@@ -147,7 +153,7 @@ function _toolDefinitions() {
     },
     {
       name: "execute_skill",
-      description: "Execute a workflow skill. Handles auth on demand — returns auth_required if the user needs to authenticate first. Returns result + screenshot on success, or failure data for recovery.",
+      description: "Execute a workflow skill. ALWAYS ask the user 'Do you want to watch while I work?' before calling this tool — pass watch: true if they say yes, watch: false if no. Returns result + screenshot on success, or failure data for recovery.",
       inputSchema: {
         type: "object",
         properties: {
@@ -155,13 +161,14 @@ function _toolDefinitions() {
           company:     { type: "string",  description: "Company slug (required if skill slug is not unique)" },
           inputs:      { type: "object",  description: "Input values. Call get_skill_inputs first to see the schema." },
           resume_from: { type: "integer", description: "Step index to resume from after fixing a failure." },
+          watch:       { type: "boolean", description: "true = open a visible browser so the user can watch; false = run headlessly in the background." },
         },
         required: ["skill"],
       },
     },
     {
       name: "execute_sequence",
-      description: "Execute an ordered list of skills in one shared browser session.",
+      description: "Execute an ordered list of skills in one shared browser session. ALWAYS ask the user 'Do you want to watch while I work?' before calling — pass watch: true if yes, false if no.",
       inputSchema: {
         type: "object",
         properties: {
@@ -177,6 +184,7 @@ function _toolDefinitions() {
               required: ["skill"],
             },
           },
+          watch: { type: "boolean", description: "true = visible browser; false = headless." },
         },
         required: ["skills"],
       },
@@ -414,6 +422,7 @@ async function _handleTool(name, args) {
 
   // ── execute_skill / execute_sequence ─────────────────────────────────────────
   if (name === "execute_skill" || name === "execute_sequence") {
+    const watch = args.watch === true;
     const runs = name === "execute_sequence"
       ? (Array.isArray(args.skills) ? args.skills : [])
       : [{ skill: args.skill, company: args.company, inputs: args.inputs, resume_from: args.resume_from }];
@@ -428,20 +437,6 @@ async function _handleTool(name, args) {
     for (const run of runs) {
       const entry = _resolveSkill(String(run.skill || ""), run.company ? String(run.company) : null);
       if (!entry) return err(`Skill not found: ${run.skill}. Call list_skills.`);
-
-      // Auth gate (Conxa token)
-      let token;
-      try { token = await authManager.getToken(entry.company); } catch (_) { token = null; }
-      if (!token) {
-        const { url } = authManager.getAuthChallengeUrl(entry.company);
-        return text(JSON.stringify({
-          status:      "auth_required",
-          company:     entry.company,
-          message:     `Authentication required for ${entry.company} workflows.`,
-          auth_url:    url,
-          instruction: "Ask the user to visit the auth_url to authenticate with Conxa, then retry.",
-        }));
-      }
 
       // Integrity gate
       try {
@@ -471,7 +466,6 @@ async function _handleTool(name, args) {
         steps,
         inputs:     (run.inputs && typeof run.inputs === "object") ? run.inputs : {},
         resumeFrom: (Number.isInteger(run.resume_from) && run.resume_from > 0) ? run.resume_from : 0,
-        token,
       });
     }
 
@@ -493,7 +487,7 @@ async function _handleTool(name, args) {
     let page = null;
     let _browser, _context;
     try {
-      ({ browser: _browser, context: _context } = await getCachedBrowser(primary.entry.company, authManager));
+      ({ browser: _browser, context: _context } = await getCachedBrowser(primary.entry.company, authManager, { headless: !watch }));
       page = await _context.newPage();
 
       const runtimeLog = { consoleErrors: [], pageErrors: [], failedRequests: [] };
@@ -523,7 +517,7 @@ async function _handleTool(name, args) {
 
       // Success — save session
       const state = await _context.storageState();
-      authManager.saveEncryptedSession(primary.entry.company, state, primary.token, SESSIONS_DIR);
+      authManager.saveRawSession(primary.entry.company, state, SESSIONS_DIR);
 
       const url  = page.url();
       const shot = await page.screenshot({ type: "png" }).catch(() => null);
