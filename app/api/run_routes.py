@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.db import db_append, db_get, db_list_kv
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -43,35 +44,44 @@ def _get_file_lock(key: str) -> threading.Lock:
 
 
 def _append_events(plugin_id: str, events: list[dict[str, Any]]) -> None:
+    db_append("runs", plugin_id, events)
+    # Also append to file for local dev
     path = _plugin_log_path(plugin_id)
-    lines = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lock = _get_file_lock(str(path))
-    with lock:
-        with path.open("a", encoding="utf-8") as f:
-            f.write(lines)
+    try:
+        lines = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock = _get_file_lock(str(path))
+        with lock:
+            with path.open("a", encoding="utf-8") as f:
+                f.write(lines)
+    except OSError:
+        pass
 
 
 def _read_events(plugin_id: str, since: float = 0.0) -> list[dict[str, Any]]:
-    path = _plugin_log_path(plugin_id)
-    if not path.is_file():
-        return []
-    events: list[dict[str, Any]] = []
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                e = json.loads(line)
-                if isinstance(e, dict):
-                    ts = e.get("ts") or e.get("timestamp") or ""
-                    # Simple ISO → epoch comparison using string prefix
-                    if since and ts and ts < _epoch_to_iso(since):
-                        continue
-                    events.append(e)
-            except (json.JSONDecodeError, ValueError):
-                continue
+    db_items = db_get("runs", plugin_id)
+    if db_items is not None:
+        events = db_items if isinstance(db_items, list) else []
+    else:
+        # File fallback
+        path = _plugin_log_path(plugin_id)
+        if not path.is_file():
+            return []
+        events = []
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                    if isinstance(e, dict):
+                        events.append(e)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+    if since:
+        cutoff = _epoch_to_iso(since)
+        events = [e for e in events if isinstance(e, dict) and not (e.get("ts") or e.get("timestamp") or "") < cutoff]
     return events
 
 
@@ -171,11 +181,14 @@ def get_runs(plugin_id: str = "", since: float = 0.0) -> dict[str, Any]:
         events = _read_events(plugin_id, since=since)
         runs = _group_by_run(events)
     else:
-        # Aggregate across all plugins
         all_events: list[dict[str, Any]] = []
-        for log_path in sorted(_runs_dir().glob("*.jsonl")):
-            pid = log_path.stem
-            all_events.extend(_read_events(pid, since=since))
+        db_pairs = db_list_kv("runs")
+        if db_pairs:
+            for pid, items in db_pairs:
+                all_events.extend(_read_events(pid, since=since))
+        else:
+            for log_path in sorted(_runs_dir().glob("*.jsonl")):
+                all_events.extend(_read_events(log_path.stem, since=since))
         runs = _group_by_run(all_events)
     return {"runs": runs}
 
@@ -184,9 +197,13 @@ def get_runs(plugin_id: str = "", since: float = 0.0) -> dict[str, Any]:
 def get_run(run_id: str) -> dict[str, Any]:
     """Return all events for a single run_id."""
     all_events: list[dict[str, Any]] = []
-    for log_path in sorted(_runs_dir().glob("*.jsonl")):
-        pid = log_path.stem
-        all_events.extend(_read_events(pid))
+    db_pairs = db_list_kv("runs")
+    if db_pairs:
+        for pid, _ in db_pairs:
+            all_events.extend(_read_events(pid))
+    else:
+        for log_path in sorted(_runs_dir().glob("*.jsonl")):
+            all_events.extend(_read_events(log_path.stem))
 
     run_events = [e for e in all_events if str(e.get("run_id") or "") == run_id]
     if not run_events:

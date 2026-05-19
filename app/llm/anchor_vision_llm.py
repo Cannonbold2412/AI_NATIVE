@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw
 
 from app.compiler.v3 import finalize_vision_anchors
 from app.config import settings
+from app.db import db_get, db_set
 from app.llm.client import call_llm, supports_multimodal_chat
 from app.policy.bundle import get_policy_bundle
 
@@ -45,6 +46,9 @@ def _cache_path() -> Path:
 
 
 def _read_cache() -> dict[str, Any]:
+    data = db_get("llm_cache", "anchor_vision")
+    if data is not None:
+        return data
     path = _cache_path()
     if not path.is_file():
         return {}
@@ -55,7 +59,11 @@ def _read_cache() -> dict[str, Any]:
 
 
 def _write_cache(cache: dict[str, Any]) -> None:
-    _cache_path().write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    db_set("llm_cache", "anchor_vision", cache)
+    try:
+        _cache_path().write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _vision_cfg(policy: dict[str, Any]) -> dict[str, Any]:

@@ -12,6 +12,7 @@ import razorpay
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.config import settings
+from app.db import db_get, db_set
 from app.services.rbac import require_admin
 from app.services.saas import Principal, ensure_principal, principal_from_request, upsert_billing
 
@@ -54,6 +55,9 @@ def _plan_store_path() -> Path:
 
 
 def _read_plan_store() -> dict[str, str]:
+    data = db_get("razorpay", "plans")
+    if data is not None:
+        return data
     path = _plan_store_path()
     if path.exists():
         return json.loads(path.read_text())
@@ -61,8 +65,12 @@ def _read_plan_store() -> dict[str, str]:
 
 
 def _write_plan_store(store: dict[str, str]) -> None:
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
-    _plan_store_path().write_text(json.dumps(store, indent=2))
+    db_set("razorpay", "plans", store)
+    try:
+        settings.data_dir.mkdir(parents=True, exist_ok=True)
+        _plan_store_path().write_text(json.dumps(store, indent=2))
+    except OSError:
+        pass
 
 
 def _ensure_plan(tier: str) -> str:

@@ -24,6 +24,7 @@ from urllib.parse import urlencode
 import httpx
 
 from app.config import settings
+from app.db import db_get, db_set, db_delete
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -78,27 +79,31 @@ class GithubStatus(TypedDict):
     scopes: list[str] | None
 
 
-def get_status(workspace_id: str) -> GithubStatus:
-    path = _token_path(workspace_id)
-    if not path.is_file():
-        return {"connected": False, "login": None, "scopes": None}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return {
-            "connected": True,
-            "login": data.get("login"),
-            "scopes": data.get("scopes", []),
-        }
-    except Exception:
-        return {"connected": False, "login": None, "scopes": None}
-
-
-def get_token(workspace_id: str) -> str | None:
+def _read_token_data(workspace_id: str) -> dict | None:
+    data = db_get("github_tokens", workspace_id)
+    if data is not None:
+        return data
     path = _token_path(workspace_id)
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def get_status(workspace_id: str) -> GithubStatus:
+    data = _read_token_data(workspace_id)
+    if not data:
+        return {"connected": False, "login": None, "scopes": None}
+    return {"connected": True, "login": data.get("login"), "scopes": data.get("scopes", [])}
+
+
+def get_token(workspace_id: str) -> str | None:
+    data = _read_token_data(workspace_id)
+    if not data:
+        return None
+    try:
         encoded = data.get("token_b64", "")
         if not encoded:
             return None
@@ -165,26 +170,26 @@ def handle_callback(code: str, state: str) -> dict:
     login: str = user_resp.json().get("login", "")
 
     # Persist
-    path = _token_path(workspace_id)
-    path.write_text(
-        json.dumps(
-            {
-                "workspace_id": workspace_id,
-                "token_b64": base64.b64encode(token.encode()).decode(),
-                "login": login,
-                "scopes": scopes,
-                "connected_at": time.time(),
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    token_data = {
+        "workspace_id": workspace_id,
+        "token_b64": base64.b64encode(token.encode()).decode(),
+        "login": login,
+        "scopes": scopes,
+        "connected_at": time.time(),
+    }
+    db_set("github_tokens", workspace_id, token_data)
+    try:
+        path = _token_path(workspace_id)
+        path.write_text(json.dumps(token_data, indent=2), encoding="utf-8")
+    except OSError:
+        pass
 
     return {"login": login, "scopes": scopes}
 
 
 def revoke(workspace_id: str) -> None:
     """Remove local token record. Token revocation on GitHub is left to the user."""
+    db_delete("github_tokens", workspace_id)
     path = _token_path(workspace_id)
     if path.is_file():
         path.unlink()

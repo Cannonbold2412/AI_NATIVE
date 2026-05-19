@@ -1,7 +1,17 @@
 """FastAPI entrypoint."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.db import init_db
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    init_db()
+    yield
 
 from app.api.job_routes import router as job_router
 from app.api.plugin_routes import router as plugin_router
@@ -18,7 +28,7 @@ from app.api.v1_alias_routes import router as v1_alias_router
 from app.api.workflow_routes import router as workflow_router
 from app.config import settings
 
-app = FastAPI(title="AI Skill Platform", version="0.1.0")
+app = FastAPI(title="AI Skill Platform", version="0.1.0", lifespan=_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

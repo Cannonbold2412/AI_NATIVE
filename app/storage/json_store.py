@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import settings
+from app.db import db_get, db_set, db_delete, db_list
 
 
 def skills_dir() -> Path:
@@ -16,12 +17,19 @@ def skills_dir() -> Path:
 
 
 def write_skill(skill_id: str, document: dict[str, Any]) -> Path:
+    db_set("skills", skill_id, document)
     path = skills_dir() / f"{skill_id}.json"
-    path.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        path.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
     return path
 
 
 def read_skill(skill_id: str) -> dict[str, Any] | None:
+    data = db_get("skills", skill_id)
+    if data is not None:
+        return data
     path = skills_dir() / f"{skill_id}.json"
     if not path.is_file():
         return None
@@ -29,38 +37,52 @@ def read_skill(skill_id: str) -> dict[str, Any] | None:
 
 
 def delete_skill(skill_id: str) -> bool:
+    db_delete("skills", skill_id)
     path = skills_dir() / f"{skill_id}.json"
-    if not path.is_file():
-        return False
-    path.unlink()
+    if path.is_file():
+        path.unlink()
     return True
 
 
 def list_skill_summaries() -> list[dict[str, Any]]:
-    """Return newest-first summaries for skills under ``data_dir/skills``."""
-    out: list[dict[str, Any]] = []
+    """Return newest-first summaries for skills."""
+    db_items = db_list("skills")
+    if db_items:
+        out: list[dict[str, Any]] = []
+        for doc in db_items:
+            skill_id = doc.get("meta", {}).get("id") or ""
+            meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+            skills_raw = doc.get("skills") or []
+            block0 = skills_raw[0] if isinstance(skills_raw, list) and skills_raw and isinstance(skills_raw[0], dict) else {}
+            steps = block0.get("steps") if isinstance(block0.get("steps"), list) else []
+            out.append({
+                "skill_id": skill_id,
+                "title": str(meta.get("title") or skill_id),
+                "version": int(meta.get("version") or 1),
+                "step_count": len(steps),
+                "modified_at": 0.0,
+            })
+        return list(reversed(out))
+    # File fallback for local dev
+    out = []
     base = skills_dir()
     paths = [p for p in base.glob("*.json") if p.is_file()]
     paths.sort(key=lambda p: p.stat().st_mtime_ns, reverse=True)
     for path in paths:
         skill_id = path.stem
         try:
-            raw = path.read_text(encoding="utf-8")
-            doc = json.loads(raw)
+            doc = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
         skills_raw = doc.get("skills") or []
         block0 = skills_raw[0] if isinstance(skills_raw, list) and skills_raw and isinstance(skills_raw[0], dict) else {}
         steps = block0.get("steps") if isinstance(block0.get("steps"), list) else []
-        n_steps = len(steps)
-        out.append(
-            {
-                "skill_id": skill_id,
-                "title": str(meta.get("title") or skill_id),
-                "version": int(meta.get("version") or 1),
-                "step_count": n_steps,
-                "modified_at": path.stat().st_mtime,
-            }
-        )
+        out.append({
+            "skill_id": skill_id,
+            "title": str(meta.get("title") or skill_id),
+            "version": int(meta.get("version") or 1),
+            "step_count": len(steps),
+            "modified_at": path.stat().st_mtime,
+        })
     return out

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import settings
+from app.db import db_get, db_set, db_delete, db_list
 from app.models.plugin import Plugin, PluginWorkflow, PluginAuth, PluginBuild, PluginInstaller
 from app.services.saas import LOCAL_WORKSPACE_ID
 
@@ -28,6 +29,9 @@ def _plugin_path(plugin_id: str) -> Path:
 
 
 def _read_raw(plugin_id: str) -> dict[str, Any] | None:
+    data = db_get("plugins", plugin_id)
+    if data is not None:
+        return data
     path = _plugin_path(plugin_id)
     if not path.is_file():
         return None
@@ -38,11 +42,13 @@ def _read_raw(plugin_id: str) -> dict[str, Any] | None:
 
 
 def _write_raw(plugin: Plugin) -> None:
-    path = _plugin_path(plugin.id)
-    path.write_text(
-        json.dumps(plugin.model_dump(mode="json"), indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    d = plugin.model_dump(mode="json")
+    db_set("plugins", plugin.id, d)
+    try:
+        path = _plugin_path(plugin.id)
+        path.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _migrate_workspace(raw: dict) -> dict:
@@ -87,7 +93,21 @@ def get_plugin(plugin_id: str, workspace_id: str = "") -> Plugin | None:
 
 
 def list_plugins(workspace_id: str = "") -> list[Plugin]:
-    out: list[Plugin] = []
+    db_items = db_list("plugins")
+    if db_items:
+        out: list[Plugin] = []
+        for raw in db_items:
+            try:
+                raw = _migrate_workspace(raw)
+                plugin = Plugin.model_validate(raw)
+                if workspace_id and plugin.workspace_id != workspace_id:
+                    continue
+                out.append(plugin)
+            except Exception:
+                continue
+        return sorted(out, key=lambda p: p.updated_at, reverse=True)
+    # File fallback for local dev
+    out = []
     base = _plugins_dir()
     paths = sorted(base.glob("*.json"), key=lambda p: p.stat().st_mtime_ns, reverse=True)
     for path in paths:
@@ -110,10 +130,10 @@ def save_plugin(plugin: Plugin) -> Plugin:
 
 
 def delete_plugin(plugin_id: str) -> bool:
+    db_delete("plugins", plugin_id)
     path = _plugin_path(plugin_id)
-    if not path.is_file():
-        return False
-    path.unlink()
+    if path.is_file():
+        path.unlink()
     return True
 
 

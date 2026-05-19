@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.db import db_get, db_set
 from app.llm.client import call_llm
 from app.policy.bundle import get_policy_bundle
 from app.policy.intent_ontology import semantic_slug_from_text
@@ -35,6 +36,9 @@ def _cache_path() -> Path:
 
 
 def _read_cache() -> dict[str, Any]:
+    data = db_get("llm_cache", "semantic")
+    if data is not None:
+        return data
     path = _cache_path()
     if not path.is_file():
         return {}
@@ -45,7 +49,11 @@ def _read_cache() -> dict[str, Any]:
 
 
 def _write_cache(cache: dict[str, Any]) -> None:
-    _cache_path().write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    db_set("llm_cache", "semantic", cache)
+    try:
+        _cache_path().write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _key(inp: SemanticLLMInput) -> str:

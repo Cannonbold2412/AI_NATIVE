@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import Request
 
 from app.config import settings
+from app.db import db_get, db_set
 from app.metrics.store import metrics
 from app.services.jobs import job_store
 from app.storage.json_store import list_skill_summaries
@@ -103,15 +104,14 @@ def _default_state() -> dict[str, Any]:
 
 
 def _read_state() -> dict[str, Any]:
-    path = _metadata_path()
-    if not path.is_file():
-        state = _default_state()
-        _write_state(state)
-        return state
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        data = {}
+    data = db_get("saas", "metadata")
+    if data is None:
+        path = _metadata_path()
+        if path.is_file():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                data = {}
     state = _default_state()
     if isinstance(data, dict):
         for key in state:
@@ -121,9 +121,13 @@ def _read_state() -> dict[str, Any]:
 
 
 def _write_state(state: dict[str, Any]) -> None:
-    path = _metadata_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    db_set("saas", "metadata", state)
+    try:
+        path = _metadata_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _slug_from_org_id(org_id: str) -> str:
