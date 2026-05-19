@@ -62,7 +62,7 @@ def db_set(namespace: str, key: str, data: Any) -> None:
         conn.execute(
             text("""
                 INSERT INTO kv_store (namespace, key, data)
-                VALUES (:ns, :key, :data::jsonb)
+                VALUES (:ns, :key, CAST(:data AS jsonb))
                 ON CONFLICT (namespace, key) DO UPDATE
                 SET data = EXCLUDED.data, updated_at = now()
             """),
@@ -122,9 +122,9 @@ def db_append(namespace: str, key: str, new_items: list) -> None:
         conn.execute(
             text("""
                 INSERT INTO kv_store (namespace, key, data)
-                VALUES (:ns, :key, :items::jsonb)
+                VALUES (:ns, :key, CAST(:items AS jsonb))
                 ON CONFLICT (namespace, key) DO UPDATE
-                SET data       = kv_store.data || :items::jsonb,
+                SET data       = kv_store.data || CAST(:items AS jsonb),
                     updated_at = now()
             """),
             {"ns": namespace, "key": key, "items": json.dumps(new_items)},
