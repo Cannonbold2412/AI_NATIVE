@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.models.plugin import Plugin
-from app.recorder.session import registry
+from app.recorder.session import is_blank_url, registry
 from app.services.saas import principal_from_request, ensure_principal
 from app.storage.plugin_store import (
     add_workflow,
@@ -51,7 +51,7 @@ _SSE_HEADERS = {
 class CreatePluginBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     target_url: str = Field(..., min_length=1)
-    protected_url: str = Field(..., min_length=1)
+    protected_url: str = Field(default="")
     protected_url_marker_text: str = Field(default="")
 
 
@@ -67,6 +67,7 @@ class FinalizeAuthBody(BaseModel):
 class StartWorkflowRecordBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     url_variables: dict[str, str] = Field(default_factory=dict)
+    capture_hover: bool = Field(False, description="Capture hover events for workflows that depend on hover-revealed elements.")
 
 
 class FinalizeWorkflowBody(BaseModel):
@@ -103,6 +104,38 @@ def _storage_state_path(plugin_id: str) -> Path:
 
 def _sse_line(payload: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n".encode()
+
+
+_FINAL_URL_LOGIN_PATTERNS = (
+    "login",
+    "signin",
+    "sign-in",
+    "auth",
+    "oauth",
+    "sso",
+    "session/new",
+    "account/login",
+    "accountchooser",
+    "account-chooser",
+)
+
+
+def _reject_reason_for_protected_url(url: str) -> str:
+    value = str(url or "").strip()
+    if is_blank_url(value):
+        return "No authenticated page URL was captured. Log in, navigate to the page where workflows should start, then close Chromium."
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(value)
+    except Exception:
+        return "The captured protected URL is not valid."
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return "The captured protected URL must be an http or https page."
+    lowered = value.lower()
+    if any(marker in lowered for marker in _FINAL_URL_LOGIN_PATTERNS):
+        return "The final page still looks like a login/auth page. Navigate to the authenticated app page, then close Chromium."
+    return ""
 
 
 async def _start_recorder_session(sess: Any) -> None:
@@ -180,7 +213,6 @@ async def post_start_auth_record(plugin_id: str, body: StartAuthRecordBody) -> d
     sess = registry.create(
         start_url=start_url,
         storage_state_autosave_path=str(storage_state_path),
-        wait_for_url=plugin.protected_url,
         auth_mode=True,
     )
     # Tag the session so finalize knows it is an auth session.
@@ -190,7 +222,7 @@ async def post_start_auth_record(plugin_id: str, body: StartAuthRecordBody) -> d
         "session_id": sess.session_id,
         "plugin_id": plugin_id,
         "start_url": start_url,
-        "message": "Browser launched. Log in naturally — session saves automatically when you reach the protected page.",
+        "message": "Browser launched. Log in, navigate to the page workflows should start from, then close Chromium.",
     }
 
 
@@ -201,26 +233,41 @@ async def post_finalize_auth(plugin_id: str, body: FinalizeAuthBody) -> dict[str
     sess = registry.get(body.session_id)
 
     storage_state_path = _storage_state_path(plugin_id)
+    final_url = ""
 
     # Capture one final storage_state when the browser is still alive. Auth sessions
     # also autosave while open, so a browser closed by the user can still finalize.
     if sess is not None:
+        final_url = str(getattr(sess, "current_url", "") or "")
         try:
             if sess._context is not None and sess.browser_open:
+                try:
+                    page = sess._active_page_sync()
+                    if page is not None:
+                        sess._remember_page_url_sync(page)
+                        final_url = str(getattr(sess, "current_url", "") or final_url)
+                except Exception:
+                    pass
                 sess._context.storage_state(path=str(storage_state_path))
         except Exception as exc:
             if not storage_state_path.is_file():
                 raise HTTPException(status_code=500, detail=f"Failed to capture storage state: {exc}") from exc
 
         await sess.stop()
+        final_url = str(getattr(sess, "current_url", "") or final_url)
 
     if not storage_state_path.is_file():
         raise HTTPException(status_code=404, detail="Session not found or auth state was not captured.")
+
+    reject_reason = _reject_reason_for_protected_url(final_url)
+    if reject_reason:
+        raise HTTPException(status_code=400, detail=reject_reason)
 
     updated = set_plugin_auth(
         plugin_id=plugin_id,
         session_id=body.session_id,
         storage_state_path=str(storage_state_path),
+        protected_url=final_url,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Plugin not found after finalize.")
@@ -230,6 +277,7 @@ async def post_finalize_auth(plugin_id: str, body: FinalizeAuthBody) -> dict[str
         "session_id": body.session_id,
         "storage_state_saved": storage_state_path.is_file(),
         "plugin_status": updated.status,
+        "protected_url": updated.protected_url,
     }
 
 
@@ -269,14 +317,13 @@ async def post_start_workflow_record(plugin_id: str, body: StartWorkflowRecordBo
             detail="Auth storage state file missing. Re-record login.",
         )
 
-    # Pre-register the workflow so we have an ID before the session starts.
-    result = add_workflow(plugin_id, body.name, session_id="__pending__")
-    if result is None:
-        raise HTTPException(status_code=404, detail="Plugin not found.")
-    _, wf = result
-
     # Resolve {{variable}} placeholders in protected_url using provided url_variables.
-    start_url = plugin.protected_url
+    start_url = plugin.protected_url.strip()
+    if not start_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Plugin auth is missing a protected URL. Re-record login and close Chromium on the page where workflows should start.",
+        )
     if body.url_variables:
         var_pattern = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
         start_url = var_pattern.sub(
@@ -292,21 +339,19 @@ async def post_start_workflow_record(plugin_id: str, body: StartWorkflowRecordBo
     sess = registry.create(
         start_url=start_url,
         storage_state_path=str(storage_state_path),
+        capture_hover=body.capture_hover,
     )
     try:
         await _start_recorder_session(sess)
     except HTTPException:
-        remove_workflow(plugin_id, wf.id)
         raise
 
-    # Update workflow with the real session_id now that the session exists.
-    refreshed = get_plugin(plugin_id)
-    if refreshed:
-        for w in refreshed.workflows:
-            if w.id == wf.id:
-                w.session_id = sess.session_id
-                break
-        save_plugin(refreshed)
+    result = add_workflow(plugin_id, body.name, session_id=sess.session_id)
+    if result is None:
+        await sess.stop()
+        registry.pop(sess.session_id)
+        raise HTTPException(status_code=404, detail="Plugin not found.")
+    _, wf = result
 
     return {
         "session_id": sess.session_id,
@@ -318,23 +363,42 @@ async def post_start_workflow_record(plugin_id: str, body: StartWorkflowRecordBo
 
 @router.post("/{plugin_id}/workflows/{workflow_id}/finalize")
 async def post_finalize_workflow(plugin_id: str, workflow_id: str, body: FinalizeWorkflowBody) -> dict[str, Any]:
-    """Stop workflow recording, classify the session, and mark workflow as recorded."""
+    """Finalize a user-closed workflow recording and mark workflow as recorded."""
     _plugin_or_404(plugin_id)
     sess = registry.get(body.session_id)
     if sess:
+        if sess.browser_open:
+            raise HTTPException(
+                status_code=409,
+                detail="Close Chromium before saving this workflow. The backend will not close recording browsers.",
+            )
         await sess.stop()
+        raw_events = sess.snapshot_events()
+        registry.pop(body.session_id)
+    else:
+        from app.storage.session_events import read_session_events
+        raw_events = read_session_events(body.session_id)
 
     plugin = get_plugin(plugin_id)
     if plugin is None:
         raise HTTPException(status_code=404, detail="Plugin not found.")
+
+    workflow_exists = any(wf.id == workflow_id for wf in plugin.workflows)
+    if not workflow_exists:
+        raise HTTPException(status_code=404, detail="Workflow not found.")
+
+    if not raw_events:
+        remove_workflow(plugin_id, workflow_id)
+        raise HTTPException(
+            status_code=400,
+            detail="No workflow actions were recorded. Browser closed before any supported action was captured.",
+        )
 
     for wf in plugin.workflows:
         if wf.id == workflow_id:
             wf.session_id = body.session_id
             wf.status = "recorded"
             break
-    else:
-        raise HTTPException(status_code=404, detail="Workflow not found.")
 
     save_plugin(plugin)
 
@@ -343,9 +407,7 @@ async def post_finalize_workflow(plugin_id: str, workflow_id: str, body: Finaliz
     if not body.force_workflow_kind:
         try:
             from app.recorder.session import classify_login_flow
-            from app.storage.session_events import read_session_events
             from app.models.events import RecordedEvent
-            raw_events = read_session_events(body.session_id)
             events = [RecordedEvent.model_validate(e) for e in raw_events]
             workflow_kind = classify_login_flow(events)
         except Exception:
@@ -377,12 +439,18 @@ def patch_workflow_endpoint(plugin_id: str, workflow_id: str, body: UpdateWorkfl
         if wf.id == workflow_id:
             if body.skill_id is not None:
                 wf.skill_id = body.skill_id
+                wf.status = "compiled"
             updated_workflow = wf
             break
     if updated_workflow is None:
         raise HTTPException(status_code=404, detail="Workflow not found.")
     save_plugin(plugin)
-    return {"plugin_id": plugin_id, "workflow_id": workflow_id, "skill_id": updated_workflow.skill_id}
+    return {
+        "plugin_id": plugin_id,
+        "workflow_id": workflow_id,
+        "skill_id": updated_workflow.skill_id,
+        "status": updated_workflow.status,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +503,7 @@ def post_build_plugin(plugin_id: str, body: BuildPluginBody) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Compiled skill inspect + url_state editing (Phase 6)
+# Compiled skill inspect
 # ---------------------------------------------------------------------------
 
 _COMPILED_SKILL_FILES = ("execution.json", "recovery.json", "input.json")
@@ -478,65 +546,6 @@ def get_compiled_skill(plugin_id: str, skill_slug: str) -> dict[str, Any]:
     return {"plugin_id": plugin_id, "skill_slug": skill_slug, "files": result}
 
 
-class PatchUrlStateBody(BaseModel):
-    before: dict[str, Any] = Field(default_factory=dict)
-    after: dict[str, Any] = Field(default_factory=dict)
-
-
-@router.patch("/{plugin_id}/skills/{skill_slug}/steps/{step_id}/url_state")
-def patch_step_url_state(
-    plugin_id: str,
-    skill_slug: str,
-    step_id: str,
-    body: PatchUrlStateBody,
-) -> dict[str, Any]:
-    """Write edited url_state inline on the matching execution.json step."""
-    plugin = _plugin_or_404(plugin_id)
-    resolve = _skill_dir(plugin)
-    skill_dir = resolve(skill_slug)
-
-    # ── Update execution.json ──────────────────────────────────────────────
-    exec_path = skill_dir / "execution.json"
-    if not exec_path.is_file():
-        raise HTTPException(status_code=404, detail="execution.json not found for skill.")
-
-    try:
-        exec_data = json.loads(exec_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        raise HTTPException(status_code=500, detail=f"Could not read execution.json: {exc}") from exc
-
-    if isinstance(exec_data, list):
-        steps = exec_data
-    elif isinstance(exec_data, dict):
-        steps = exec_data.get("steps") or exec_data.get("execution_plan") or []
-    else:
-        steps = []
-    matched = False
-    for step in steps:
-        if str(step.get("id", "")) == step_id or str(step.get("step_id", "")) == step_id:
-            us = step.setdefault("url_state", {})
-            if body.before:
-                us["before"] = {**us.get("before", {}), **body.before}
-            if body.after:
-                us["after"] = {**us.get("after", {}), **body.after}
-            us["edited_by_user"] = True
-            matched = True
-            break
-
-    if not matched:
-        raise HTTPException(status_code=404, detail=f"Step '{step_id}' not found in execution.json.")
-
-    exec_path.write_text(json.dumps(exec_data, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    return {
-        "plugin_id": plugin_id,
-        "skill_slug": skill_slug,
-        "step_id": step_id,
-        "updated": True,
-        "edited_by_user": True,
-    }
-
-
 class ExecuteSkillBody(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     headless: bool = Field(default=True)
@@ -544,6 +553,7 @@ class ExecuteSkillBody(BaseModel):
 
 @router.post("/{plugin_id}/skills/{skill_slug}/execute")
 async def post_execute_skill(plugin_id: str, skill_slug: str, body: ExecuteSkillBody) -> dict[str, Any]:
+    """Low-level dev tool: run a built skill without persisting results. Use /test/stream for the gated test flow."""
     plugin = _plugin_or_404(plugin_id)
     if plugin.build is None:
         raise HTTPException(status_code=400, detail="Plugin not built yet.")
@@ -555,6 +565,68 @@ async def post_execute_skill(plugin_id: str, skill_slug: str, body: ExecuteSkill
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+class WorkflowTestBody(BaseModel):
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    headless: bool = Field(default=False)  # author wants to watch by default
+
+
+@router.post("/{plugin_id}/workflows/{workflow_id}/test/stream")
+async def post_test_workflow_stream(plugin_id: str, workflow_id: str, body: WorkflowTestBody) -> StreamingResponse:
+    """Run a built workflow end-to-end and persist the pass/fail result. Gate for Build Installer."""
+    plugin = _plugin_or_404(plugin_id)
+    if plugin.build is None:
+        raise HTTPException(status_code=400, detail="Build the plugin first before testing.")
+
+    wf = next((w for w in plugin.workflows if w.id == workflow_id), None)
+    if wf is None:
+        raise HTTPException(status_code=404, detail="Workflow not found.")
+    if not wf.skill_id:
+        raise HTTPException(status_code=400, detail="Compile this workflow first.")
+    if wf.edited_at and plugin.build.last_built_at and wf.edited_at > plugin.build.last_built_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Workflow was edited since the last build. Rebuild the plugin before retesting.",
+        )
+
+    from app.services.plugin_executor import execute_skill
+    from app.storage.plugin_store import set_workflow_test_result, set_workflow_test_error
+
+    async def events() -> AsyncIterator[bytes]:
+        log_queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def log_sink(line: str) -> None:
+            log_queue.put_nowait(line)
+
+        yield _sse_line({"event": "log", "entry": {"message": f"Starting test for workflow '{wf.name}'..."}})
+
+        task = asyncio.create_task(
+            execute_skill(plugin, wf.slug, body.inputs, body.headless, log_sink=log_sink)
+        )
+
+        # Stream log lines while execution is in progress
+        while not task.done():
+            try:
+                line = await asyncio.wait_for(log_queue.get(), timeout=0.1)
+                yield _sse_line({"event": "log", "entry": {"message": line}})
+            except asyncio.TimeoutError:
+                continue
+
+        # Drain any remaining log lines queued before the task completed
+        while not log_queue.empty():
+            yield _sse_line({"event": "log", "entry": {"message": log_queue.get_nowait()}})
+
+        try:
+            result = await task
+            set_workflow_test_result(plugin_id, workflow_id, status="passed", inputs=dict(body.inputs))
+            yield _sse_line({"event": "done", "result": result})
+        except Exception as exc:
+            err = str(exc)[:2000]
+            set_workflow_test_error(plugin_id, workflow_id, err)
+            yield _sse_line({"event": "error", "message": err})
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=dict(_SSE_HEADERS))
+
+
 @router.post("/{plugin_id}/build-installer/stream")
 async def post_build_installer_stream(plugin_id: str) -> StreamingResponse:
     """Build a Windows installer EXE and stream progress via SSE."""
@@ -563,6 +635,12 @@ async def post_build_installer_stream(plugin_id: str) -> StreamingResponse:
         raise HTTPException(
             status_code=400,
             detail="Plugin must be built first. Call /build/stream before building the installer.",
+        )
+    untested = [wf.name for wf in plugin.workflows if wf.last_test_status != "passed"]
+    if untested:
+        raise HTTPException(
+            status_code=400,
+            detail=f"All workflows must pass Test Plugin first. Untested or failing: {', '.join(untested)}",
         )
     from app.services.plugin_builder import _plugin_bundle_slug
     company_slug = _plugin_bundle_slug(plugin_id, plugin.name)

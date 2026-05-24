@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react'
 import { FormProvider, useForm, useFormState, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import type { StepEditorDTO, WorkflowResponse } from '../types/workflow'
@@ -18,8 +18,6 @@ import { BoxSelect, Info, Trash2 } from 'lucide-react'
 type FormValues = {
   intent: string
   url: string
-  url_state_before_pattern: string
-  url_state_after_pattern: string
   scroll_mode: 'scroll_only' | 'scroll_to_locate'
   scroll_amount: string
   scroll_selector: string
@@ -40,8 +38,6 @@ type FormValues = {
 const emptyForm: FormValues = {
   intent: '',
   url: '',
-  url_state_before_pattern: '',
-  url_state_after_pattern: '',
   scroll_mode: 'scroll_only',
   scroll_amount: '',
   scroll_selector: '',
@@ -63,12 +59,16 @@ const ANCHOR_RELATIONS = new Set(['target', 'inside', 'above', 'below', 'near'])
 const URL_CHECK_KINDS = new Set(['url', 'url_exact', 'url_must_be'])
 const EXACT_URL_CHECK_KINDS = new Set(['url_exact', 'url_must_be'])
 
+function frameChainFromStep(step: StepEditorDTO): Record<string, unknown>[] {
+  const frame = step.frame || {}
+  const chain = Array.isArray(frame.chain) ? frame.chain : []
+  return chain.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+}
+
 function defaultsFromStep(step: StepEditorDTO): FormValues {
   const tgt = step.target as { primary_selector?: string; fallback_selectors?: string[] }
   const sel = step.selectors as { css?: string; aria?: string; text_based?: string; xpath?: string }
-  const urlState = step.url_state || {}
-  const beforeUrlState = (urlState.before || {}) as Record<string, string>
-  const afterUrlState = (urlState.after || {}) as Record<string, string>
+  const actionPayload = step.action_payload || {}
   const anc = (step.anchors_signals || [])
     .map((a) => {
       const o = a as Record<string, string>
@@ -81,15 +81,22 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
   return {
     intent: step.intent || step.final_intent,
     url: step.url || '',
-    url_state_before_pattern: String(beforeUrlState.url_pattern || ''),
-    url_state_after_pattern: String(afterUrlState.url_pattern || ''),
     scroll_mode: step.scroll_mode === 'scroll_to_locate' ? 'scroll_to_locate' : 'scroll_only',
     scroll_amount: step.scroll_amount === null || step.scroll_amount === undefined ? '' : String(step.scroll_amount),
     scroll_selector: String(step.scroll_selector || ''),
     selectors: [String(tgt.primary_selector || ''), ...(tgt.fallback_selectors || [])].filter(
       (selector, index, arr) => index === 0 || Boolean(selector) || arr.length === 1,
     ),
-    value: typeof step.value === 'string' ? step.value : '',
+    value:
+      typeof step.value === 'string'
+        ? step.value
+        : typeof actionPayload.value === 'string'
+          ? actionPayload.value
+          : actionPayload.ms !== undefined && actionPayload.ms !== null
+            ? String(actionPayload.ms)
+            : step.value !== undefined && step.value !== null
+              ? String(step.value)
+              : '',
     css: String(sel.css || ''),
     aria: String(sel.aria || ''),
     text_based: String(sel.text_based || ''),
@@ -144,6 +151,19 @@ function humanizeAction(action: string): string {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
 }
 
+function stepActionKind(step: StepEditorDTO): string {
+  return step.action_type.trim().toLowerCase().replace(/-/g, '_')
+}
+
+function actionSpecFlag(step: StepEditorDTO, key: string): boolean {
+  return Boolean((step.action_spec || {})[key])
+}
+
+function actionValueLabel(step: StepEditorDTO): string {
+  const raw = (step.action_spec || {}).value_label
+  return typeof raw === 'string' && raw.trim() ? raw : 'Value'
+}
+
 function visualBboxSummary(step: StepEditorDTO): {
   usable: boolean
   label: string
@@ -182,31 +202,6 @@ function parseScrollAmount(raw: string): number {
   return Number.parseInt(trimmed, 10)
 }
 
-function urlStateBlock(step: StepEditorDTO, phase: 'before' | 'after'): Record<string, string> {
-  const block = step.url_state?.[phase]
-  return block && typeof block === 'object' && !Array.isArray(block) ? (block as Record<string, string>) : {}
-}
-
-function appendUrlStatePatch(patch: Record<string, unknown>, values: FormValues, step: StepEditorDTO) {
-  const before = urlStateBlock(step, 'before')
-  const after = urlStateBlock(step, 'after')
-  const nextBeforePattern = values.url_state_before_pattern.trim()
-  const nextAfterPattern = values.url_state_after_pattern.trim()
-  const changed =
-    nextBeforePattern !== String(before.url_pattern || '') ||
-    nextAfterPattern !== String(after.url_pattern || '')
-  if (!changed) return
-  patch.url_state = {
-    before: {
-      url_pattern: nextBeforePattern,
-    },
-    after: {
-      url_pattern: nextAfterPattern,
-    },
-    edited_by_user: true,
-  }
-}
-
 function DirtySync({ stepIndex }: { stepIndex: number }) {
   const { isDirty } = useFormState()
   const markDirty = useEditorStore((s) => s.markStepDirty)
@@ -231,12 +226,10 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
     ref,
   ) {
   const methods = useForm<FormValues>({ defaultValues: emptyForm })
-  const [urlStateTestResult, setUrlStateTestResult] = useState<{ before?: boolean; after?: boolean } | null>(null)
 
   useEffect(() => {
     if (step) {
       methods.reset(defaultsFromStep(step))
-      setUrlStateTestResult(null)
     }
   }, [step, methods])
 
@@ -268,8 +261,11 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
       const silent = options?.silentToast ?? false
       const editable = step.editable_fields
       const canEditField = (key: string) => editable[key] !== false
-      const isCheckStep = step.action_type === 'check'
-      const isNavigateStep = step.action_type.toLowerCase() === 'navigate'
+      const actionKind = stepActionKind(step)
+      const isMarkerStep = actionSpecFlag(step, 'marker')
+      const isCheckStep = actionKind === 'check' || actionKind === 'assert'
+      const isNavigateStep = actionKind === 'navigate'
+      if (isMarkerStep) return
       if (isNavigateStep) {
         const url = values.url.trim()
         if (!/^https?:\/\//i.test(url)) {
@@ -290,7 +286,59 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
             success_conditions: { url },
           },
         }
-        appendUrlStatePatch(patch, values, step)
+        try {
+          const res = await patchStep(skillId, step.step_index, patch, false)
+          onWorkflowUpdated(res.workflow)
+          const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
+          if (next) methods.reset(defaultsFromStep(next))
+          if (!silent) toast.success('Step saved')
+          return
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Save failed'
+          methods.setError('root', { message: msg })
+          if (!silent) toast.error(msg)
+          throw e
+        }
+      }
+      if (actionKind === 'wait') {
+        const rawMs = values.value.trim() || '1000'
+        if (!/^\d+$/.test(rawMs)) {
+          const err = new Error('Wait milliseconds must be a non-negative whole number')
+          methods.setError('value', { message: err.message })
+          if (!silent) toast.error(err.message)
+          throw err
+        }
+        const ms = Number.parseInt(rawMs, 10)
+        const patch: Record<string, unknown> = {
+          intent: values.intent,
+          value: String(ms),
+          action: {
+            action: 'wait',
+            ms,
+            value: String(ms),
+          },
+        }
+        try {
+          const res = await patchStep(skillId, step.step_index, patch, false)
+          onWorkflowUpdated(res.workflow)
+          const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
+          if (next) methods.reset(defaultsFromStep(next))
+          if (!silent) toast.success('Step saved')
+          return
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Save failed'
+          methods.setError('root', { message: msg })
+          if (!silent) toast.error(msg)
+          throw e
+        }
+      }
+      if (actionKind === 'screenshot') {
+        const patch: Record<string, unknown> = {
+          intent: values.intent,
+          action: {
+            action: 'screenshot',
+          },
+        }
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
@@ -308,6 +356,9 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
       if (isCheckStep) {
         const patch: Record<string, unknown> = {
           intent: values.intent,
+          action: {
+            action: actionKind,
+          },
           check_kind: values.check_kind,
         }
         if (URL_CHECK_KINDS.has(values.check_kind)) {
@@ -318,7 +369,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         else if (values.check_kind === 'snapshot') patch.check_threshold = Number(values.check_threshold)
         else if (values.check_kind === 'selector') patch.check_selector = values.check_selector
         else if (values.check_kind === 'text') patch.check_text = values.check_text
-        appendUrlStatePatch(patch, values, step)
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
@@ -359,7 +409,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
             delta: scrollAmount,
           }
         }
-        appendUrlStatePatch(patch, values, step)
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
@@ -382,6 +431,9 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
       const anchors = parseAnchorRows(values.anchors)
       const patch: Record<string, unknown> = {
         intent: values.intent,
+        action: {
+          action: actionKind,
+        },
         target: {
           primary_selector: primarySelector,
           fallback_selectors: fallbackSelectors,
@@ -396,8 +448,13 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
           anchors,
         },
       }
-      if (canEditField('value')) patch.value = values.value
-      appendUrlStatePatch(patch, values, step)
+      if (canEditField('value')) {
+        patch.value = values.value
+        patch.action = {
+          action: actionKind,
+          value: values.value,
+        }
+      }
       try {
         const res = await patchStep(skillId, step.step_index, patch, false)
         onWorkflowUpdated(res.workflow)
@@ -442,8 +499,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
   const anchors = useWatch({ control: methods.control, name: 'anchors' }) || ['']
   const checkKind = useWatch({ control: methods.control, name: 'check_kind' }) || 'url'
   const scrollMode = useWatch({ control: methods.control, name: 'scroll_mode' }) || 'scroll_only'
-  const urlStateBeforePattern = useWatch({ control: methods.control, name: 'url_state_before_pattern' }) || ''
-  const urlStateAfterPattern = useWatch({ control: methods.control, name: 'url_state_after_pattern' }) || ''
 
   if (!step) {
     return (
@@ -455,33 +510,19 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
 
   const editable = step.editable_fields
   const canEdit = (key: string) => editable[key] !== false
-  const isCheckStep = step.action_type === 'check'
-  const isNavigateStep = step.action_type.toLowerCase() === 'navigate'
-  const isScrollStep = step.flags.is_scroll
-  const showSelectorAndAnchorTools = !isScrollStep && !isNavigateStep && !(isCheckStep && URL_CHECK_KINDS.has(checkKind))
+  const actionKind = stepActionKind(step)
+  const isMarkerStep = actionSpecFlag(step, 'marker')
+  const actionHasSelectors = actionSpecFlag(step, 'selectors')
+  const actionHasValue = actionSpecFlag(step, 'value')
+  const isCheckStep = actionKind === 'check' || actionKind === 'assert'
+  const isNavigateStep = actionKind === 'navigate'
+  const isScrollStep = step.flags.is_scroll || actionKind === 'scroll'
+  const isWaitStep = actionKind === 'wait'
+  const isScreenshotStep = actionKind === 'screenshot'
+  const showSelectorAndAnchorTools =
+    actionHasSelectors && !isScrollStep && !isNavigateStep && !isMarkerStep && !(isCheckStep && URL_CHECK_KINDS.has(checkKind))
   const bboxSummary = visualBboxSummary(step)
-  const beforeUrlState = urlStateBlock(step, 'before')
-  const afterUrlState = urlStateBlock(step, 'after')
-  const testUrlStatePatterns = () => {
-    const values = methods.getValues()
-    let beforeOk: boolean | undefined
-    let afterOk: boolean | undefined
-    try {
-      if (values.url_state_before_pattern.trim()) {
-        beforeOk = new RegExp(values.url_state_before_pattern.trim()).test(String(beforeUrlState.url || ''))
-      }
-    } catch {
-      beforeOk = false
-    }
-    try {
-      if (values.url_state_after_pattern.trim()) {
-        afterOk = new RegExp(values.url_state_after_pattern.trim()).test(String(afterUrlState.url || ''))
-      }
-    } catch {
-      afterOk = false
-    }
-    setUrlStateTestResult({ before: beforeOk, after: afterOk })
-  }
+  const frameChain = frameChainFromStep(step)
 
   const onSubmit = methods.handleSubmit(async (values) => {
     try {
@@ -670,7 +711,15 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                   )}
                 </>
               ) : null}
-              {!isScrollStep && !isCheckStep && !isNavigateStep ? (
+              {isMarkerStep ? (
+                <div className="grid gap-2">
+                  <Label>Recorded marker</Label>
+                  <pre className="border-border/60 bg-muted/20 max-h-40 overflow-auto rounded-md border p-2 font-mono text-[11px] leading-5 text-muted-foreground">
+                    {JSON.stringify(step.action_payload || {}, null, 2)}
+                  </pre>
+                </div>
+              ) : null}
+              {actionHasSelectors ? (
                 <>
                   <div className="grid gap-2">
                     <div className="flex items-center justify-between gap-2">
@@ -719,82 +768,25 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                       ))}
                     </div>
                   </div>
-                  {canEdit('value') ? (
-                    <div className="grid gap-2">
-                      <Label htmlFor="value">Value (for type/fill)</Label>
-                      <Input id="value" type="text" {...methods.register('value')} />
-                    </div>
-                  ) : null}
                 </>
               ) : null}
-          </CardContent>
-          </Card>
-
-          <Card className="gap-2 py-3">
-            <CardHeader className="p-2.5 pb-1">
-              <CardTitle className="text-sm">URL State</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2.5 p-2.5 pt-0">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="url_state_before_pattern">Before pattern</Label>
+              {!isMarkerStep && actionHasValue ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="value">{actionValueLabel(step)}</Label>
                   <Input
-                    id="url_state_before_pattern"
-                    type="text"
-                    className="font-mono text-xs"
-                    placeholder="^https://example\\.com/path$"
-                    {...methods.register('url_state_before_pattern', {
-                      onChange: () => setUrlStateTestResult(null),
-                    })}
+                    id="value"
+                    type={isWaitStep ? 'number' : 'text'}
+                    inputMode={isWaitStep ? 'numeric' : undefined}
+                    disabled={!canEdit('value')}
+                    placeholder={isWaitStep ? '1000' : isScreenshotStep ? '' : undefined}
+                    {...methods.register('value')}
                   />
-                  {beforeUrlState.url ? (
-                    <p className="text-muted-foreground truncate font-mono text-[11px]">
-                      recorded: {beforeUrlState.url}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="url_state_after_pattern">After pattern</Label>
-                  <Input
-                    id="url_state_after_pattern"
-                    type="text"
-                    className="font-mono text-xs"
-                    placeholder="^https://example\\.com/next$"
-                    {...methods.register('url_state_after_pattern', {
-                      onChange: () => setUrlStateTestResult(null),
-                    })}
-                  />
-                  {afterUrlState.url ? (
-                    <p className="text-muted-foreground truncate font-mono text-[11px]">
-                      recorded: {afterUrlState.url}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              {urlStateTestResult ? (
-                <div className="flex flex-wrap gap-3 text-xs">
-                  {urlStateTestResult.before != null ? (
-                    <span className={urlStateTestResult.before ? 'text-emerald-400' : 'text-destructive'}>
-                      before: {urlStateTestResult.before ? 'matches' : 'no match'}
-                    </span>
-                  ) : null}
-                  {urlStateTestResult.after != null ? (
-                    <span className={urlStateTestResult.after ? 'text-emerald-400' : 'text-destructive'}>
-                      after: {urlStateTestResult.after ? 'matches' : 'no match'}
-                    </span>
+                  {methods.formState.errors.value ? (
+                    <p className="text-destructive text-xs">{methods.formState.errors.value.message}</p>
                   ) : null}
                 </div>
               ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={testUrlStatePatterns}
-                disabled={!urlStateBeforePattern.trim() && !urlStateAfterPattern.trim()}
-              >
-                Test patterns
-              </Button>
-            </CardContent>
+          </CardContent>
           </Card>
 
           {showSelectorAndAnchorTools ? (
@@ -834,6 +826,31 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
               </div>
             </CardContent>
           </Card>
+
+          {frameChain.length > 0 ? (
+            <Card className="gap-2 py-3">
+              <CardHeader className="p-2.5 pb-1">
+                <CardTitle className="text-sm">Frame context</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 p-2.5 pt-0">
+                {frameChain.map((frame, index) => (
+                  <div key={`frame-${index}`} className="border-border/60 bg-muted/20 rounded-md border p-2">
+                    <p className="truncate font-mono text-[11px]">{String(frame.selector || '')}</p>
+                    {Array.isArray(frame.fallback_selectors) && frame.fallback_selectors.length > 0 ? (
+                      <p className="text-muted-foreground mt-1 truncate font-mono text-[11px]">
+                        {frame.fallback_selectors.map((item) => String(item)).join(' | ')}
+                      </p>
+                    ) : null}
+                    {frame.url_pattern ? (
+                      <p className="text-muted-foreground mt-1 truncate font-mono text-[11px]">
+                        {String(frame.url_pattern)}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card className="gap-2 py-3">
             <CardHeader className="p-2.5 pb-1">
@@ -890,7 +907,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
 
           <Separator />
           <div className="flex items-center justify-end">
-            <Button type="submit" size="default" disabled={methods.formState.isSubmitting}>
+            <Button type="submit" size="default" disabled={methods.formState.isSubmitting || isMarkerStep}>
               {methods.formState.isSubmitting ? 'Saving…' : 'Save step'}
             </Button>
           </div>

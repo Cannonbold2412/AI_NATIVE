@@ -2,26 +2,9 @@
 
 ## Install
 
-Paste the right prompt into Claude Code Desktop — Claude runs it automatically. No terminal needed.
-
-**Windows** — paste this into Claude:
-```
-Run this command in PowerShell: & ([scriptblock]::Create((irm 'https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.ps1'))) '{{plugin_id}}'
-```
-
-**Mac** — paste this into Claude:
-```
-Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {{plugin_id}}
-```
-
-**Linux** — paste this into Claude:
-```
-Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {{plugin_id}}
-```
-
-After Claude finishes, restart Claude Code Desktop once. That's it.
-
-**Already have another conxa plugin installed?** Just tell Claude: *"Install the {{plugin_name}} plugin: {{plugin_id}}"* — no command, no restart needed.
+This file is bundled by Conxa's Build Installer flow. Run the generated Windows
+setup file to install the runtime, register Claude, and copy the {{plugin_name}}
+skills onto the user's machine.
 
 ## ⚠️ MANDATORY RULES
 
@@ -39,6 +22,10 @@ After Claude finishes, restart Claude Code Desktop once. That's it.
 | `list_skills` | List available skills (pass `plugin: "{{slug}}"` to filter to this plugin) |
 | `read_skill_files(slug, plugin?)` | Read SKILL.md, required inputs, and execution steps |
 | `execute_plan(skills, inputs?)` | Run a visible Playwright browser — auth handled transparently |
+| `get_execution_status(execution_id)` | Poll an async execution for progress and completion |
+| `pause_execution(execution_id)` | Pause at the next step boundary (resumes with resume_execution) |
+| `resume_execution(execution_id)` | Resume a paused execution from its last checkpoint |
+| `cancel_execution(execution_id)` | Cancel a running or paused execution |
 
 ---
 
@@ -62,13 +49,35 @@ Call `list_skills({ plugin: "{{slug}}" })` to find the right skill for the user'
 The `read_skill_files` response has an `instruction` field. If it says **"STOP — ask the user for: X"**, check first whether the user already provided X in their message. If yes, use it directly. If no, ask.
 
 ### Step 3: Execute
+
+**Synchronous (short workflows, < 30 steps):**
 ```
 execute_plan({
   skills: [{ plugin: "{{slug}}", slug: "<skill-slug>", inputs: { key: "value" } }]
 })
 ```
 
+**Async (long workflows or when you need to report progress):**
+```
+execute_plan({
+  skills: [{ plugin: "{{slug}}", slug: "<skill-slug>", inputs: { key: "value" } }],
+  async: true
+})
+→ returns { execution_id, status: "starting" }
+
+# Poll every 30s until status is "completed" or "failed"
+get_execution_status({ execution_id })
+→ { status, step_current, step_total, error }
+```
+
 Auth is handled internally. If the session is missing or expired, a login browser opens automatically — the user logs in and the workflow continues without any extra steps from you.
+
+**Pause/resume** (for long workflows that may need user approval at a step):
+```
+pause_execution({ execution_id })    # stops at next step boundary
+resume_execution({ execution_id })   # continues from checkpoint
+cancel_execution({ execution_id })   # abort entirely
+```
 
 ---
 

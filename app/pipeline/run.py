@@ -124,13 +124,35 @@ def _annotate_scroll_amounts(events: list[dict[str, Any]]) -> list[dict[str, Any
     return out
 
 
+def _action_name(ev: dict[str, Any]) -> str:
+    action = ev.get("action") if isinstance(ev.get("action"), dict) else {}
+    return str((action or {}).get("action") or "").strip().lower()
+
+
+def _has_weak_visual_bbox(ev: dict[str, Any]) -> bool:
+    visual = ev.get("visual") if isinstance(ev.get("visual"), dict) else {}
+    bbox = visual.get("bbox") if isinstance(visual.get("bbox"), dict) else {}
+    try:
+        return int(bbox.get("w") or 0) < 2 or int(bbox.get("h") or 0) < 2
+    except (TypeError, ValueError):
+        return True
+
+
+def _drop_non_actionable_hover_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        ev
+        for ev in events
+        if not (_action_name(ev) == "hover" and _has_weak_visual_bbox(ev))
+    ]
+
+
 def run_pipeline(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     bundle = get_policy_bundle()
     policy = bundle.data
     validated: list[dict[str, Any]] = []
     for row in events:
         validated.append(RecordedEvent.model_validate(row).model_dump(mode="json"))
-    cleaned = [_clean_one(e, policy) for e in validated]
+    cleaned = [_clean_one(e, policy) for e in _drop_non_actionable_hover_events(validated)]
     sem_enriched = [_semantic_enrich_one(e, policy) for e in cleaned]
     deduped = dedupe_scroll_events(sem_enriched)
     scroll_annotated = _annotate_scroll_amounts(deduped)

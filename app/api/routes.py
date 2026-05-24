@@ -31,6 +31,7 @@ GENERIC_INTENTS = {"interact", "provide_input", "perform_action"}
 
 class StartRecordBody(BaseModel):
     start_url: HttpUrl | None = Field(None, description="Optional initial navigation target for the headed recorder. If omitted, browser opens to a blank page.")
+    capture_hover: bool = Field(False, description="Capture hover events for workflows that depend on hover-revealed elements.")
 
 
 class CompileBody(BaseModel):
@@ -111,7 +112,7 @@ def health() -> dict[str, str]:
 async def start_record(body: StartRecordBody) -> dict[str, Any]:
     """Start a headed Chromium session with in-page multi-signal capture."""
     start_url = str(body.start_url) if body.start_url else "about:blank"
-    sess = registry.create(start_url)
+    sess = registry.create(start_url, capture_hover=body.capture_hover)
     metrics.inc("recordings_started")
     try:
         await sess.start()
@@ -152,12 +153,18 @@ def record_status(session_id: str) -> dict[str, Any]:
         stored_events = read_session_events(session_id)
         if not stored_events:
             raise HTTPException(status_code=404, detail="Unknown session_id")
+        current_url = ""
+        try:
+            current_url = str((stored_events[-1].get("page") or {}).get("url") or "")
+        except Exception:
+            current_url = ""
         return {
             "session_id": session_id,
             "browser_open": False,
             "event_count": len(stored_events),
             "ended_by_user": True,
             "binding_errors": [],
+            "current_url": current_url,
         }
     return sess.status()
 

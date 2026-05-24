@@ -15,6 +15,9 @@ class ProductRoutesTests(unittest.TestCase):
         patcher = patch("app.config.settings.data_dir", self.tmp / "data")
         self.addCleanup(patcher.stop)
         patcher.start()
+        auth_patcher = patch("app.config.settings.auth_required", False)
+        self.addCleanup(auth_patcher.stop)
+        auth_patcher.start()
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -43,7 +46,7 @@ class ProductRoutesTests(unittest.TestCase):
         self.assertEqual(payload["plan"], "development")
         self.assertFalse(payload["stripe_configured"])
 
-    def test_publish_bundle_records_release_and_audit(self) -> None:
+    def test_patch_bundle_release_records_release_and_audit(self) -> None:
         bundle_root = self.tmp / "bundle" / "render"
         bundle_root.mkdir(parents=True)
 
@@ -52,9 +55,9 @@ class ProductRoutesTests(unittest.TestCase):
 
         client = self._client()
         with patch("app.api.product_routes.bundle_root_dir", side_effect=fake_bundle_root_dir):
-            res = client.post(
-                "/api/v1/packages/bundles/render/publish",
-                json={"version": "1.2.3", "release_notes": "Initial release"},
+            res = client.patch(
+                "/api/v1/packages/bundles/render/release",
+                json={"state": "published", "version": "1.2.3", "release_notes": "Initial release"},
             )
             self.assertEqual(res.status_code, 200)
             release = res.json()["release"]

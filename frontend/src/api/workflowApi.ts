@@ -107,10 +107,12 @@ const stepEditorSchema = z.object({
   step_index: z.number(),
   human_readable_description: z.string(),
   action_type: z.string(),
+  action_payload: recordUnknown.default({}),
+  action_spec: recordUnknown.default({}),
   intent: z.string(),
   final_intent: z.string(),
   url: z.string().default(''),
-  url_state: recordUnknown.default({}),
+  frame: recordUnknown.default({}),
   target: recordUnknown,
   selectors: recordUnknown,
   anchors_signals: z.array(recordUnknown),
@@ -232,6 +234,7 @@ export type RecordingScreenshotItemDTO = {
   preview_url: string
   viewport: string
   has_element_snapshot: boolean
+  frame: Record<string, unknown>
 }
 
 const recordingScreenshotsSchema = z.object({
@@ -245,6 +248,7 @@ const recordingScreenshotsSchema = z.object({
       preview_url: z.string(),
       viewport: z.string(),
       has_element_snapshot: z.boolean(),
+      frame: recordUnknown.default({}),
     }),
   ),
 })
@@ -588,11 +592,17 @@ export function postCompileUpdated(
   }).then((r) => json<Record<string, unknown>>(r))
 }
 
-export function postStartRecording(): Promise<{ session_id: string }> {
+export function postSignOff(skillId: string): Promise<{ skill_id: string; signed_off: boolean }> {
+  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}/sign-off`), {
+    method: 'POST',
+  }).then((r) => json<{ skill_id: string; signed_off: boolean }>(r))
+}
+
+export function postStartRecording(body: { capture_hover?: boolean } = {}): Promise<{ session_id: string }> {
   return fetch(apiUrl('/record'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify(body),
   }).then((r) => json<{ session_id: string }>(r))
 }
 
@@ -602,6 +612,7 @@ export function getRecordingStatus(sessionId: string): Promise<{
   event_count: number
   ended_by_user: boolean
   binding_errors: string[]
+  capture_hover?: boolean
 }> {
   return fetch(apiUrl(`/record/${encodeURIComponent(sessionId)}/status`)).then((r) =>
     json<{
@@ -610,6 +621,7 @@ export function getRecordingStatus(sessionId: string): Promise<{
       event_count: number
       ended_by_user: boolean
       binding_errors: string[]
+      capture_hover?: boolean
     }>(r),
   )
 }
@@ -703,6 +715,17 @@ export function enqueueCompileJob(sessionId: string, skillTitle?: string): Promi
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId, skill_title: skillTitle ?? '' }),
+  })
+    .then(json)
+    .then((payload) => parseOrThrow(enqueuedJobSchema, payload, endpoint) as EnqueuedJob)
+}
+
+export function enqueueRecompileSkillJob(skillId: string, skillTitle?: string): Promise<EnqueuedJob> {
+  const endpoint = `/jobs/skills/${encodeURIComponent(skillId)}/compile-updated`
+  return fetch(apiUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skill_title: skillTitle ?? null }),
   })
     .then(json)
     .then((payload) => parseOrThrow(enqueuedJobSchema, payload, endpoint) as EnqueuedJob)

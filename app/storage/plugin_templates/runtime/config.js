@@ -19,6 +19,10 @@ function getAuthJson(slug) {
   return path.join(CONXA_HOME, "plugins", slug, "auth", "auth.json");
 }
 
+function getAuthMetaJson(slug) {
+  return path.join(CONXA_HOME, "plugins", slug, "auth", "auth_meta.json");
+}
+
 function getPluginConfig(slug) {
   const cfgPath = path.join(getPluginDir(slug), "plugin.json");
   return JSON.parse(fs.readFileSync(cfgPath, "utf8"));
@@ -43,6 +47,6 @@ function writeRegistryAuth(payload) {
 module.exports = {
   CONXA_HOME, REGISTRY_PATH, CONXA_CLAUDE_MD, CONXA_INDEX_MD,
   CACHE_DIR, AUTH_DIR, REGISTRY_AUTH_PATH,
-  getPluginDir, getAuthJson, getPluginConfig, getRegistry,
+  getPluginDir, getAuthJson, getAuthMetaJson, getPluginConfig, getRegistry,
   getRegistryAuth, writeRegistryAuth,
 };

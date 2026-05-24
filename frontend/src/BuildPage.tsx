@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { buildPlugin, fetchPlugins, normalizePluginList, readPluginSse } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { PluginWorkflowTests, workflowTestSummary } from '@/components/PluginWorkflowTests'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2, FolderKanban, Loader2, PackageCheck, XCircle } from 'lucide-react'
@@ -35,7 +36,19 @@ export function BuildPage() {
   const plugins = normalizePluginList(pluginsQ.data)
   const selectedPlugin = plugins.find((p) => p.id === selectedId)
   const currentBuildResult = buildResult?.plugin_id === selectedPlugin?.id ? buildResult : null
-  const buildOutputPath = currentBuildResult?.output_path ?? selectedPlugin?.build?.output_path
+  const hasBuiltPackage = Boolean(selectedPlugin?.build || currentBuildResult)
+  const testSummary = selectedPlugin
+    ? workflowTestSummary(selectedPlugin)
+    : { passed: 0, total: 0, allPassed: false }
+
+  const uncompiled = selectedPlugin?.workflows.filter((w) => !w.skill_id) ?? []
+  const unedited = selectedPlugin?.workflows.filter((w) => w.skill_id && !w.edited_at) ?? []
+  const buildBlocked = uncompiled.length > 0 || unedited.length > 0
+  const stale =
+    selectedPlugin?.build &&
+    selectedPlugin.workflows.some(
+      (w) => w.edited_at && w.edited_at > (selectedPlugin.build?.last_built_at ?? 0),
+    )
 
   function selectPlugin(pluginId: string) {
     setSelectedId(pluginId)
@@ -155,11 +168,26 @@ export function BuildPage() {
                 <p className="mt-0.5 text-xs text-zinc-500">{selectedPlugin.workflows.length} workflows</p>
               </div>
 
+              {buildBlocked && (
+                <div className="mx-4 mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
+                  {uncompiled.length > 0 && (
+                    <p>Compile first: {uncompiled.map((w) => w.name).join(', ')}</p>
+                  )}
+                  {unedited.length > 0 && (
+                    <p>Open editor and sign off: {unedited.map((w) => w.name).join(', ')}</p>
+                  )}
+                </div>
+              )}
+              {stale && !buildBlocked && (
+                <div className="mx-4 mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-300">
+                  Workflows edited since last build — rebuild then re-test before creating the installer.
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 px-4">
                 <Button
                   size="sm"
                   onClick={handleBuild}
-                  disabled={building || selectedPlugin.status !== 'ready' || selectedPlugin.workflows.length === 0}
+                  disabled={building || selectedPlugin.status !== 'ready' || selectedPlugin.workflows.length === 0 || buildBlocked}
                 >
                   {building ? (
                     <>
@@ -181,25 +209,6 @@ export function BuildPage() {
               </div>
 
               <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-4">
-                {selectedPlugin.build && !buildDone ? (
-                  <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <CheckCircle2 className="size-4 shrink-0 text-sky-400" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-sky-300">Plugin package already built</p>
-                          <p className="mt-1 break-all font-mono text-[11px] text-sky-100/60">{selectedPlugin.build.output_path}</p>
-                        </div>
-                      </div>
-                      <Button size="sm" variant="outline" asChild>
-                        <Link href="/build-installer">
-                          <PackageCheck className="size-3.5" />
-                          Build Installer
-                        </Link>
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
                 {buildDone && (
                   <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -207,9 +216,7 @@ export function BuildPage() {
                         <CheckCircle2 className="size-4 shrink-0 text-emerald-400" />
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-emerald-300">Plugin package built</p>
-                          {buildOutputPath ? (
-                            <p className="mt-1 break-all font-mono text-[11px] text-emerald-100/60">{buildOutputPath}</p>
-                          ) : null}
+                          <p className="mt-1 text-[11px] text-emerald-100/60">Run the workflow tests below before building the installer.</p>
                         </div>
                       </div>
                       <Button size="sm" variant="outline" asChild>
@@ -227,16 +234,45 @@ export function BuildPage() {
                     <p className="text-xs text-red-300">{buildError}</p>
                   </div>
                 )}
-                <div
-                  ref={logRef}
-                  className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/8 bg-black/30 p-3 font-mono text-[11px] text-zinc-400"
-                >
-                  {logs.length === 0 ? (
-                    <p className="text-zinc-600">Build logs will appear here...</p>
-                  ) : (
-                    logs.map((line, i) => <div key={i}>{line}</div>)
-                  )}
-                </div>
+                {hasBuiltPackage && !building ? (
+                  <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/8 bg-black/20">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-3 py-2.5">
+                      <div>
+                        <p className="text-xs font-medium text-white">Workflow tests</p>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          {testSummary.passed}/{testSummary.total} workflows passed
+                        </p>
+                      </div>
+                      {testSummary.allPassed ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href="/build-installer">
+                            <PackageCheck className="size-3.5" />
+                            Build Installer
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="p-3">
+                      <PluginWorkflowTests
+                        plugin={selectedPlugin}
+                        onComplete={() => {
+                          void pluginsQ.refetch()
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    ref={logRef}
+                    className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/8 bg-black/30 p-3 font-mono text-[11px] text-zinc-400"
+                  >
+                    {logs.length === 0 ? (
+                      <p className="text-zinc-600">Build logs will appear here...</p>
+                    ) : (
+                      logs.map((line, i) => <div key={i}>{line}</div>)
+                    )}
+                  </div>
+                )}
               </div>
             </>
           ) : (

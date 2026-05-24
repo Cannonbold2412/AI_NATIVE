@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
 from PIL import Image
 
 from app.services.plugin_builder import (
     _build_workflow_from_saved_skill,
+    _clean_stale_artifacts,
+    _copy_plugin_templates,
     _is_login_step,
     _normalize_saved_skill_inputs,
-    _render_credentials_example,
     _render_license,
     _render_readme,
     build_plugin,
@@ -39,32 +41,44 @@ class TestRenderReadme:
         assert "create-service" in md
         assert "deploy" in md
 
-    def test_contains_install_snippet(self):
+    def test_points_to_installer_flow(self):
         md = _render_readme("Test", "test_slug", "https://test.com", [])
-        assert "npx -y conxa install" in md
+        assert "Build Installer" in md
+        assert "npx -y conxa install" not in md
 
-    def test_install_snippet_uses_package_id_when_given(self):
+    def test_package_id_uses_package_id_when_given(self):
         md = _render_readme("Test", "test_slug", "https://test.com", [], package_id="acme/x")
-        assert "npx -y conxa install acme/x" in md
+        assert "Package ID: `acme/x`" in md
 
     def test_contains_auth_reference(self):
         md = _render_readme("Test", "test_slug", "https://test.com", [])
         assert "auth" in md.lower()
 
 
-# ─────────────────────────────────────────────────
-# _render_credentials_example
-# ─────────────────────────────────────────────────
+class TestPluginTemplateCopy:
+    def test_does_not_write_credentials_example(self, tmp_path):
+        _copy_plugin_templates(
+            tmp_path,
+            plugin_name="Test",
+            plugin_slug="test",
+            target_url="https://example.com",
+            version="0.1.0",
+            skill_slugs=[],
+        )
 
-class TestRenderCredentialsExample:
-    def test_valid_json(self):
-        parsed = json.loads(_render_credentials_example())
-        assert "username" in parsed
-        assert "password" in parsed
+        assert (tmp_path / "Claude.md").is_file()
+        assert not (tmp_path / "auth" / "credentials.example.json").exists()
 
-    def test_has_comment(self):
-        parsed = json.loads(_render_credentials_example())
-        assert "_comment" in parsed
+    def test_clean_stale_artifacts_removes_auth_credentials(self, tmp_path):
+        auth_dir = tmp_path / "auth"
+        auth_dir.mkdir()
+        (auth_dir / "credentials.example.json").write_text("{}", encoding="utf-8")
+        (auth_dir / "credentials.json").write_text("{}", encoding="utf-8")
+
+        _clean_stale_artifacts(tmp_path)
+
+        assert not (auth_dir / "credentials.example.json").exists()
+        assert not (auth_dir / "credentials.json").exists()
 
 
 # ─────────────────────────────────────────────────
@@ -186,6 +200,88 @@ class TestPluginConfigStructure:
 # ─────────────────────────────────────────────────
 
 class TestSavedSkillJsonBuild:
+    def test_saved_skill_export_strips_legacy_synthetic_start_navigation(self, tmp_path):
+        saved_skill = {
+            "meta": {"id": "skill_123", "title": "Delete Database"},
+            "inputs": [{"id": "service_name", "label": "Service Name", "type": "text"}],
+            "skills": [
+                {
+                    "name": "recorded",
+                    "steps": [
+                        {
+                            "action": {"action": "navigate", "url": "https://dashboard.render.com/"},
+                            "intent": "navigate_to_start_url",
+                            "target": {},
+                            "signals": {
+                                "semantic": {
+                                    "final_intent": "navigate_to_start_url",
+                                    "llm_intent": "navigate_to_start_url",
+                                },
+                                "selectors": {},
+                                "anchors": [],
+                                "visual": {},
+                            },
+                        },
+                        {
+                            "action": "type",
+                            "target": {"primary_selector": 'input[placeholder="Search"]'},
+                            "value": "{{service_name}}",
+                        },
+                        {
+                            "action": "click",
+                            "target": {"primary_selector": "text={{service_name}}"},
+                        },
+                    ],
+                }
+            ],
+        }
+
+        _build_workflow_from_saved_skill(
+            bundle_root=tmp_path,
+            workflow_slug="delete_database",
+            saved_skill=saved_skill,
+        )
+
+        skill_dir = tmp_path / "skills" / "delete_database"
+        execution = json.loads((skill_dir / "execution.json").read_text(encoding="utf-8"))
+        assert [step["type"] for step in execution] == ["type", "click"]
+        assert all(step["type"] != "navigate" for step in execution)
+
+        recovery = json.loads((skill_dir / "recovery.json").read_text(encoding="utf-8"))
+        assert [step["step_id"] for step in recovery["steps"]] == [1, 2]
+        assert recovery["steps"][0]["selector_context"]["primary"] == 'input[placeholder="Search"]'
+        assert recovery["steps"][1]["selector_context"]["primary"] == "text={{service_name}}"
+
+    def test_saved_skill_export_preserves_real_first_navigation(self, tmp_path):
+        saved_skill = {
+            "meta": {"id": "skill_123", "title": "Open Settings"},
+            "inputs": [],
+            "skills": [
+                {
+                    "steps": [
+                        {
+                            "action": {"action": "navigate", "url": "https://dashboard.render.com/settings"},
+                            "intent": "navigate_to_account_settings",
+                        },
+                        {
+                            "action": "click",
+                            "target": {"primary_selector": "text=Members"},
+                        },
+                    ],
+                }
+            ],
+        }
+
+        _build_workflow_from_saved_skill(
+            bundle_root=tmp_path,
+            workflow_slug="open_settings",
+            saved_skill=saved_skill,
+        )
+
+        execution = json.loads((tmp_path / "skills" / "open_settings" / "execution.json").read_text(encoding="utf-8"))
+        assert [step["type"] for step in execution] == ["navigate", "click"]
+        assert execution[0]["url"] == "https://dashboard.render.com/settings"
+
     def test_preserves_human_edit_placeholders_and_removes_recorded_literal(self, tmp_path):
         saved_skill = {
             "meta": {"id": "skill_123", "title": "Delete Database"},
@@ -230,6 +326,7 @@ class TestSavedSkillJsonBuild:
         execution_raw = (skill_dir / "execution.json").read_text(encoding="utf-8")
         assert "{{service_name}}" in execution_raw
         assert "conxa-db" not in execution_raw
+        assert "url_state" not in execution_raw
 
         execution = json.loads(execution_raw)
         assert execution[1]["value"] == "{{service_name}}"
@@ -413,7 +510,7 @@ class TestSavedSkillJsonBuild:
         recovery = json.loads((skill_dir / "recovery.json").read_text(encoding="utf-8"))
         assert recovery["steps"][0]["visual_ref"] == "visuals/Image_1.jpg"
 
-    def test_saved_skill_url_state_keeps_only_runtime_patterns(self, tmp_path):
+    def test_saved_skill_export_drops_url_state_and_preserves_frame(self, tmp_path):
         saved_skill = {
             "meta": {"id": "skill_123", "title": "Delete Database"},
             "inputs": [],
@@ -423,6 +520,16 @@ class TestSavedSkillJsonBuild:
                         {
                             "action": "click",
                             "target": {"primary_selector": 'text="Delete Database"'},
+                            "frame": {
+                                "chain": [
+                                    {
+                                        "selector": 'iframe[id="object-builder-ui"]',
+                                        "fallback_selectors": ['iframe[data-test-id="object-builder-ui-iframe"]'],
+                                        "url": "https://app-na2.hubspot.com/object-builder/246242636/0-1/embed?",
+                                        "url_pattern": "^https://app\\-na2\\.hubspot\\.com/object\\-builder/[^/]+/0\\-1/embed$",
+                                    }
+                                ]
+                            },
                             "url_state": {
                                 "before": {
                                     "url": "https://dashboard.render.com/d/dpg-123",
@@ -449,15 +556,115 @@ class TestSavedSkillJsonBuild:
         )
 
         execution_raw = (tmp_path / "skills" / "delete_database" / "execution.json").read_text(encoding="utf-8")
+        assert "url_state" not in execution_raw
         assert "title_includes" not in execution_raw
         assert "edited_by_user" not in execution_raw
-        assert '"url":' not in execution_raw
 
         execution = json.loads(execution_raw)
-        assert execution[0]["url_state"] == {
-            "before": {"url_pattern": "^https://dashboard\\.render\\.com/d/[^/]+$"},
-            "after": {"url_pattern": "^https://dashboard\\.render\\.com/$"},
+        assert execution[0]["frame"]["chain"][0]["selector"] == 'iframe[id="object-builder-ui"]'
+
+    def test_saved_skill_export_drops_placeholder_url_state(self, tmp_path):
+        saved_skill = {
+            "meta": {
+                "id": "skill_session",
+                "title": "Create Lead",
+                "source_session_id": "session_123",
+            },
+            "inputs": [],
+            "skills": [
+                {
+                    "steps": [
+                        {
+                            "action": "click",
+                            "target": {"primary_selector": '[aria-label="Contacts"]'},
+                            "url_state": {
+                                "before": {
+                                    "url_pattern": "^https://{{Organisation_Name}}\\.pipedrive\\.com/setup\\-guide$"
+                                },
+                                "after": {
+                                    "url_pattern": "^https://{{Organisation_Name}}\\.pipedrive\\.com/setup\\-guide$"
+                                },
+                            },
+                        },
+                    ],
+                }
+            ],
         }
+
+        _build_workflow_from_saved_skill(
+            bundle_root=tmp_path,
+            workflow_slug="create_a_lead",
+            saved_skill=saved_skill,
+        )
+
+        execution_raw = (tmp_path / "skills" / "create_a_lead" / "execution.json").read_text(encoding="utf-8")
+        assert "url_state" not in execution_raw
+        assert "{{Organisation_Name}}" not in execution_raw
+
+    def test_saved_skill_export_preserves_extended_actions_and_markers(self, tmp_path):
+        saved_skill = {
+            "meta": {"id": "skill_123", "title": "Action Parity"},
+            "inputs": [],
+            "skills": [
+                {
+                    "steps": [
+                        {"action": {"action": "dblclick"}, "target": {"primary_selector": 'text="Open"'}},
+                        {
+                            "action": {"action": "set_checkbox", "value": "false"},
+                            "target": {"primary_selector": 'input[name="enabled"]'},
+                            "value": "true",
+                        },
+                        {
+                            "action": {"action": "keyboard_shortcut", "value": "Control+K"},
+                            "value": "Control+K",
+                        },
+                        {
+                            "action": {
+                                "action": "drag_drop",
+                                "value": '{"src_selector":"#source","dst_selector":"#target"}',
+                            },
+                        },
+                        {"action": {"action": "wait", "ms": 750}},
+                        {"action": {"action": "download_observed", "value": '{"suggested_filename":"report.csv"}'}},
+                    ],
+                }
+            ],
+        }
+
+        _build_workflow_from_saved_skill(
+            bundle_root=tmp_path,
+            workflow_slug="action_parity",
+            saved_skill=saved_skill,
+        )
+
+        execution = json.loads((tmp_path / "skills" / "action_parity" / "execution.json").read_text(encoding="utf-8"))
+        assert [step["type"] for step in execution] == [
+            "dblclick",
+            "set_checkbox",
+            "keyboard_shortcut",
+            "drag_drop",
+            "wait",
+            "download_observed",
+        ]
+        assert execution[1]["value"] == "false"
+        assert execution[3]["src_selector"] == "#source"
+        assert execution[3]["dst_selector"] == "#target"
+        assert execution[4]["ms"] == 750
+        assert execution[5]["recording_marker"] is True
+
+    def test_saved_skill_export_rejects_malformed_supported_action(self, tmp_path):
+        saved_skill = {
+            "meta": {"id": "skill_123", "title": "Bad Drag"},
+            "inputs": [],
+            "skills": [{"steps": [{"action": {"action": "drag_drop", "value": "{}"}}]}],
+        }
+
+        with pytest.raises(ValueError, match="not exportable"):
+            _build_workflow_from_saved_skill(
+                bundle_root=tmp_path,
+                workflow_slug="bad_drag",
+                saved_skill=saved_skill,
+            )
 
     def test_normalizes_human_edit_input_id_to_runtime_name(self):
         inputs = _normalize_saved_skill_inputs(
@@ -490,11 +697,16 @@ class TestSavedSkillJsonBuild:
                     name="Delete Database",
                     session_id="workflow-session",
                     skill_id="skill_saved",
+                    edited_at=1,
                 )
             ],
         )
         saved_skill = {
-            "meta": {"id": "skill_saved", "title": "Delete Database"},
+            "meta": {
+                "id": "skill_saved",
+                "title": "Delete Database",
+                "source_session_id": "workflow-session",
+            },
             "inputs": [{"id": "service_name", "label": "Service Name", "type": "text"}],
             "skills": [
                 {
@@ -509,15 +721,8 @@ class TestSavedSkillJsonBuild:
                 }
             ],
         }
-        sessions_read: list[str] = []
-
-        def fake_read_session_events(session_id):
-            sessions_read.append(session_id)
-            return []
-
         monkeypatch.setattr(plugin_builder, "get_plugin", lambda _plugin_id: plugin)
         monkeypatch.setattr(plugin_builder, "read_skill", lambda skill_id: saved_skill if skill_id == "skill_saved" else None)
-        monkeypatch.setattr(plugin_builder, "read_session_events", fake_read_session_events)
         monkeypatch.setattr(plugin_builder, "_bundle_root", lambda _bundle_slug: tmp_path)
         monkeypatch.setattr(plugin_builder, "set_build", lambda *args, **kwargs: None)
 
@@ -526,11 +731,12 @@ class TestSavedSkillJsonBuild:
         execution_raw = (tmp_path / "skills" / "delete_database" / "execution.json").read_text(encoding="utf-8")
         assert "{{service_name}}" in execution_raw
         assert "conxa-db" not in execution_raw
-        assert sessions_read == []  # saved skill used — no session events needed
 
         # Data-only artifact: marketplace shim and runtime/ never ship.
         assert not (tmp_path / ".claude-plugin").exists()
         assert not (tmp_path / "runtime").exists()
+        assert not (tmp_path / "sessions").exists()
+        assert not any(path.name == "events.jsonl" for path in tmp_path.rglob("*"))
 
         # v2 manifest fields written by build_plugin
         manifest = json.loads((tmp_path / "plugin.json").read_text(encoding="utf-8"))
@@ -541,6 +747,7 @@ class TestSavedSkillJsonBuild:
         assert manifest["auth_requirements"] == {"kind": "cookie", "manual_login": True}
         assert manifest["runtime_min_version"] == "1.0.0"
 
-        # Per-plugin Claude.md gets the new npx install snippet.
+        # Per-plugin Claude.md points at the installer flow, not the deleted npm CLI.
         claude_md = (tmp_path / "Claude.md").read_text(encoding="utf-8")
-        assert "npx -y conxa install" in claude_md
+        assert "Build Installer" in claude_md
+        assert "npx -y conxa install" not in claude_md

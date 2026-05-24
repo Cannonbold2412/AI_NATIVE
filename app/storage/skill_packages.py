@@ -685,7 +685,7 @@ def _read_text_file_if_present(path: Path) -> str | None:
 
 
 _SKIP_DIRS = frozenset({"node_modules", ".git", "__pycache__"})
-_SKIP_FILES = frozenset({"auth.json"})
+_SKIP_FILES = frozenset({"auth.json", "credentials.json", "credentials.example.json"})
 _TEXT_SUFFIXES = frozenset({".json", ".md", ".js", ".ts", ".txt", ".yaml", ".yml", ".toml", ".gitignore", ".env", ".example", ""})
 
 

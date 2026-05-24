@@ -176,7 +176,7 @@ function SidebarRail({
             </Badge>
           </div>
           <p className="text-xs leading-5 text-zinc-500">
-            Record flows, refine steps, publish packages, and monitor jobs.
+            Record flows, refine steps, package skills, and monitor jobs.
           </p>
         </div>
       </div>

@@ -9,7 +9,7 @@ const FEATURES = [
   },
   {
     icon: '🏢',
-    title: 'Private deployment',
+    title: 'Private installation',
     desc: 'Run CONXA runtime inside your own infrastructure. Your data stays on your machines.',
   },
   {

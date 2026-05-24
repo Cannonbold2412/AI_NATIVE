@@ -21,7 +21,8 @@
       "sync.js",
       "auth_manager.js",
       "run.js",
-      "browser.js"
+      "browser.js",
+      "tracker.js"
     ]
   },
   "dependencies": {

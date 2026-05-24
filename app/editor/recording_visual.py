@@ -69,6 +69,7 @@ def screenshot_items_for_skill(
                 "has_element_snapshot": bool(
                     isinstance(vis.get("element_snapshot"), str) and str(vis.get("element_snapshot") or "").strip()
                 ),
+                "frame": dict(ev.get("frame") or {}) if isinstance(ev.get("frame"), dict) else {},
             }
         )
 
@@ -172,6 +173,9 @@ def apply_recording_event_visual_to_step_or_raise(
     signals["visual"] = merged_visual
     signals["anchors"] = list(anchors)
     step["signals"] = signals
+    frame = ev_pick.get("frame")
+    if isinstance(frame, dict) and frame.get("chain"):
+        step["frame"] = dict(frame)
 
     recovery = dict(step.get("recovery") or {})
     recovery["anchors"] = list(anchors)

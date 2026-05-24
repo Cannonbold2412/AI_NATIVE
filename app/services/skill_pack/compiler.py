@@ -266,6 +266,20 @@ def _canonical_scroll_step(step: dict[str, Any], index: int) -> dict[str, Any]:
     return out
 
 
+def _canonical_wait_step(step: dict[str, Any], index: int) -> dict[str, Any]:
+    selector_raw = _json_text(step.get("selector")).strip()
+    if selector_raw:
+        raise ValueError(f"Wait step at index {index} must not include selector.")
+    out: dict[str, Any] = {"type": "wait"}
+    raw_ms = step.get("ms", step.get("value"))
+    if raw_ms not in (None, ""):
+        try:
+            out["ms"] = max(0, int(raw_ms))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Wait step at index {index}: ms must be an integer.") from exc
+    return out
+
+
 def _canonical_check_step(step: dict[str, Any], index: int) -> dict[str, Any]:
     kind = _normalize_check_kind(step.get("kind") or step.get("check_kind") or "url")
     if kind not in _CHECK_KINDS:
@@ -317,6 +331,40 @@ def _canonical_click_step(step: dict[str, Any]) -> dict[str, Any]:
     return {"type": "click", "selector": selector}
 
 
+def _canonical_v2_step(step: dict[str, Any]) -> dict[str, Any]:
+    """Generic passthrough for v2 action kinds — preserves type, selector, and value."""
+    step_type = str(step.get("type") or "").strip().lower()
+    out: dict[str, Any] = {"type": step_type}
+    selector = _json_text(step.get("selector"))
+    if selector:
+        out["selector"] = selector
+    value = step.get("value")
+    if value is not None:
+        out["value"] = value
+    return out
+
+
+def _canonical_upload_step(step: dict[str, Any]) -> dict[str, Any]:
+    """Transform upload_intent → upload with a {{variable}} the caller fills with a file path."""
+    selector = _json_text(step.get("selector"))
+    var_name = "file_path"
+    raw_value = step.get("value") or ""
+    if raw_value:
+        try:
+            files = json.loads(raw_value) if isinstance(raw_value, str) else raw_value
+            if isinstance(files, list) and files:
+                fname = str(files[0].get("name") or "")
+                if fname:
+                    base = fname.rsplit(".", 1)[0] if "." in fname else fname
+                    var_name = _normalize_name(base) or "file_path"
+        except Exception:
+            pass
+    out: dict[str, Any] = {"type": "upload", "value": f"{{{{{var_name}}}}}"}
+    if selector:
+        out["selector"] = selector
+    return out
+
+
 def _canonical_step(step: dict[str, Any], index: int) -> dict[str, Any]:
     step_type = str(step.get("type") or "").strip().lower()
     if step_type not in _ALLOWED_STRUCTURED_TYPES:
@@ -324,16 +372,27 @@ def _canonical_step(step: dict[str, Any], index: int) -> dict[str, Any]:
             f"Unsupported structured step type at index {index}: {step.get('type')}"
         )
     if step_type == "navigate":
-        return _canonical_navigate_step(step, index)
-    if step_type in _TEXT_INPUT_STEP_TYPES:
-        return _canonical_text_input_step(step, step_type, index)
-    if step_type in _SELECTOR_ONLY_STEP_TYPES:
-        return _canonical_selector_only_step(step, step_type)
-    if step_type == "scroll":
-        return _canonical_scroll_step(step, index)
-    if step_type == "check":
-        return _canonical_check_step(step, index)
-    return _canonical_click_step(step)
+        out = _canonical_navigate_step(step, index)
+    elif step_type in _TEXT_INPUT_STEP_TYPES:
+        out = _canonical_text_input_step(step, step_type, index)
+    elif step_type in _SELECTOR_ONLY_STEP_TYPES:
+        out = _canonical_selector_only_step(step, step_type)
+    elif step_type == "scroll":
+        out = _canonical_scroll_step(step, index)
+    elif step_type == "wait":
+        out = _canonical_wait_step(step, index)
+    elif step_type == "check":
+        out = _canonical_check_step(step, index)
+    elif step_type == "click":
+        out = _canonical_click_step(step)
+    elif step_type == "upload_intent":
+        out = _canonical_upload_step(step)
+    else:
+        out = _canonical_v2_step(step)
+    frame = _sanitize_runtime_frame(step.get("frame"))
+    if frame:
+        out["frame"] = frame
+    return out
 
 
 def _validate_structured_output(structured: dict[str, Any]) -> dict[str, Any]:
@@ -1282,52 +1341,141 @@ def _pipeline_phase_append(phase: str, state: str, **fields: Any) -> None:
     skill_pack_log_append(row)
 
 
-def _extract_raw_url_state(raw_step: dict[str, Any]) -> dict[str, Any] | None:
-    us = raw_step.get("url_state")
-    if not isinstance(us, dict):
-        return None
-    before = us.get("before") or {}
-    after = us.get("after") or {}
-    if not isinstance(before, dict):
-        return None
-    return {"before": before, "after": after}
+def _sanitize_runtime_frame(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    chain = raw.get("chain")
+    if not isinstance(chain, list):
+        return {}
+    out_chain: list[dict[str, Any]] = []
+    for item in chain:
+        if not isinstance(item, dict):
+            continue
+        selector = str(item.get("selector") or "").strip()
+        if not selector:
+            continue
+        fallbacks = [
+            str(fb).strip()
+            for fb in (item.get("fallback_selectors") or [])
+            if str(fb or "").strip()
+        ][:5]
+        url = str(item.get("url") or "").strip()
+        out_chain.append(
+            {
+                "selector": selector,
+                "fallback_selectors": fallbacks,
+                "url": url,
+                "url_pattern": str(item.get("url_pattern") or _normalize_url_pattern(url)).strip(),
+            }
+        )
+    return {"chain": out_chain} if out_chain else {}
 
 
-def _build_url_state_for_steps(
+def _extract_raw_frame(raw_step: dict[str, Any]) -> dict[str, Any]:
+    return _sanitize_runtime_frame(raw_step.get("frame"))
+
+
+def _selector_candidates_for_context_match(step: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip().lower()
+        if text and text not in out:
+            out.append(text)
+
+    add(step.get("selector"))
+    add(step.get("css_selector"))
+    target = step.get("target") if isinstance(step.get("target"), dict) else {}
+    add(target.get("primary_selector"))
+    name = str(target.get("name") or "").strip()
+    if name:
+        add(f'input[name="{name}"]')
+    aria = str(target.get("aria_label") or "").strip()
+    if aria:
+        add(f'input[aria-label="{aria}"]')
+    placeholder = str(target.get("placeholder") or "").strip()
+    if placeholder:
+        add(f'input[placeholder="{placeholder}"]')
+    selectors = step.get("selectors") if isinstance(step.get("selectors"), dict) else {}
+    add(selectors.get("selector"))
+    add(selectors.get("text_based"))
+    add(selectors.get("css"))
+    add(selectors.get("aria"))
+    return out
+
+
+def _selector_context_score(exec_step: dict[str, Any], raw_step: dict[str, Any]) -> float:
+    exec_candidates = _selector_candidates_for_context_match(exec_step)
+    raw_candidates = _selector_candidates_for_context_match(raw_step)
+    best = 0.0
+    for left in exec_candidates:
+        for right in raw_candidates:
+            if left == right:
+                best = max(best, 1.0)
+            elif left and right and (left in right or right in left):
+                best = max(best, 0.5)
+    return best
+
+
+def _raw_context_for_execution_step(
+    exec_step: dict[str, Any],
+    raw_steps: list[dict[str, Any]],
+    used_indices: set[int],
+    fallback_index: int,
+) -> tuple[int | None, dict[str, Any] | None]:
+    best_index: int | None = None
+    best_score = 0.0
+    for idx, raw_step in enumerate(raw_steps):
+        if idx in used_indices or not isinstance(raw_step, dict):
+            continue
+        score = _selector_context_score(exec_step, raw_step)
+        if score > best_score:
+            best_score = score
+            best_index = idx
+    if best_index is not None and best_score > 0:
+        used_indices.add(best_index)
+        return best_index, raw_steps[best_index]
+    if 0 <= fallback_index < len(raw_steps):
+        idx = fallback_index
+        used_indices.add(idx)
+        return idx, raw_steps[idx]
+    return None, None
+
+
+def _attach_recorded_frame_context_for_steps(
     execution_plan: list[dict[str, Any]],
     raw_steps: list[dict[str, Any]],
-    skill_name: str,
-) -> tuple[list[dict[str, Any]], str]:
-    usable_raw = [s for s in raw_steps if _extract_raw_url_state(s) is not None]
+    _skill_name: str,
+) -> list[dict[str, Any]]:
+    usable_raw = [
+        s
+        for s in raw_steps
+        if isinstance(s, dict) and _extract_raw_frame(s)
+    ]
 
     augmented: list[dict[str, Any]] = []
     n_exec = len(execution_plan)
+    used_raw_indices: set[int] = set()
 
     for exec_idx, step in enumerate(execution_plan, start=1):
         step_copy = copy.deepcopy(step)
-        us: dict[str, Any] | None = None
 
         if usable_raw:
             ratio = (exec_idx - 1) / max(n_exec - 1, 1)
-            raw_idx = round(ratio * (len(usable_raw) - 1))
-            raw_us = _extract_raw_url_state(usable_raw[raw_idx]) or {}
-            before = raw_us.get("before") or {}
-            after = raw_us.get("after") or {}
-            before_url = str(before.get("url") or "")
-            after_url = str(after.get("url") or "")
-            us = {
-                "before": {
-                    "url_pattern": _normalize_url_pattern(before_url),
-                },
-                "after": {
-                    "url_pattern": _normalize_url_pattern(after_url),
-                },
-            }
-            step_copy["url_state"] = us
+            fallback_idx = round(ratio * (len(usable_raw) - 1))
+            _, raw_step = _raw_context_for_execution_step(
+                step_copy,
+                usable_raw,
+                used_raw_indices,
+                fallback_idx,
+            )
+            frame = _extract_raw_frame(raw_step or {})
+            if frame:
+                step_copy["frame"] = frame
 
         augmented.append(step_copy)
 
-    return augmented, ""
+    return augmented
 
 
 def _write_visual_assets_to_temp_dir(visual_assets: dict[str, bytes], parent: Path) -> Path:
@@ -1503,7 +1651,7 @@ def _compile_workflow_payload(
 
     execution_plan = _fix_execution_plan(execution_plan)
 
-    execution_plan, _ = _build_url_state_for_steps(execution_plan, raw_steps, workflow_slug)
+    execution_plan = _attach_recorded_frame_context_for_steps(execution_plan, raw_steps, workflow_slug)
 
     manifest = build_manifest(inputs, workflow_slug, str(structured.get("goal") or ""))
     skill_md = generate_skill_markdown(

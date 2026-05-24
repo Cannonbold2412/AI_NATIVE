@@ -149,11 +149,9 @@ function init() {
   }
   process.stderr.write(`[conxa] Bootstrapping runtime at ${RUNTIME_DIR} ...\n`);
 
-  // All runtime files live alongside cli.js in both layouts: the in-repo
-  // template tree (app/storage/plugin_templates/runtime/) and the published
-  // npm package (packages/conxa-cli/lib/). Copy the whole directory so new
-  // files (resolver/, search.js, etc.) ship automatically without having to
-  // maintain a hardcoded allow-list.
+  // All runtime files live alongside cli.js in the in-repo template tree.
+  // Copy the whole directory so new files (resolver/, search.js, etc.) ship
+  // automatically without having to maintain a hardcoded allow-list.
   fs.mkdirSync(RUNTIME_DIR, { recursive: true });
   for (const entry of fs.readdirSync(__dirname, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name === ".bootstrapped") continue;
@@ -206,7 +204,6 @@ function _installFromLocalDir(pluginDir) {
   const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
   if (!cfg.slug)          throw new Error("plugin.json missing: slug");
   if (!cfg.target_url)    throw new Error("plugin.json missing: target_url");
-  if (!cfg.protected_url) throw new Error("plugin.json missing: protected_url");
 
   const slug    = cfg.slug;
   const destDir = path.join(PLUGINS_DIR, slug);
@@ -227,13 +224,6 @@ function _installFromLocalDir(pluginDir) {
   const skillsSrc = path.join(absDir, "skills");
   if (fs.existsSync(skillsSrc)) copyDirSync(skillsSrc, path.join(destDir, "skills"));
 
-  // Copy auth/credentials.example.json (never auth.json)
-  const credsEx = path.join(absDir, "auth", "credentials.example.json");
-  if (fs.existsSync(credsEx)) {
-    fs.mkdirSync(path.join(destDir, "auth"), { recursive: true });
-    fs.copyFileSync(credsEx, path.join(destDir, "auth", "credentials.example.json"));
-  }
-
   // Update master registry
   const skillsList = (cfg.skills || []).map(s => ({ slug: s.slug, path: s.path || `skills/${s.slug}` }));
   const entry = {
@@ -242,7 +232,7 @@ function _installFromLocalDir(pluginDir) {
     version:       cfg.version || "1.0.0",
     path:          destDir,
     target_url:    cfg.target_url,
-    protected_url: cfg.protected_url,
+    protected_url: cfg.protected_url || "",
     skills:        skillsList,
     installed_at:  new Date().toISOString(),
   };
@@ -395,4 +385,4 @@ if (require.main === module) {
   runCli(process.argv.slice(2));
 }
 
-module.exports = { init, install, uninstall, list, search, registryLogin, registryLogout, runCli };
+module.exports = { init, install, uninstall, list, search, registryLogin, registryLogout, runCli, _installFromLocalDir };

@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -17,6 +18,7 @@ import {
   CircleDot,
   ClipboardList,
   Gauge,
+  MousePointer2,
   Pencil,
   Play,
   Sparkles,
@@ -50,7 +52,7 @@ function metricPreviewValue(value: unknown) {
 const workflowNotes = [
   'Click "Start recording" to launch a headed browser.',
   'Navigate to your desired URL and record your workflow.',
-  'Close the browser when done; it compiles automatically.',
+  'Close the browser when done; compile it when you are ready.',
 ]
 
 export function HomePage() {
@@ -62,9 +64,13 @@ export function HomePage() {
     logLines,
     isRecording,
     isCompiling,
+    isRecordingComplete,
+    captureHover,
+    setCaptureHover,
     metrics,
     sessionId,
     startFlow,
+    compileCurrentSession,
   } = useRecordingSession({
     onCompileSuccess: (id) => router.push(`/edit/${id}`),
   })
@@ -76,7 +82,7 @@ export function HomePage() {
     <div className="h-full overflow-y-auto">
       <PageHeader
         title="New recording"
-        description="Record a browser workflow, compile it into a package, and move into review without leaving the workspace."
+        description="Record a browser workflow, then compile it into a package when you are ready to review."
         actions={
           <>
             <Button
@@ -108,7 +114,7 @@ export function HomePage() {
                     Build reusable skills from live browser workflows.
                   </CardTitle>
                   <CardDescription className="max-w-2xl text-sm leading-6 text-zinc-400">
-                    Start a session from any URL, capture the flow in a headed browser, and hand the compiled result directly to the editor for refinement.
+                    Start a session from any URL, capture the flow in a headed browser, then compile the saved recording for refinement.
                   </CardDescription>
                 </div>
               </div>
@@ -129,6 +135,26 @@ export function HomePage() {
                     className="h-10 border-white/10 bg-black/20 text-zinc-100 placeholder:text-zinc-500"
                   />
                 </div>
+                <div
+                  className="flex items-start gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2.5"
+                >
+                  <Checkbox
+                    id="captureHover"
+                    checked={captureHover}
+                    disabled={isRecording || isCompiling}
+                    onCheckedChange={(checked) => setCaptureHover(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="captureHover" className="grid min-w-0 cursor-pointer gap-1">
+                    <span className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+                      <MousePointer2 className="size-3.5 text-zinc-400" />
+                      Workflow contains hover-only elements
+                    </span>
+                    <span className="text-xs leading-5 text-zinc-500">
+                      Turn this on when menus, tooltips, or drawers only appear after hovering.
+                    </span>
+                  </Label>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
@@ -142,6 +168,19 @@ export function HomePage() {
                   <Play className="size-4" />
                   Start recording
                 </Button>
+                {isRecordingComplete && sessionId ? (
+                  <Button
+                    type="button"
+                    size="lg"
+                    disabled={isRecording || isCompiling}
+                    onClick={() => void compileCurrentSession()}
+                    className="h-10 min-w-44 border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15"
+                    variant="outline"
+                  >
+                    <Sparkles className="size-4" />
+                    Compile recording
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"

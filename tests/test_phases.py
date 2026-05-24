@@ -126,10 +126,9 @@ class PhaseTests(unittest.TestCase):
         finally:
             shutil.rmtree(data_dir, ignore_errors=True)
         self.assertEqual(pkg.meta.id, "skill_test")
-        self.assertEqual(len(pkg.skills[0].steps), 2)
-        self.assertEqual(pkg.skills[0].steps[0].action, {"action": "navigate", "url": "https://example.com/app"})
-        self.assertEqual(pkg.skills[0].steps[1].action, "click")
-        dumped = pkg.skills[0].steps[1].model_dump()
+        self.assertEqual(len(pkg.skills[0].steps), 1)
+        self.assertEqual(pkg.skills[0].steps[0].action, "click")
+        dumped = pkg.skills[0].steps[0].model_dump()
         self.assertIn("signals", dumped)
         self.assertIn("decision_policy", dumped)
         self.assertIn("intent", dumped)
@@ -142,6 +141,41 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(anchors[0].get("relation"), "target")
         blob = " ".join(str(a.get("element") or "") for a in anchors)
         self.assertNotIn("h1", blob)
+
+    def test_phase3_compiler_preserves_frame_context(self) -> None:
+        from app.compiler.build import compile_skill_package
+        from app.pipeline.run import run_pipeline
+
+        ev = _minimal_click_event()
+        ev["frame"] = {
+            "chain": [
+                {
+                    "selector": 'iframe[id="object-builder-ui"]',
+                    "fallback_selectors": ['iframe[data-test-id="object-builder-ui-iframe"]'],
+                    "url": "https://app-na2.hubspot.com/object-builder/246242636/0-1/embed?",
+                    "url_pattern": "^https://app\\-na2\\.hubspot\\.com/object\\-builder/[^/]+/0\\-1/embed$",
+                }
+            ]
+        }
+        evs = run_pipeline([ev])
+        data_dir, *patchers = _compile_with_vision_mocks("s-frame", evs)
+        try:
+            with ExitStack() as stack:
+                for p in patchers:
+                    stack.enter_context(p)
+                pkg = compile_skill_package(
+                    evs,
+                    skill_id="skill_frame",
+                    source_session_id="s-frame",
+                    title="t",
+                    version=1,
+                )
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
+        step = pkg.skills[0].steps[0].model_dump(mode="json")
+        assert step["frame"]["chain"][0]["selector"] == 'iframe[id="object-builder-ui"]'
+        assert step["frame"]["chain"][0]["fallback_selectors"] == ['iframe[data-test-id="object-builder-ui-iframe"]']
 
     def test_phase6_patch_bumps_version(self) -> None:
         from app.compiler.build import compile_skill_package
@@ -196,7 +230,7 @@ class PhaseTests(unittest.TestCase):
         finally:
             shutil.rmtree(data_dir, ignore_errors=True)
         doc = pkg.model_dump(mode="json")
-        step = doc["skills"][0]["steps"][1]
+        step = doc["skills"][0]["steps"][0]
         step["intent"] = ""
         rec = dict(step.get("recovery") or {})
         rec["intent"] = ""
@@ -211,12 +245,12 @@ class PhaseTests(unittest.TestCase):
             source="test",
         )
         with patch("app.compiler.patch.enrich_semantic", return_value=fake):
-            patched = apply_step_patch(doc, 1, {"target": {"primary_selector": "#go"}})
+            patched = apply_step_patch(doc, 0, {"target": {"primary_selector": "#go"}})
 
-        out_rec = patched["skills"][0]["steps"][1]["recovery"]
+        out_rec = patched["skills"][0]["steps"][0]["recovery"]
         self.assertEqual(out_rec.get("intent"), "navigate_to_checkout")
         self.assertEqual(out_rec.get("final_intent"), "navigate_to_checkout")
-        self.assertIn("url_state_match", out_rec.get("strategies") or [])
+        self.assertNotIn("url_state_match", out_rec.get("strategies") or [])
         self.assertIn("llm_reasoned_match", out_rec.get("strategies") or [])
 
     def test_compiler_validation_commit_waits_dom_when_no_url_signal(self) -> None:
@@ -399,7 +433,7 @@ class PhaseTests(unittest.TestCase):
         pol = load_policy_bundle().data
         strat = recovery_strategies_for_intent("navigate_to_account_settings", pol)
         self.assertIn("semantic match", strat)
-        self.assertIn("url_state_match", strat)
+        self.assertNotIn("url_state_match", strat)
 
     def test_default_recovery_block_includes_final_intent(self) -> None:
         from app.compiler.recovery_policy import default_recovery_block
@@ -519,6 +553,32 @@ class PhaseTests(unittest.TestCase):
         out = clean_steps([type_ev, click_ev], {})
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["action"]["action"], "type")
+
+    def test_pipeline_drops_zero_bbox_hover_events(self) -> None:
+        from app.pipeline.run import _drop_non_actionable_hover_events
+
+        def _event(action: str, width: int, height: int) -> dict:
+            return {
+                "action": {"action": action, "timestamp": "2026-01-01T00:00:00Z", "value": None},
+                "target": {"tag": "div", "id": "loading", "classes": [], "inner_text": "Loading", "role": "status"},
+                "selectors": {"css": "#loading", "xpath": "/div[1]", "text_based": 'text="Loading"', "aria": '[role="status"][name="Loading"]'},
+                "context": {"parent": "main", "siblings": [], "index_in_parent": 0, "form_context": None},
+                "semantic": {"normalized_text": "loading", "role": "status", "input_type": None, "intent_hint": "interact"},
+                "anchors": [{"element": "Loading", "relation": "inside"}],
+                "visual": {"bbox": {"x": 0, "y": 0, "w": width, "h": height}, "viewport": "1280x720", "scroll_position": "0,0"},
+                "page": {"url": "https://example.com", "title": "Example"},
+                "state_change": {"before": "", "after": ""},
+                "timing": {"wait_for": "load", "timeout": 5000},
+                "extras": {},
+            }
+
+        out = _drop_non_actionable_hover_events([
+            _event("hover", 0, 0),
+            _event("click", 0, 0),
+            _event("hover", 20, 10),
+        ])
+
+        self.assertEqual([item["action"]["action"] for item in out], ["click", "hover"])
 
     def test_selector_filters_reject_dynamic_id_and_weak_tokens(self) -> None:
         from app.compiler.selector_filters import selector_passes_filters
@@ -740,7 +800,7 @@ class PhaseTests(unittest.TestCase):
                     title="t",
                     version=1,
                 )
-                step = pkg.skills[0].steps[1].model_dump()
+                step = pkg.skills[0].steps[0].model_dump()
                 anchors = step.get("signals", {}).get("anchors") or []
                 self.assertTrue(anchors)
                 self.assertIn("submit", " ".join(str(a.get("element") or "") for a in anchors))

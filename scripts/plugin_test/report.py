@@ -74,7 +74,7 @@ def write(bundle: Bundle, results: list[PhaseResult]) -> Path:
     ]
 
     if overall_pass:
-        lines += ["## Result", "", "Ready to publish."]
+        lines += ["## Result", "", "Ready to package."]
     else:
         lines += ["## Failures", ""]
         for r in results:

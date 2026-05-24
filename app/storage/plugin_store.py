@@ -57,7 +57,7 @@ def _migrate_workspace(raw: dict) -> dict:
     return raw
 
 
-def create_plugin(name: str, target_url: str, protected_url: str, protected_url_marker_text: str = "", workspace_id: str = "") -> Plugin:
+def create_plugin(name: str, target_url: str, protected_url: str = "", protected_url_marker_text: str = "", workspace_id: str = "") -> Plugin:
     import re
     slug_base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "plugin"
     plugin_id = str(uuid.uuid4())
@@ -137,7 +137,7 @@ def delete_plugin(plugin_id: str) -> bool:
     return True
 
 
-def set_plugin_auth(plugin_id: str, session_id: str, storage_state_path: str) -> Plugin | None:
+def set_plugin_auth(plugin_id: str, session_id: str, storage_state_path: str, protected_url: str | None = None) -> Plugin | None:
     plugin = get_plugin(plugin_id)
     if plugin is None:
         return None
@@ -147,6 +147,8 @@ def set_plugin_auth(plugin_id: str, session_id: str, storage_state_path: str) ->
         captured_at=now,
         storage_state_path=storage_state_path,
     )
+    if protected_url is not None:
+        plugin.protected_url = protected_url
     plugin.status = "ready"
     return save_plugin(plugin)
 
@@ -213,6 +215,58 @@ def set_installer(
         version=version,
         runtime_version=runtime_version,
     )
+    return save_plugin(plugin)
+
+
+def invalidate_workflow_test_by_skill(skill_id: str) -> None:
+    """Reset last_test_* and bump edited_at on any workflow that references this skill_id."""
+    now = time.time()
+    for plugin in list_plugins():
+        dirty = False
+        for wf in plugin.workflows:
+            if wf.skill_id == skill_id:
+                wf.last_test_status = "never"
+                wf.last_test_error = None
+                wf.last_test_at = None
+                wf.edited_at = now
+                dirty = True
+        if dirty:
+            save_plugin(plugin)
+
+
+def set_workflow_test_result(
+    plugin_id: str,
+    workflow_id: str,
+    *,
+    status: str,
+    inputs: dict,
+) -> Plugin | None:
+    """Persist test outcome onto the workflow (called after test/stream completes)."""
+    plugin = get_plugin(plugin_id)
+    if plugin is None:
+        return None
+    now = time.time()
+    for wf in plugin.workflows:
+        if wf.id == workflow_id:
+            wf.last_test_status = status  # type: ignore[assignment]
+            wf.last_test_at = now
+            wf.last_test_inputs = dict(inputs)
+            wf.last_test_error = None
+            break
+    return save_plugin(plugin)
+
+
+def set_workflow_test_error(plugin_id: str, workflow_id: str, error: str) -> Plugin | None:
+    """Persist a test failure error message."""
+    plugin = get_plugin(plugin_id)
+    if plugin is None:
+        return None
+    for wf in plugin.workflows:
+        if wf.id == workflow_id:
+            wf.last_test_status = "failed"
+            wf.last_test_at = time.time()
+            wf.last_test_error = error[:2000]
+            break
     return save_plugin(plugin)
 
 

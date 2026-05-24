@@ -13,7 +13,7 @@ type Options = {
 }
 
 /**
- * Start recording from home, poll until browser closes, then compile.
+ * Start recording from home and poll until the browser closes.
  * No "stop" control — user closes the browser to finish.
  */
 export function useRecordingSession(options?: Options) {
@@ -24,6 +24,8 @@ export function useRecordingSession(options?: Options) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isCompiling, setIsCompiling] = useState(false)
+  const [isRecordingComplete, setIsRecordingComplete] = useState(false)
+  const [captureHover, setCaptureHover] = useState(false)
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null)
   const pollingRef = useRef<number | null>(null)
   const lastEventCount = useRef(0)
@@ -59,6 +61,7 @@ export function useRecordingSession(options?: Options) {
       try {
         const result = await postCompileSession(activeSessionId, skillTitle)
         setFlowStatus('Compiled. You can open Human edit to review steps.')
+        setIsRecordingComplete(false)
         appendLog(`compile_done: skill=${result.skill_id}, steps=${result.step_count}`)
         refreshMetrics()
         toast.success(
@@ -88,15 +91,17 @@ export function useRecordingSession(options?: Options) {
     if (isRecording || isCompiling) return
     stopPolling()
     setSessionId(null)
+    setIsRecordingComplete(false)
     setLogLines(['[system] flow started'])
     lastEventCount.current = 0
     setFlowStatus('Starting browser recorder...')
     try {
-      const start = await postStartRecording()
+      const start = await postStartRecording({ capture_hover: captureHover })
       setSessionId(start.session_id)
       setIsRecording(true)
-      setFlowStatus('Browser opened. Navigate to your desired URL, then close the browser when done to compile.')
+      setFlowStatus('Browser opened. Navigate to your desired URL, then close the browser when done.')
       appendLog(`recording_started: session=${start.session_id}`)
+      appendLog(`recording_options: capture_hover=${captureHover}`)
       toast.success('Recording started')
     } catch (err) {
       const msg = errorMessage(err, 'Could not start recorder.')
@@ -104,7 +109,7 @@ export function useRecordingSession(options?: Options) {
       appendLog(`start_error: ${msg}`)
       toast.error(msg)
     }
-  }, [appendLog, isCompiling, isRecording, skillTitle, stopPolling])
+  }, [appendLog, captureHover, isCompiling, isRecording, skillTitle, stopPolling])
 
   useEffect(() => {
     if (!isRecording || !sessionId) return
@@ -121,8 +126,11 @@ export function useRecordingSession(options?: Options) {
           if (!status.browser_open) {
             stopPolling()
             setIsRecording(false)
-            setFlowStatus('Browser closed. Compiling captured events...')
-            void compileFromSession(sessionId)
+            setIsRecordingComplete(true)
+            setFlowStatus('Browser closed. Recording saved and ready to compile.')
+            appendLog(`recording_finished: session=${sessionId}`)
+            refreshMetrics()
+            toast.success('Recording saved')
           }
         })
         .catch((err: Error) => {
@@ -136,7 +144,12 @@ export function useRecordingSession(options?: Options) {
     }, 2000)
 
     return () => stopPolling()
-  }, [appendLog, compileFromSession, isRecording, sessionId, stopPolling])
+  }, [appendLog, isRecording, refreshMetrics, sessionId, stopPolling])
+
+  const compileCurrentSession = useCallback(async () => {
+    if (!sessionId || isRecording || isCompiling) return
+    await compileFromSession(sessionId)
+  }, [compileFromSession, isCompiling, isRecording, sessionId])
 
   useEffect(() => {
     return () => stopPolling()
@@ -154,9 +167,13 @@ export function useRecordingSession(options?: Options) {
     sessionId,
     isRecording,
     isCompiling,
+    isRecordingComplete,
+    captureHover,
+    setCaptureHover,
     metrics,
     appendLog,
     startFlow,
+    compileCurrentSession,
     refreshMetrics,
   }
 }

@@ -17,12 +17,19 @@ def skills_dir() -> Path:
 
 
 def write_skill(skill_id: str, document: dict[str, Any]) -> Path:
+    is_update = read_skill(skill_id) is not None
     db_set("skills", skill_id, document)
     path = skills_dir() / f"{skill_id}.json"
     try:
         path.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError:
         pass
+    if is_update:
+        try:
+            from app.storage.plugin_store import invalidate_workflow_test_by_skill  # noqa: PLC0415
+            invalidate_workflow_test_by_skill(skill_id)
+        except Exception:  # noqa: BLE001
+            pass
     return path
 
 

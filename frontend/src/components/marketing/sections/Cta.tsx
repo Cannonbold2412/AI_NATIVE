@@ -35,7 +35,7 @@ export function Cta() {
 
         <Reveal delay={0.1}>
           <p className="mb-10 text-base leading-relaxed text-[#9ba3af] sm:text-lg">
-            Start teaching CONXA your workflows today. No engineering team required — just demonstrate, refine, and deploy.
+            Start teaching CONXA your workflows today. No engineering team required — just demonstrate, refine, and package.
           </p>
         </Reveal>
 

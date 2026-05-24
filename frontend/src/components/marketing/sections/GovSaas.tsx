@@ -21,7 +21,7 @@ const USE_CASES = [
       'Employee onboarding across HR, access, and payroll tools',
       'Support ticket routing and CRM updates',
       'Finance reconciliation in NetSuite or SAP',
-      'Deployment coordination in CI/CD dashboards',
+      'Release coordination in CI/CD dashboards',
       'Cross-platform data synchronization',
     ],
     accent: '#5eead4',

@@ -19,74 +19,17 @@ from app.compiler.wait_for_shape import (
     scan_wait_for_binding_targets,
 )
 from app.confidence.uncertainty import audit_reference
+from app.editor.action_registry import (
+    action_spec,
+    action_spec_dict,
+    default_action_value,
+    is_supported_action,
+)
 from app.editor.describe import describe_step
 from app.editor.dto import StepEditorDTO, StepFlags, StepScreenshotDTO, SuggestionItem, WorkflowResponse
 from app.editor.step_view import skill_step_for_destructive_check
 from app.policy.bundle import get_policy_bundle
 from app.policy.intent_ontology import generic_intents
-
-
-def ensure_initial_navigation_step(document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Backfill a persisted first navigate step from the first recorded page URL."""
-    doc = dict(document)
-    skills = list(doc.get("skills") or [])
-    if not skills:
-        return doc, False
-    block = dict(skills[0])
-    steps = list(block.get("steps") or [])
-    if not steps:
-        return doc, False
-    first = dict(steps[0])
-    first_action = action_name(first).strip().lower()
-    if first_action == "navigate":
-        return doc, False
-    url = ""
-    title = ""
-    for raw in steps:
-        step = dict(raw) if isinstance(raw, dict) else {}
-        signals = step.get("signals") if isinstance(step.get("signals"), dict) else {}
-        context = signals.get("context") if isinstance(signals.get("context"), dict) else {}
-        candidate = str(context.get("page_url") or "").strip()
-        if candidate.startswith(("http://", "https://")):
-            url = candidate
-            title = str(context.get("page_title") or "")
-            break
-    if not url:
-        return doc, False
-    nav_step = {
-        "action": {"action": "navigate", "url": url},
-        "intent": "navigate_to_start_url",
-        "url": url,
-        "target": {},
-        "signals": {
-            "context": {"page_url": url, "page_title": title},
-            "semantic": {
-                "final_intent": "navigate_to_start_url",
-                "llm_intent": "navigate_to_start_url",
-            },
-            "selectors": {},
-            "anchors": [],
-            "visual": {},
-        },
-        "state": {},
-        "value": None,
-        "input_binding": None,
-        "validation": {
-            "wait_for": {"type": "url_change", "target": url, "timeout": 15000},
-            "success_conditions": {"url": url},
-        },
-        "recovery": no_recovery_block("navigate_to_start_url"),
-        "confidence_protocol": {},
-        "decision_policy": {},
-    }
-    block["steps"] = [nav_step, *steps]
-    skills[0] = block
-    doc["skills"] = skills
-    meta = dict(doc.get("meta") or {})
-    meta["version"] = int(meta.get("version", 1)) + 1
-    doc["meta"] = meta
-    return doc, True
-
 
 def _parse_scroll_amount(step: dict[str, Any]) -> int | None:
     action = step.get("action")
@@ -148,19 +91,21 @@ def _build_reference_for_audit(step: dict[str, Any]) -> dict[str, Any]:
 
 def _editable_fields(step: dict[str, Any], policy: dict[str, Any]) -> dict[str, bool]:
     act = action_name(step).lower()
+    spec = action_spec(act)
     is_scroll = act == "scroll"
     is_navigate = act == "navigate"
+    is_marker = spec.marker
     dest = destructive_compiler_step(skill_step_for_destructive_check(step), policy)
     return {
-        "intent": True,
-        "action": False,
+        "intent": not is_marker,
+        "action": not is_marker,
         "url": is_navigate,
-        "selectors": not is_scroll and not is_navigate,
-        "anchors": not is_scroll and not is_navigate,
-        "validation": not is_scroll,
+        "selectors": spec.selectors and not is_marker,
+        "anchors": spec.recovery and not is_marker,
+        "validation": not is_scroll and not is_marker,
         "recovery_strategies": False,
-        "value": act in {"fill", "type"},
-        "parameterization": not is_scroll,
+        "value": spec.value and not is_marker,
+        "parameterization": not is_scroll and not is_marker,
         "destructive_requires_validation": dest,
     }
 
@@ -248,6 +193,8 @@ def collect_suggestions(steps: list[dict[str, Any]], policy: dict[str, Any]) -> 
     gen = generic_intents(policy)
 
     for idx, step in enumerate(steps):
+        if action_spec(action_name(step)).marker:
+            continue
         ref = _build_reference_for_audit(step)
         for issue in audit_reference(ref):
             sev: str = "error" if issue in {"missing_selectors", "empty_primary_css", "anchors_empty_required"} else "warn"
@@ -375,10 +322,12 @@ def step_to_dto(
         step_index=step_index,
         human_readable_description=describe_step(step, step_index),
         action_type=str(action_name(step)),
+        action_payload=dict(step.get("action") or {}) if isinstance(step.get("action"), dict) else {"action": action_name(step)},
+        action_spec=action_spec_dict(action_name(step)),
         intent=intent_top,
         final_intent=final_intent,
         url=_step_url(step),
-        url_state=dict(step.get("url_state") or {}),
+        frame=dict(step.get("frame") or {}),
         target=dict(step.get("target") or {}),
         selectors=dict(signals.get("selectors") or {}),
         anchors_signals=[] if is_url_check else normalize_anchor_list(signals.get("anchors") or []),
@@ -502,19 +451,32 @@ def _last_known_page_url(steps: list[Any], insert_after: int) -> str:
 
 def _new_manual_step(action_kind: str, page_url: str) -> dict[str, Any]:
     kind = action_kind.strip().lower().replace("-", "_")
-    if kind == "type":
-        kind = "fill"
-    allowed = {"navigate", "click", "fill", "scroll", "check"}
-    if kind not in allowed:
+    if not is_supported_action(kind) or not action_spec(kind).insertable:
         raise ValueError("unsupported_action_kind")
 
     intent = {
         "navigate": "navigate_to_page",
         "click": "click_target",
+        "dblclick": "double_click_target",
+        "right_click": "right_click_target",
+        "hover": "hover_target",
+        "focus": "focus_target",
+        "type": "type_into_field",
         "fill": "fill_field",
+        "set_checkbox": "set_checkbox",
+        "set_radio": "set_radio_option",
+        "select": "select_option",
+        "select_option": "select_option",
+        "date_pick": "pick_date",
+        "drag_drop": "drag_and_drop",
+        "keyboard_shortcut": "press_keyboard_shortcut",
         "scroll": "scroll_page",
         "check": "check_page_state",
-    }[kind]
+        "assert": "assert_page_state",
+        "wait": "wait_for_page",
+        "screenshot": "capture_screenshot",
+        "upload": "upload_file",
+    }.get(kind, f"{kind}_target")
     url = page_url if page_url.startswith(("http://", "https://")) else ""
     action: dict[str, Any] = {"action": kind}
     if kind == "navigate":
@@ -522,6 +484,11 @@ def _new_manual_step(action_kind: str, page_url: str) -> dict[str, Any]:
         url = action["url"]
     elif kind == "scroll":
         action["delta"] = 600
+    elif kind == "wait":
+        action["ms"] = 1000
+    default_value = default_action_value(kind)
+    if default_value is not None:
+        action["value"] = default_value
 
     step: dict[str, Any] = {
         "action": action,
@@ -540,7 +507,7 @@ def _new_manual_step(action_kind: str, page_url: str) -> dict[str, Any]:
             "visual": {},
         },
         "state": {},
-        "value": "" if kind == "fill" else None,
+        "value": default_value,
         "input_binding": None,
         "validation": {
             "wait_for": {"type": "none", "timeout": 5000},
@@ -555,7 +522,7 @@ def _new_manual_step(action_kind: str, page_url: str) -> dict[str, Any]:
             "wait_for": {"type": "url_change", "target": url, "timeout": 15000},
             "success_conditions": {"url": url},
         }
-    if kind == "check":
+    if kind in {"check", "assert"}:
         step["check_kind"] = "url"
         step["check_pattern"] = url
     return step

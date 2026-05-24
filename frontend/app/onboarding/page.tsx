@@ -6,7 +6,7 @@ export default function OnboardingPage() {
       <div className="space-y-1 text-center">
         <h1 className="text-2xl font-semibold text-white">Create your workspace</h1>
         <p className="text-sm text-zinc-400">
-          Set up your Conxa organization to start building and publishing plugins.
+          Set up your Conxa organization to start building and packaging plugins.
         </p>
       </div>
       <CreateOrganization afterCreateOrganizationUrl="/dashboard" skipInvitationScreen />

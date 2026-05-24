@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import {
-  BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -24,8 +23,9 @@ import {
   Home,
   Layers,
   Menu,
+  PackageCheck,
+  PlayCircle,
   Puzzle,
-  Rocket,
   Settings,
   Users,
 } from 'lucide-react'
@@ -40,11 +40,9 @@ const navGroups = [
       { to: '/plugins', label: 'Plugins', icon: Puzzle },
       { to: '/build', label: 'Build Plugin', icon: Hammer },
       { to: '/packages', label: 'Packages', icon: FolderKanban },
+      { to: '/test', label: 'Test Plugin', icon: PlayCircle },
+      { to: '/build-installer', label: 'Build Installer', icon: PackageCheck },
     ],
-  },
-  {
-    label: 'Release',
-    items: [{ to: '/publish', label: 'Publish & Deploy', icon: Rocket }],
   },
   {
     label: 'Manage',

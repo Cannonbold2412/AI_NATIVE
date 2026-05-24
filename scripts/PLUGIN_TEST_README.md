@@ -37,7 +37,7 @@ If any phase fails, the report includes:
 - **Codegen Instructions**: bugs in `app/services/skill_pack_builder.py` to fix
 
 If all phases pass:
-- Summary only, plus "Ready to publish" footer
+- Summary only, plus "Ready to package" footer
 
 ## Phases
 
@@ -131,7 +131,7 @@ Fix the builder, rebuild the bundle, re-test.
 python scripts/test_plugin.py render-plugin --skip-phase2 --skip-phase5
 ```
 
-### Full validation before publishing to marketplace
+### Full validation before packaging
 ```bash
 python scripts/test_plugin.py render-plugin --prepare --skip-phase5
 # Share PHASE2_BRIEF.md with Claude

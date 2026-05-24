@@ -19,11 +19,27 @@ import { RECORDING_DRAG_MODE_CLEAR_VISUAL, RECORDING_SCREENSHOT_DRAG_MIME } from
 import { BoxSelect, ChevronDown, GripVertical, Info, Plus, Trash2 } from 'lucide-react'
 
 const ADD_ACTION_OPTIONS = [
-  { value: 'click', label: 'Click' },
-  { value: 'fill', label: 'Fill' },
-  { value: 'navigate', label: 'Navigate' },
-  { value: 'scroll', label: 'Scroll' },
-  { value: 'check', label: 'Check' },
+  { value: 'navigate', label: 'Navigate', category: 'Flow' },
+  { value: 'scroll', label: 'Scroll', category: 'Flow' },
+  { value: 'wait', label: 'Wait', category: 'Flow' },
+  { value: 'check', label: 'Check', category: 'Validation' },
+  { value: 'assert', label: 'Assert', category: 'Validation' },
+  { value: 'screenshot', label: 'Screenshot', category: 'Validation' },
+  { value: 'click', label: 'Click', category: 'Pointer' },
+  { value: 'dblclick', label: 'Double click', category: 'Pointer' },
+  { value: 'right_click', label: 'Right click', category: 'Pointer' },
+  { value: 'hover', label: 'Hover', category: 'Pointer' },
+  { value: 'focus', label: 'Focus', category: 'Pointer' },
+  { value: 'type', label: 'Type', category: 'Input' },
+  { value: 'fill', label: 'Fill', category: 'Input' },
+  { value: 'set_checkbox', label: 'Set checkbox', category: 'Input' },
+  { value: 'set_radio', label: 'Set radio', category: 'Input' },
+  { value: 'select', label: 'Select', category: 'Input' },
+  { value: 'select_option', label: 'Select option', category: 'Input' },
+  { value: 'date_pick', label: 'Date pick', category: 'Input' },
+  { value: 'drag_drop', label: 'Drag and drop', category: 'Advanced' },
+  { value: 'keyboard_shortcut', label: 'Keyboard shortcut', category: 'Advanced' },
+  { value: 'upload', label: 'Upload', category: 'Advanced' },
 ] as const
 
 type AddActionKind = (typeof ADD_ACTION_OPTIONS)[number]['value']
@@ -121,22 +137,32 @@ function WorkflowHeader({ version, onAddAction }: WorkflowHeaderProps) {
           {addMenuOpen ? (
             <div
               role="menu"
-              className="border-border bg-popover text-popover-foreground absolute right-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-md border p-1 shadow-lg"
+              className="border-border bg-popover text-popover-foreground absolute right-0 top-full z-30 mt-1 max-h-96 w-52 overflow-y-auto rounded-md border p-1 shadow-lg"
             >
-              {ADD_ACTION_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="menuitem"
-                  className="hover:bg-muted focus-visible:bg-muted flex h-8 w-full items-center rounded-sm px-2 text-left text-xs outline-none"
-                  onClick={() => {
-                    setAddMenuOpen(false)
-                    onAddAction(option.value)
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
+              {ADD_ACTION_OPTIONS.map((option, index) => {
+                const prev = ADD_ACTION_OPTIONS[index - 1]
+                const showCategory = !prev || prev.category !== option.category
+                return (
+                  <div key={option.value}>
+                    {showCategory ? (
+                      <div className="px-2 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground first:pt-1">
+                        {option.category}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="hover:bg-muted focus-visible:bg-muted flex h-8 w-full items-center rounded-sm px-2 text-left text-xs outline-none"
+                      onClick={() => {
+                        setAddMenuOpen(false)
+                        onAddAction(option.value)
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           ) : null}
         </div>

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from app.models.events import (
     ActionMeta, DomContext, PageContext, RecordedEvent,
-    SemanticFeatures, Selectors, StateChange, TargetDom, Timing, UrlStatePair, UrlStateEntry, VisualFeatures,
+    SemanticFeatures, Selectors, StateChange, TargetDom, Timing, VisualFeatures,
 )
-from app.recorder.session import classify_login_flow, _parse_url_state
+from app.recorder.session import classify_login_flow
 
 
 # ─────────────────────────────────────────────────
@@ -18,8 +18,6 @@ def _make_event(
     title: str = "",
     input_type: str | None = None,
     target_name: str | None = None,
-    url_state_before_url: str = "",
-    url_state_after_url: str = "",
 ) -> RecordedEvent:
     return RecordedEvent(
         action=ActionMeta(action="click", timestamp="2026-01-01T00:00:00Z"),
@@ -31,10 +29,6 @@ def _make_event(
         page=PageContext(url=url, title=title),
         state_change=StateChange(before="", after=""),
         timing=Timing(),
-        url_state=UrlStatePair(
-            before=UrlStateEntry(url=url_state_before_url or url, title=title),
-            after=UrlStateEntry(url=url_state_after_url or url, title=title),
-        ) if (url_state_before_url or url_state_after_url) else None,
     )
 
 
@@ -102,73 +96,6 @@ class TestClassifyLoginFlow:
         assert classify_login_flow(events) == "login"
 
 
-# ─────────────────────────────────────────────────
-# _parse_url_state
-# ─────────────────────────────────────────────────
-
-class TestParseUrlState:
-    def test_parses_valid_url_state(self):
-        raw = {
-            "before": {"url": "https://example.com/login", "title": "Login"},
-            "after": {"url": "https://example.com/dashboard", "title": "Dashboard"},
-        }
-        result = _parse_url_state(raw)
-        assert result is not None
-        assert result["before"]["url"] == "https://example.com/login"
-        assert result["after"]["url"] == "https://example.com/dashboard"
-        assert result["before"]["title"] == "Login"
-        assert result["after"]["title"] == "Dashboard"
-
-    def test_returns_none_for_none(self):
-        assert _parse_url_state(None) is None
-
-    def test_returns_none_for_empty_dict(self):
-        assert _parse_url_state({}) is None
-
-    def test_handles_missing_after(self):
-        raw = {"before": {"url": "https://example.com/login", "title": "Login"}, "after": None}
-        result = _parse_url_state(raw)
-        assert result is not None
-        assert result["after"]["url"] == ""
-
-    def test_handles_missing_fields(self):
-        raw = {"before": {}, "after": {}}
-        result = _parse_url_state(raw)
-        assert result is not None
-        assert result["before"]["url"] == ""
-        assert result["after"]["title"] == ""
-
-
-# ─────────────────────────────────────────────────
-# UrlStatePair model
-# ─────────────────────────────────────────────────
-
-class TestUrlStatePairModel:
-    def test_round_trips_through_model(self):
-        pair = UrlStatePair(
-            before=UrlStateEntry(url="https://example.com/before", title="Before"),
-            after=UrlStateEntry(url="https://example.com/after", title="After"),
-        )
-        dumped = pair.model_dump()
-        restored = UrlStatePair.model_validate(dumped)
-        assert restored.before.url == "https://example.com/before"
-        assert restored.after.url == "https://example.com/after"
-
-    def test_defaults_to_empty_strings(self):
-        pair = UrlStatePair()
-        assert pair.before.url == ""
-        assert pair.after.title == ""
-
-    def test_recorded_event_with_url_state(self):
-        event = _make_event(
-            url="https://app.example.com",
-            url_state_before_url="https://app.example.com/before",
-            url_state_after_url="https://app.example.com/after",
-        )
-        assert event.url_state is not None
-        assert event.url_state.before.url == "https://app.example.com/before"
-        assert event.url_state.after.url == "https://app.example.com/after"
-
-    def test_recorded_event_without_url_state_is_none(self):
-        event = _make_event()
-        assert event.url_state is None
+def test_recorded_event_omits_url_state_field():
+    event = _make_event()
+    assert "url_state" not in event.model_dump()

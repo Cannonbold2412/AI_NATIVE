@@ -1,29 +1,20 @@
 """Plugin-first build pipeline.
 
 Compiles a Plugin entity (auth session + N workflow sessions) into a
-GitHub-ready plugin folder:
+data-only skill pack folder:
 
   output/skill_package/{bundle_slug}-plugin/
-    .claude-plugin/
-      plugin.json                  <- Claude Code plugin manifest
-      marketplace.json             <- Claude Code marketplace catalog
-    .mcp.json                      <- auto-start MCP server for Claude Code
     plugin.json                   <- plugin manifest
     README.md                     <- auto-generated, public-facing
     CLAUDE.md                     <- Claude reads this for skill discovery
     .gitignore                    <- excludes auth/auth.json and local state
     LICENSE                       <- MIT by default
-    package.json                  <- top-level npm manifest for post-clone install
-    auth/
-      credentials.example.json   <- template only, safe to commit
-      login/                      <- compiled auth skill
+    auth/                         <- runtime-local auth directory only
     skills/
       {workflow_slug}/            <- one per workflow, login steps stripped
-    execution/
-      executor.js, recovery.js, tracker.js, validator.js, session_manager.js
 
-auth/auth.json is NEVER placed in the build output — it is a credential
-captured locally at runtime (via `conxa auth <plugin>`) and is gitignored.
+auth/auth.json and auth/credentials*.json are NEVER placed in the build output.
+Credentials are local runtime state captured by the installed Conxa runtime.
 """
 
 from __future__ import annotations
@@ -41,11 +32,11 @@ from typing import Any, Callable
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from app.compiler.action_policy import RECOVERY_ACTION_TYPES
+from app.editor.action_registry import is_marker_action, is_supported_action, normalize_action_kind
 from app.editor.assets import resolve_skill_asset
 from app.llm.anchor_vision_llm import _apply_bbox_highlight
 from app.storage.plugin_store import get_plugin, set_build
 from app.storage.json_store import read_skill
-from app.storage.session_events import read_session_events
 
 # ─────────────────────────────────────────────────
 # Login-step detection
@@ -154,65 +145,188 @@ def _step_url(step: dict[str, Any]) -> str:
     return str(context.get("page_url") or "").strip()
 
 
-def _copy_url_state(step: dict[str, Any], out: dict[str, Any]) -> None:
-    url_state = step.get("url_state")
-    if not isinstance(url_state, dict) or not url_state:
-        return
+def _saved_step_intents(step: dict[str, Any]) -> set[str]:
+    intents = {str(step.get("intent") or "").strip().lower()}
+    signals = step.get("signals") if isinstance(step.get("signals"), dict) else {}
+    semantic = signals.get("semantic") if isinstance(signals.get("semantic"), dict) else {}
+    intents.add(str(semantic.get("final_intent") or "").strip().lower())
+    intents.add(str(semantic.get("llm_intent") or "").strip().lower())
+    recovery = step.get("recovery") if isinstance(step.get("recovery"), dict) else {}
+    intents.add(str(recovery.get("final_intent") or "").strip().lower())
+    return {intent for intent in intents if intent}
 
-    sanitized: dict[str, Any] = {}
-    for phase in ("before", "after"):
-        phase_state = url_state.get(phase)
-        if not isinstance(phase_state, dict):
+
+def _has_meaningful_export_payload(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, set)):
+        return any(_has_meaningful_export_payload(item) for item in value)
+    if isinstance(value, dict):
+        return any(_has_meaningful_export_payload(item) for item in value.values())
+    return bool(value)
+
+
+def _has_user_interaction_payload(step: dict[str, Any]) -> bool:
+    if _step_selector(step):
+        return True
+
+    target = step.get("target")
+    if isinstance(target, dict) and _has_meaningful_export_payload(target):
+        return True
+
+    signals = step.get("signals") if isinstance(step.get("signals"), dict) else {}
+    selectors = signals.get("selectors") if isinstance(signals.get("selectors"), dict) else {}
+    if _has_meaningful_export_payload(selectors):
+        return True
+
+    action = step.get("action") if isinstance(step.get("action"), dict) else {}
+    if isinstance(action, dict):
+        for key, value in action.items():
+            if key in {"action", "url"}:
+                continue
+            if _has_meaningful_export_payload(value):
+                return True
+
+    for key in ("value", "input_binding", "frame", "check_kind", "check_pattern", "check_selector", "check_text"):
+        if _has_meaningful_export_payload(step.get(key)):
+            return True
+    return False
+
+
+def _is_legacy_synthetic_start_navigation_step(step: dict[str, Any]) -> bool:
+    if normalize_action_kind(_step_action_name(step)) != "navigate":
+        return False
+    if "navigate_to_start_url" not in _saved_step_intents(step):
+        return False
+    return not _has_user_interaction_payload(step)
+
+
+def _sanitize_runtime_frame(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    chain = raw.get("chain")
+    if not isinstance(chain, list):
+        return {}
+    out_chain: list[dict[str, Any]] = []
+    for item in chain:
+        if not isinstance(item, dict):
             continue
-        pattern = str(phase_state.get("url_pattern") or "").strip()
-        if pattern:
-            sanitized[phase] = {"url_pattern": pattern}
+        selector = str(item.get("selector") or "").strip()
+        if not selector:
+            continue
+        fallbacks = [
+            str(fb).strip()
+            for fb in (item.get("fallback_selectors") or [])
+            if str(fb or "").strip()
+        ][:5]
+        out_chain.append(
+            {
+                "selector": selector,
+                "fallback_selectors": fallbacks,
+                "url": str(item.get("url") or "").strip(),
+                "url_pattern": str(item.get("url_pattern") or "").strip(),
+            }
+        )
+    return {"chain": out_chain} if out_chain else {}
 
-    if sanitized:
-        out["url_state"] = sanitized
+
+def _copy_frame(step: dict[str, Any], out: dict[str, Any]) -> None:
+    frame = _sanitize_runtime_frame(step.get("frame"))
+    if frame:
+        out["frame"] = frame
+
+
+def _step_action_value(step: dict[str, Any]) -> Any:
+    action = step.get("action") if isinstance(step.get("action"), dict) else {}
+    if isinstance(action, dict) and action.get("value") is not None:
+        return action.get("value")
+    return step.get("value")
+
+
+def _action_value_text(step: dict[str, Any]) -> str:
+    value = _step_action_value(step)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _action_value_json(step: dict[str, Any]) -> dict[str, Any]:
+    value = _step_action_value(step)
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return dict(parsed) if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _copy_saved_common(step: dict[str, Any], out: dict[str, Any]) -> dict[str, Any]:
+    _copy_frame(step, out)
+    return out
+
+
+def _saved_check_like_step(step: dict[str, Any], action: str) -> dict[str, Any] | None:
+    kind = str(step.get("check_kind") or "url").strip().lower().replace("-", "_")
+    out: dict[str, Any] = {"type": action, "kind": "url_exact" if kind in {"url_must_be", "exact_url"} else kind}
+    if out["kind"] == "url":
+        out["pattern"] = str(step.get("check_pattern") or _step_url(step) or "")
+    elif out["kind"] == "url_exact":
+        out["url"] = str(step.get("check_pattern") or _step_url(step) or "")
+    elif out["kind"] == "selector":
+        out["selector"] = str(step.get("check_selector") or _step_selector(step) or "")
+    elif out["kind"] == "text":
+        out["text"] = str(step.get("check_text") or "")
+    elif out["kind"] == "snapshot":
+        out["threshold"] = float(step.get("check_threshold") or 0.9)
+    if not any(k in out and out[k] for k in ("pattern", "url", "selector", "text", "threshold")):
+        return None
+    return _copy_saved_common(step, out)
 
 
 def _saved_step_to_execution_step(step: dict[str, Any]) -> dict[str, Any] | None:
-    action = _step_action_name(step)
-    if action == "input":
-        action = "type"
+    action = normalize_action_kind(_step_action_name(step))
+    if not is_supported_action(action):
+        return None
+
+    if is_marker_action(action):
+        out: dict[str, Any] = {"type": action, "recording_marker": True}
+        value = _action_value_text(step)
+        if value:
+            out["value"] = value
+        return _copy_saved_common(step, out)
 
     if action == "navigate":
         url = _step_url(step)
         if not url:
             return None
-        out: dict[str, Any] = {"type": "navigate", "url": url}
-        _copy_url_state(step, out)
-        return out
+        return _copy_saved_common(step, {"type": "navigate", "url": url})
 
-    if action in {"click", "focus"}:
+    if action in {"click", "focus", "hover", "dblclick", "right_click"}:
+        selector = _step_selector(step)
+        if not selector:
+            return None
+        return _copy_saved_common(step, {"type": action, "selector": selector})
+
+    if action in {"type", "fill", "date_pick"}:
+        selector = _step_selector(step)
+        if not selector:
+            return None
+        return _copy_saved_common(step, {"type": action, "selector": selector, "value": _action_value_text(step)})
+
+    if action in {"select", "select_option", "set_checkbox", "set_radio"}:
         selector = _step_selector(step)
         if not selector:
             return None
         out = {"type": action, "selector": selector}
-        _copy_url_state(step, out)
-        return out
-
-    if action in {"type", "fill"}:
-        selector = _step_selector(step)
-        if not selector:
-            return None
-        value = step.get("value")
-        if value is None:
-            value = ""
-        out = {"type": action, "selector": selector, "value": str(value)}
-        _copy_url_state(step, out)
-        return out
-
-    if action == "select":
-        selector = _step_selector(step)
-        if not selector:
-            return None
-        out = {"type": "select", "selector": selector}
-        if step.get("value") is not None:
-            out["value"] = str(step.get("value"))
-        _copy_url_state(step, out)
-        return out
+        value = _action_value_text(step)
+        if value:
+            out["value"] = value
+        return _copy_saved_common(step, out)
 
     if action == "scroll":
         action_block = step.get("action") if isinstance(step.get("action"), dict) else {}
@@ -225,26 +339,46 @@ def _saved_step_to_execution_step(step: dict[str, Any]) -> dict[str, Any] | None
             if delta is None:
                 delta = step.get("scroll_amount")
             out["delta_y"] = float(delta if delta is not None else 600)
-        _copy_url_state(step, out)
-        return out
+        return _copy_saved_common(step, out)
 
-    if action == "check":
-        kind = str(step.get("check_kind") or "url").strip().lower().replace("-", "_")
-        out = {"type": "check", "kind": "url_exact" if kind in {"url_must_be", "exact_url"} else kind}
-        if out["kind"] == "url":
-            out["pattern"] = str(step.get("check_pattern") or _step_url(step) or "")
-        elif out["kind"] == "url_exact":
-            out["url"] = str(step.get("check_pattern") or _step_url(step) or "")
-        elif out["kind"] == "selector":
-            out["selector"] = str(step.get("check_selector") or _step_selector(step) or "")
-        elif out["kind"] == "text":
-            out["text"] = str(step.get("check_text") or "")
-        elif out["kind"] == "snapshot":
-            out["threshold"] = float(step.get("check_threshold") or 0.9)
-        if not any(k in out and out[k] for k in ("pattern", "url", "selector", "text", "threshold")):
+    if action in {"check", "assert"}:
+        return _saved_check_like_step(step, action)
+
+    if action == "wait":
+        action_block = step.get("action") if isinstance(step.get("action"), dict) else {}
+        raw_ms = action_block.get("ms") if isinstance(action_block, dict) else None
+        raw_ms = raw_ms if raw_ms is not None else _action_value_text(step)
+        try:
+            ms = int(raw_ms)
+        except (TypeError, ValueError):
+            ms = 1000
+        return _copy_saved_common(step, {"type": "wait", "ms": max(ms, 0)})
+
+    if action == "screenshot":
+        return _copy_saved_common(step, {"type": "screenshot"})
+
+    if action == "keyboard_shortcut":
+        value = _action_value_text(step)
+        if not value:
             return None
-        _copy_url_state(step, out)
-        return out
+        return _copy_saved_common(step, {"type": "keyboard_shortcut", "value": value})
+
+    if action == "drag_drop":
+        payload = _action_value_json(step)
+        selector = _step_selector(step)
+        src = str(payload.get("src_selector") or payload.get("src_css") or "").strip()
+        dst = str(payload.get("dst_selector") or payload.get("dst_css") or selector or "").strip()
+        if not src or not dst:
+            return None
+        return _copy_saved_common(step, {"type": "drag_drop", "src_selector": src, "dst_selector": dst})
+
+    if action in {"upload", "upload_intent"}:
+        selector = _step_selector(step)
+        value = _action_value_text(step) or "{{file_path}}"
+        out = {"type": "upload", "value": value}
+        if selector:
+            out["selector"] = selector
+        return _copy_saved_common(step, out)
 
     return None
 
@@ -556,15 +690,26 @@ def _build_workflow_from_saved_skill(
     skills = saved_skill.get("skills") if isinstance(saved_skill.get("skills"), list) else []
     block = skills[0] if skills and isinstance(skills[0], dict) else {}
     raw_steps = block.get("steps") if isinstance(block.get("steps"), list) else []
+    source_session_id = str(meta.get("source_session_id") or "").strip()
     execution_steps: list[dict[str, Any]] = []
     source_steps: list[dict[str, Any]] = []
     step_ids: list[int] = []
-    for raw in raw_steps:
+    export_steps = [
+        raw
+        for raw_index, raw in enumerate(raw_steps)
+        if not (
+            raw_index == 0
+            and isinstance(raw, dict)
+            and _is_legacy_synthetic_start_navigation_step(raw)
+        )
+    ]
+    for raw_index, raw in enumerate(export_steps, start=1):
         if not isinstance(raw, dict):
             continue
         converted = _saved_step_to_execution_step(raw)
         if converted is None:
-            continue
+            action = _step_action_name(raw) or "unknown"
+            raise ValueError(f"Saved skill step {raw_index} action {action!r} is not exportable.")
         execution_steps.append(converted)
         source_steps.append(raw)
         step_ids.append(len(execution_steps))
@@ -577,7 +722,6 @@ def _build_workflow_from_saved_skill(
     if skill_dir.exists():
         shutil.rmtree(skill_dir)
     skill_dir.mkdir(parents=True, exist_ok=True)
-    source_session_id = str(meta.get("source_session_id") or "").strip()
     visuals_dir = _write_saved_visual_assets(
         source_steps=source_steps,
         skill_dir=skill_dir,
@@ -619,7 +763,11 @@ def _write_skill_packs_format(
     from app.config import settings
 
     company      = bundle_slug
-    api_base     = conxa_api_url or os.environ.get("CONXA_API_URL", "https://api.conxa.io")
+    api_base     = (conxa_api_url or os.environ.get("CONXA_API_URL", "https://api.conxa.io")).rstrip("/")
+    tracking_base = os.environ.get("CONXA_TRACKING_API_URL", api_base).rstrip("/")
+    tracking_events_url = os.environ.get("CONXA_TRACKING_EVENTS_URL", "").strip()
+    if not tracking_events_url:
+        tracking_events_url = f"{tracking_base}/tracking/{company}/events"
     skill_packs  = settings.data_dir / "skill-packs" / company
 
     skill_packs.mkdir(parents=True, exist_ok=True)
@@ -649,25 +797,6 @@ def _write_skill_packs_format(
         input_src = src_dir / "input.json"
         if input_src.is_file():
             shutil.copy2(input_src, dest_dir / "inputs.json")
-
-        # validation.json — extract from execution plan if available
-        exec_path = dest_dir / "execution.json"
-        if exec_path.is_file():
-            try:
-                exec_data = json.loads(exec_path.read_text(encoding="utf-8"))
-                steps = exec_data if isinstance(exec_data, list) else exec_data.get("steps") or exec_data.get("execution_plan") or []
-                validation_data = {
-                    "url_states": [
-                        {"step": i + 1, **s["url_state"]}
-                        for i, s in enumerate(steps)
-                        if isinstance(s, dict) and s.get("url_state")
-                    ]
-                }
-                (dest_dir / "validation.json").write_text(
-                    json.dumps(validation_data, indent=2, ensure_ascii=False), encoding="utf-8"
-                )
-            except Exception:
-                pass
 
         # Compute checksums over the files we wrote
         checksums: dict[str, str] = {}
@@ -731,6 +860,28 @@ def _write_skill_packs_format(
         "sync_endpoint":      f"{api_base}/skill-packs/{company}/delta",
         "built_at":           datetime.now(timezone.utc).isoformat(),
     }
+
+    # Tracking config: embed in pack.json so the runtime knows where to send events
+    import hmac as _hmac_mod
+    import hashlib as _hash_mod
+
+    _tracking_secret = os.environ.get("SKILL_TRACKING_HMAC_SECRET", "")
+    _tracking_token  = ""
+    if _tracking_secret:
+        _raw = f"{company}:{version}".encode()
+        _tracking_token = _hmac_mod.new(_tracking_secret.encode(), _raw, _hash_mod.sha256).hexdigest()
+        from app.db import db_set
+        db_set("tracking_tokens", company, {"token": _tracking_token, "version": version})
+
+    pack["tracking"] = {
+        "enabled":          bool(_tracking_secret),
+        "tracking_url":     tracking_events_url,
+        "tracking_token":   _tracking_token,
+        "company_id":       company,
+        "schema_version":   1,
+        "protocol_version": 1,
+    }
+
     (skill_packs / "pack.json").write_text(
         json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8"
     )
@@ -785,12 +936,6 @@ def _copy_plugin_templates(
     if tmpl_gi.exists():
         (bundle_root / ".gitignore").write_text(tmpl_gi.read_text(encoding="utf-8"), encoding="utf-8")
 
-    # auth/credentials.example.json
-    creds_src = templates / "plugin" / "auth" / "credentials.example.json"
-    if creds_src.exists():
-        (bundle_root / "auth").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(creds_src), str(bundle_root / "auth" / "credentials.example.json"))
-
     install_id = package_id or plugin_slug
 
     # Claude.md (from template)
@@ -820,8 +965,8 @@ def _copy_plugin_templates(
         encoding="utf-8",
     )
 
-    # Published artifact is data-only. The shared-runtime model installs via
-    # `npx -y conxa install <plugin_id>`; runtime is bootstrapped by the npm package.
+    # Build output stays data-only. Runtime installation is handled by the
+    # Windows installer flow, not by an npm CLI package.
 
 
 
@@ -833,6 +978,8 @@ def _clean_stale_artifacts(bundle_root: Path) -> None:
         "package.json", "package-lock.json", ".mcp.json",
         "plugin.config.json",  # renamed to plugin.json
         "schema.json",         # removed from build output
+        "auth/credentials.example.json",
+        "auth/credentials.json",
     ]
     stale_dirs = [
         "execution", "node_modules", "auth/login",
@@ -853,7 +1000,7 @@ def _clean_stale_artifacts(bundle_root: Path) -> None:
 
 
 # ─────────────────────────────────────────────────
-# GitHub-ready file generators (kept for README/LICENSE)
+# Data-only package file generators (kept for README/LICENSE)
 # ─────────────────────────────────────────────────
 
 
@@ -869,30 +1016,15 @@ def _render_readme(
     return f"""\
 # {plugin_name}
 
-Automate [{target_url}]({target_url}) with Claude using this Conxa plugin.
+Automate [{target_url}]({target_url}) with Claude using this Conxa skill pack.
+
+Package ID: `{install_id}`
 
 ## Install
 
-Paste the right prompt into Claude Code Desktop — Claude runs it automatically. No terminal needed.
-
-**Windows** — paste into Claude:
-```
-Run this command in PowerShell: & ([scriptblock]::Create((irm 'https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.ps1'))) '{install_id}'
-```
-
-**Mac** — paste into Claude:
-```
-Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {install_id}
-```
-
-**Linux** — paste into Claude:
-```
-Run this command: curl -fsSL https://cdn.jsdelivr.net/npm/@kiran_nandi_123/conxa/scripts/install.sh | bash -s -- {install_id}
-```
-
-After Claude finishes, restart Claude Code Desktop once.
-
-Already have another conxa plugin? Just tell Claude: *"Install the {plugin_name} plugin: {install_id}"* — no command, no restart needed.
+This is a data-only skill pack. Use Conxa's Build Installer page to create the
+Windows setup file that installs the runtime, registers Claude, and copies these
+skills onto the user's machine.
 
 ## Available Skills
 
@@ -900,10 +1032,10 @@ Already have another conxa plugin? Just tell Claude: *"Install the {plugin_name}
 
 ## How It Works
 
-This plugin works with the shared `conxa` MCP server. When Claude calls a skill,
-a real Chromium browser opens on your machine, executes the recorded workflow,
-and returns a result and screenshot. Your auth session stays on your machine
-and is never uploaded anywhere.
+This skill pack works with the installed `conxa` MCP runtime. When Claude calls
+a skill, a real Chromium browser opens on your machine, executes the recorded
+workflow, and returns a result and screenshot. Your auth session stays on your
+machine and is never uploaded anywhere.
 
 ---
 *Generated by [Conxa](https://conxa.ai)*
@@ -937,18 +1069,6 @@ SOFTWARE.
 """
 
 
-def _render_credentials_example() -> str:
-    return json.dumps(
-        {
-            "_comment": "Copy this to credentials.json and fill in your values. This file is safe to commit.",
-            "username": "your-email@example.com",
-            "password": "your-password",
-        },
-        indent=2,
-        ensure_ascii=False,
-    )
-
-
 # ─────────────────────────────────────────────────
 # Main build entry point
 # ─────────────────────────────────────────────────
@@ -959,12 +1079,20 @@ def build_plugin(
     version: str = "0.1.0",
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Compile a plugin from its recorded sessions into a data-only GitHub-ready package."""
+    """Compile a plugin from its recorded sessions into an installer-ready package."""
     plugin = get_plugin(plugin_id)
     if plugin is None:
         raise ValueError(f"Plugin {plugin_id!r} not found.")
     if not plugin.workflows:
         raise ValueError("Plugin has no workflows. Record at least one workflow.")
+    uncompiled = [wf.name for wf in plugin.workflows if not wf.skill_id]
+    if uncompiled:
+        raise ValueError(f"Compile these workflows before building: {', '.join(uncompiled)}")
+    unedited = [wf.name for wf in plugin.workflows if not wf.edited_at]
+    if unedited:
+        raise ValueError(
+            f"Open the editor and sign off on these workflows before building: {', '.join(unedited)}"
+        )
 
     def _log(msg: str, **extra: Any) -> None:
         entry = {"kind": "plugin_build", "message": msg, "plugin_id": plugin_id, **extra}
@@ -981,8 +1109,6 @@ def build_plugin(
     _log("Cleaned stale artifacts")
 
     # ── 1. Build workflow skills ───────────────────────────────────────────
-    from app.services.skill_pack.compiler import build_skill_package
-
     skill_slugs: list[str] = []
     for wf in plugin.workflows:
         saved_skill = read_skill(wf.skill_id) if wf.skill_id else None
@@ -997,28 +1123,9 @@ def build_plugin(
             _log(f"Workflow {wf.name!r} compiled from saved skill JSON")
             continue
 
-        _log("Building workflow from original recording", workflow=wf.name, session_id=wf.session_id)
-        raw_events = read_session_events(wf.session_id)
-        if not raw_events:
-            _log(f"Skipping workflow {wf.name!r} — no events found", warning=True)
-            continue
+        _log(f"Skipping workflow {wf.name!r} — no compiled skill found", warning=True)
 
-        clean_events = strip_login_steps(raw_events)
-        stripped_count = len(raw_events) - len(clean_events)
-        if stripped_count:
-            _log(f"Stripped {stripped_count} login steps from workflow {wf.name!r}")
-
-        wf_json_text = _events_to_json_text(clean_events, wf.name)
-        build_skill_package(
-            wf_json_text,
-            package_name=wf.slug,
-            bundle_slug=bundle_slug,
-            realtime_sink=realtime_sink,
-        )
-        skill_slugs.append(wf.slug)
-        _log(f"Workflow {wf.name!r} compiled")
-
-    # ── 2. Write plugin.json (v2 manifest for shared-runtime `conxa` CLI) ──
+    # ── 2. Write plugin.json (v2 manifest for the installed Conxa runtime) ──
     var_pattern = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
     protected_url_vars = var_pattern.findall(plugin.protected_url)
 
@@ -1050,7 +1157,7 @@ def build_plugin(
     )
     _log("Written plugin.json", skills=skill_slugs, package_id=package_id, visibility=visibility)
 
-    # ── 3. Copy plugin templates (Claude.md, index.md, .gitignore, auth/example) ─
+    # ── 3. Copy plugin templates (Claude.md, index.md, .gitignore) ─────────
     _copy_plugin_templates(
         bundle_root,
         plugin_name=plugin.name,
@@ -1119,8 +1226,10 @@ def zip_plugin(plugin_id: str) -> tuple[str, bytes]:
             if not file_path.is_file():
                 continue
             rel = file_path.relative_to(bundle_root)
-            # auth/auth.json is a local credential — never include in the zip
-            if rel.parts[0] == "auth" and rel.name == "auth.json":
+            # auth/* credentials are local runtime state — never include in the zip
+            if rel.parts and rel.parts[0] == "auth" and (
+                rel.name == "auth.json" or rel.name.startswith("credentials")
+            ):
                 continue
             arcname = file_path.relative_to(bundle_root.parent).as_posix()
             zf.write(file_path, arcname)

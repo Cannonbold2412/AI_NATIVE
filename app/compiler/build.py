@@ -6,7 +6,6 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse
 
 from app.compiler.action_policy import no_recovery_block, recovery_enabled_for_action
 from app.compiler.decision_layer import rank_merged_anchors
@@ -16,6 +15,7 @@ from app.compiler.recovery_policy import (
     merge_recovery_strategies_for_wait_shape,
 )
 from app.compiler.selector_filters import filter_selectors_dict, selector_passes_filters
+from app.compiler.selector_score import rank_selectors_scored, score_selector_row
 from app.compiler.v3 import (
     capture_state_snapshot,
     clean_steps,
@@ -24,7 +24,6 @@ from app.compiler.v3 import (
     fix_step_order,
     generate_stable_selector,
     optimize_scroll,
-    rank_selectors,
     scroll_payload,
     validation_from_diff,
 )
@@ -33,7 +32,9 @@ from app.llm.anchor_vision_llm import VisionAnchorGenerationError, generate_anch
 from app.llm.intent_llm import generate_intent_with_llm
 from app.models.events import RecordedEvent
 from app.models.skill_spec import (
+    Assertion,
     DecisionPolicy,
+    ElementFingerprint,
     RecoveryBlock,
     SkillBlock,
     SkillMeta,
@@ -46,11 +47,6 @@ from app.policy.bundle import PolicyBundle, get_policy_bundle
 from app.policy.intent_ontology import intent_specificity_score, normalize_compiler_intent
 
 
-_URL_DYNAMIC_SEG = re.compile(r"^(?:[0-9]+|[0-9a-f]{8,}|[A-Za-z0-9_-]{16,})$")
-_URL_VOLATILE_PARAMS = frozenset({
-    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-    "ts", "_", "t", "ref",
-})
 _RECOVERABLE_VISION_ANCHOR_REASONS = frozenset({
     "vision_anchors_disabled_in_policy",
     "llm_disabled",
@@ -63,48 +59,54 @@ _RECOVERABLE_VISION_ANCHOR_REASONS = frozenset({
 })
 
 
-def _normalize_url_pattern(url: str) -> str:
-    url = str(url or "").strip()
-    if not url:
-        return ""
-    try:
-        parsed = urlparse(url)
-        if not parsed.scheme or not parsed.netloc:
-            return ""
-        host_part = re.escape(parsed.scheme + "://" + parsed.netloc)
-        segments = parsed.path.split("/")
-        normalized = [
-            "[^/]+" if _URL_DYNAMIC_SEG.match(seg) else re.escape(seg)
-            for seg in segments
-        ]
-        path_pattern = "/".join(normalized)
-        qs = [(k, v) for k, v in parse_qsl(parsed.query) if k not in _URL_VOLATILE_PARAMS and not k.startswith("utm_")]
-        query_suffix = ("\\?" + re.escape(urlencode(qs))) if qs else ""
-        return f"^{host_part}{path_pattern}{query_suffix}$"
-    except Exception:
-        return ""
-
-
 def _default_confidence_protocol(bundle: PolicyBundle) -> dict[str, Any]:
     return bundle.as_confidence_protocol_fragment()
 
 
-def _build_url_state(ev: dict[str, Any]) -> dict[str, Any]:
-    raw = ev.get("url_state")
-    if not isinstance(raw, dict):
+def _infer_selector_kind(selector: str) -> str:
+    """Infer selector kind from its string pattern for confidence scoring."""
+    s = selector.strip()
+    if s.startswith("label:has-text("):
+        return "label"
+    if s.startswith("[aria-label="):
+        return "aria"
+    if re.match(r"input\[name=", s):
+        return "name"
+    if s.lower().startswith("text="):
+        return "text_based"
+    if s.startswith("/") or s.startswith("(//"):
+        return "xpath"
+    return "css"
+
+
+def _build_frame_context(ev: dict[str, Any]) -> dict[str, Any]:
+    frame = ev.get("frame")
+    if not isinstance(frame, dict):
         return {}
-    before = raw.get("before") if isinstance(raw.get("before"), dict) else {}
-    after = raw.get("after") if isinstance(raw.get("after"), dict) else {}
-    before_url = str(before.get("url") or "")
-    after_url = str(after.get("url") or "")
-    return {
-        "before": {
-            "url_pattern": str(before.get("url_pattern") or _normalize_url_pattern(before_url)),
-        },
-        "after": {
-            "url_pattern": str(after.get("url_pattern") or _normalize_url_pattern(after_url)),
-        },
-    }
+    chain = frame.get("chain")
+    if not isinstance(chain, list):
+        return {}
+    out_chain: list[dict[str, Any]] = []
+    for raw in chain:
+        if not isinstance(raw, dict):
+            continue
+        selector = str(raw.get("selector") or "").strip()
+        if not selector:
+            continue
+        fallbacks = [
+            str(item).strip()
+            for item in (raw.get("fallback_selectors") or [])
+            if str(item or "").strip()
+        ][:5]
+        out_chain.append(
+            {
+                "selector": selector,
+                "fallback_selectors": fallbacks,
+                "url": str(raw.get("url") or "").strip(),
+                "url_pattern": str(raw.get("url_pattern") or "").strip(),
+            }
+        )
+    return {"chain": out_chain} if out_chain else {}
 
 
 def _merge_compile_warnings(
@@ -209,14 +211,153 @@ def build_signal_reference(ev: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_element_fingerprint(ev: dict[str, Any]) -> ElementFingerprint:
+    """Extract stable element identity from recorded event signals."""
+    target = ev.get("target") or {}
+    semantic = ev.get("semantic") or {}
+    selectors = ev.get("selectors") or {}
+    anchors = ev.get("anchors") or []
+    visual = ev.get("visual") or {}
+
+    # Extract data-testid from CSS selector — highest-stability attribute
+    data_testid = ""
+    css = str(selectors.get("css") or "")
+    m = re.search(r'data-testid=["\']?([^"\'>\s\]]+)', css)
+    if m:
+        data_testid = m.group(1)
+    if not data_testid:
+        aria = str(selectors.get("aria") or "")
+        m2 = re.search(r'data-testid=["\']?([^"\'>\s\]]+)', aria)
+        if m2:
+            data_testid = m2.group(1)
+
+    inner_text = str(target.get("inner_text") or semantic.get("normalized_text") or "").strip()[:120]
+
+    # Only keep class tokens that look stable (no hash-like sequences, min length 3)
+    raw_classes = " ".join(target.get("classes") or []) if isinstance(target.get("classes"), list) else str(target.get("classes") or "")
+    class_tokens = [
+        c for c in raw_classes.split()
+        if len(c) >= 3 and not re.search(r"[0-9]{4,}|[a-f0-9]{6,}", c)
+    ][:8]
+
+    anchor_phrases = [
+        str(a.get("element") or "").strip()
+        for a in anchors
+        if a.get("element") and str(a.get("element")).strip()
+    ][:6]
+
+    bbox = visual.get("bbox") or {}
+    vw = max(int(bbox.get("vw", 0)) or 1280, 1)
+    vh = max(int(bbox.get("vh", 0)) or 800, 1)
+
+    return ElementFingerprint(
+        role=str(semantic.get("role") or target.get("role") or ""),
+        tag=str(target.get("tag") or ""),
+        inner_text=inner_text,
+        aria_label=str(target.get("aria_label") or ""),
+        name=str(target.get("name") or ""),
+        placeholder=str(target.get("placeholder") or ""),
+        label_text=str(target.get("label_text") or ""),
+        data_testid=data_testid,
+        input_type=str(semantic.get("input_type") or ""),
+        css_class_tokens=class_tokens,
+        anchor_phrases=anchor_phrases,
+        position_hint={
+            "x_pct": round(int(bbox.get("x") or 0) / vw, 3),
+            "y_pct": round(int(bbox.get("y") or 0) / vh, 3),
+        },
+    )
+
+
+def _build_assertions(
+    ev: dict[str, Any],
+    validation: ValidationBlock,
+) -> list[Assertion]:
+    """Compile multiple verifiable post-action assertions from all available evidence."""
+    assertions: list[Assertion] = []
+    action = str((ev.get("action") or {}).get("action") or "").lower()
+
+    # fill/type have no observable post-action outcome to assert at compile time
+    if action in {"fill", "type", "focus", "scroll"}:
+        return []
+
+    # Primary wait_for assertion
+    wf = validation.wait_for
+    wf_type = str(wf.get("type") or "")
+    wf_target = str(wf.get("target") or "")
+    wf_timeout = int(wf.get("timeout") or 5000)
+
+    if wf_type == "url_change":
+        before_url = str((ev.get("page") or {}).get("url") or "")
+        # URL must change but we don't know to what — assert it differs from current
+        assertions.append(Assertion(
+            type="url_changed",
+            target=before_url,
+            timeout_ms=wf_timeout,
+            required=True,
+        ))
+    elif wf_type == "element_appear" and wf_target:
+        assertions.append(Assertion(
+            type="selector_present",
+            target=wf_target,
+            timeout_ms=wf_timeout,
+            required=True,
+        ))
+
+    # success_conditions: required_elements and expected_text_tokens as advisory assertions
+    sc = validation.success_conditions
+    for el in (sc.get("required_elements") or [])[:3]:
+        if el and isinstance(el, str):
+            assertions.append(Assertion(
+                type="selector_present",
+                target=el,
+                timeout_ms=wf_timeout,
+                required=False,
+            ))
+    for tok in (sc.get("expected_text_tokens") or [])[:3]:
+        if tok and isinstance(tok, str):
+            assertions.append(Assertion(
+                type="text_present",
+                target=tok,
+                timeout_ms=min(wf_timeout, 5000),
+                required=False,
+            ))
+
+    return assertions
+
+
+def _build_structural_fingerprint(steps: list[SkillStep]) -> dict[str, Any]:
+    """Fingerprint the first 3 interactive steps for pre-execution drift detection."""
+    landmarks: list[dict[str, Any]] = []
+    for step in steps[:5]:
+        action = step.action if isinstance(step.action, str) else (step.action or {}).get("action", "")
+        if action in {"navigate", "scroll"}:
+            continue
+        fp = step.element_fingerprint
+        primary = step.target.get("primary_selector", "")
+        if primary or fp.data_testid or fp.aria_label or fp.inner_text:
+            landmarks.append({
+                "intent": step.intent,
+                "primary_selector": primary,
+                "data_testid": fp.data_testid,
+                "aria_label": fp.aria_label,
+                "inner_text": fp.inner_text[:60],
+                "tag": fp.tag,
+            })
+        if len(landmarks) >= 3:
+            break
+    return {"landmarks": landmarks, "landmark_count": len(landmarks)}
+
+
 def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
-    selectors = filter_selectors_dict(ev.get("selectors") or {})
+    raw_selectors = ev.get("selectors") or {}
+    selectors = filter_selectors_dict(raw_selectors)
     target = ev.get("target") or {}
     semantic = ev.get("semantic") or {}
     stable = generate_stable_selector(
         {"target": target, "selectors": selectors, "semantic": semantic}, policy
     )
-    ranked = rank_selectors(
+    ranked_scored = rank_selectors_scored(
         {
             "aria": selectors.get("aria"),
             "name": target.get("name"),
@@ -226,16 +367,36 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
         },
         policy,
     )
+    ranked = [v for _, _, v in ranked_scored]
+    top_score = ranked_scored[0][0] if ranked_scored else 0.0
+    # Also score the synthesized stable primary — it may be higher (e.g. label selector)
+    stable_primary = str(stable.get("primary_selector") or "").strip()
+    if stable_primary:
+        stable_kind = _infer_selector_kind(stable_primary)
+        stable_score = max(0.0, score_selector_row(stable_kind, stable_primary, policy))
+        top_score = max(top_score, stable_score)
+    selector_confidence = round(top_score / 100.0, 3)
+
     ranked_extra = [
         selector
         for selector in ranked
         if selector not in {stable.get("primary_selector"), *(stable.get("fallback_selectors") or [])}
     ]
     primary = str(stable.get("primary_selector") or (ranked[0] if ranked else str(selectors.get("css") or "")))
-    if not selector_passes_filters(primary):
-        primary = next((r for r in ranked if selector_passes_filters(str(r))), "") or str(
-            target.get("tag") or "input"
-        )
+    _is_bare_tag = bool(re.fullmatch(r"[a-zA-Z][a-zA-Z0-9]*", primary.strip()))
+    if not selector_passes_filters(primary) or _is_bare_tag:
+        primary = next((r for r in ranked if selector_passes_filters(str(r))), "")
+        if not primary:
+            # Last resort: use the best raw (unfiltered) selector — brittle > bare tag
+            primary = next(
+                (str(v).strip() for v in [
+                    raw_selectors.get("css"), raw_selectors.get("aria"),
+                    raw_selectors.get("text_based"), raw_selectors.get("xpath"),
+                ] if v and str(v).strip()),
+                str(target.get("tag") or "input"),
+            )
+            selector_confidence = 0.0
+
     fallback_raw = list(stable.get("fallback_selectors") or []) + ranked_extra
     fallback = [s for s in fallback_raw if selector_passes_filters(str(s)) and str(s) != primary]
     input_type = semantic.get("input_type")
@@ -249,6 +410,7 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
         "fallback_selectors": fallback,
         "role": str(semantic.get("role") or target.get("role") or ""),
         "type": target_type or "input",
+        "selector_confidence": selector_confidence,
     }
 
 
@@ -353,45 +515,6 @@ def _build_validation(ev: dict[str, Any], state_diff: dict[str, Any], policy: di
         success_conditions=dynamic.get("success_conditions") or {},
     )
 
-
-def _initial_navigation_step(events: list[dict[str, Any]], bundle: PolicyBundle) -> SkillStep | None:
-    """Persist the browser starting URL so editor/runtime flows do not begin from about:blank."""
-    for ev in events:
-        url = str((ev.get("page") or {}).get("url") or "").strip()
-        if not url.startswith(("http://", "https://")):
-            continue
-        title = str((ev.get("page") or {}).get("title") or "")
-        return SkillStep(
-            action={"action": "navigate", "url": url},
-            intent="navigate_to_start_url",
-            url=url,
-            url_state={},
-            signals={
-                "context": {
-                    "page_url": url,
-                    "page_title": title,
-                },
-                "semantic": {
-                    "final_intent": "navigate_to_start_url",
-                    "llm_intent": "navigate_to_start_url",
-                },
-                "selectors": {},
-                "anchors": [],
-                "visual": {},
-            },
-            validation=ValidationBlock(
-                wait_for={"type": "url_change", "target": url, "timeout": 15000},
-                success_conditions={"url": url},
-            ),
-            recovery=RecoveryBlock(
-                **no_recovery_block("navigate_to_start_url"),
-            ),
-            confidence_protocol=_default_confidence_protocol(bundle),
-            decision_policy=DecisionPolicy(),
-        )
-    return None
-
-
 def _build_step(
     ev: dict[str, Any],
     bundle: PolicyBundle,
@@ -417,7 +540,7 @@ def _build_step(
         return SkillStep(
             action=scroll_action,
             intent="scroll_viewport",
-            url_state=_build_url_state(ev),
+            frame=_build_frame_context(ev),
             signals={
                 "visual": visual_signals,
             },
@@ -479,11 +602,25 @@ def _build_step(
         policy,
         vision_anchor_warning=vision_anchor_warning,
     )
+    sel_conf = target.get("selector_confidence", 1.0)
+    if sel_conf <= 0.5:
+        cw = dict(confidence_protocol.get("compile_warnings") or {})
+        cw["selector_confidence"] = sel_conf
+        confidence_protocol = {**confidence_protocol, "compile_warnings": cw}
+    fingerprint = _build_element_fingerprint(ev_with_intent)
+    assertions = _build_assertions(ev_with_intent, validation)
+    if assertions:
+        validation = ValidationBlock(
+            wait_for=validation.wait_for,
+            success_conditions=validation.success_conditions,
+            assertions=assertions,
+        )
     return SkillStep(
         action=action_payload,
         intent=intent,
-        url_state=_build_url_state(ev),
+        frame=_build_frame_context(ev),
         target=target,
+        element_fingerprint=fingerprint,
         signals=signals,
         state={"before": state_before, "after": state_after},
         value=value,
@@ -515,10 +652,8 @@ def compile_skill_package(
     session_root = (settings.data_dir / "sessions" / sid).resolve()
     cleaned_events = fix_step_order(clean_steps(events, pol), pol)
     steps = [_build_step(e, bundle, session_root=session_root, step_index=i) for i, e in enumerate(cleaned_events)]
-    initial_nav = _initial_navigation_step(cleaned_events, bundle)
-    if initial_nav is not None:
-        steps = [initial_nav, *steps]
     now = datetime.now(timezone.utc).isoformat()
+    structural_fp = _build_structural_fingerprint(steps)
     meta = SkillMeta(
         id=skill_id,
         version=version,
@@ -527,6 +662,7 @@ def compile_skill_package(
         source_session_id=source_session_id,
         compiler_policy_version=bundle.version,
         compiler_policy_hash=bundle.content_hash,
+        structural_fingerprint=structural_fp,
     )
     return SkillPackage(
         meta=meta,

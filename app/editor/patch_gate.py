@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from copy import deepcopy
 from typing import Any
 
@@ -12,6 +11,7 @@ from app.compiler.intent_access import get_effective_intent_from_skill_step
 from app.compiler.patch import deep_merge
 from app.compiler.selector_filters import selector_passes_filters
 from app.compiler.wait_for_shape import destructive_wait_for_is_non_none
+from app.editor.action_registry import action_spec, is_supported_action
 from app.editor.step_view import skill_step_for_destructive_check
 from app.policy.intent_ontology import sanitize_intent_token
 
@@ -21,7 +21,7 @@ def _merge_step_shell(step: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
     for key in (
         "target",
         "signals",
-        "url_state",
+        "frame",
         "validation",
         "recovery",
         "confidence_protocol",
@@ -51,26 +51,32 @@ def _merge_step_shell(step: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
     return out
 
 
-def _validate_url_state_patch(raw: Any) -> None:
+def _validate_frame_patch(raw: Any) -> None:
     if raw is None:
         return
     if not isinstance(raw, dict):
-        raise ValueError("url_state_must_be_object")
-    for phase in ("before", "after"):
-        block = raw.get(phase)
-        if block is None:
-            continue
-        if not isinstance(block, dict):
-            raise ValueError(f"url_state_{phase}_must_be_object")
-        pattern = block.get("url_pattern")
-        if pattern in (None, ""):
-            continue
-        if not isinstance(pattern, str):
-            raise ValueError(f"url_state_{phase}_pattern_must_be_string")
-        try:
-            re.compile(pattern)
-        except re.error as exc:
-            raise ValueError(f"url_state_{phase}_pattern_invalid_regex") from exc
+        raise ValueError("frame_must_be_object")
+    chain = raw.get("chain")
+    if chain in (None, []):
+        return
+    if not isinstance(chain, list):
+        raise ValueError("frame_chain_must_be_array")
+    for index, item in enumerate(chain):
+        if not isinstance(item, dict):
+            raise ValueError(f"frame_chain_{index}_must_be_object")
+        selector = str(item.get("selector") or "").strip()
+        if not selector:
+            raise ValueError(f"frame_chain_{index}_selector_required")
+        lowered = selector.lower()
+        if lowered.startswith(("/", "./", "//")) or "xpath" in lowered:
+            raise ValueError(f"frame_chain_{index}_selector_must_not_be_xpath")
+        fallbacks = item.get("fallback_selectors") or []
+        if not isinstance(fallbacks, list):
+            raise ValueError(f"frame_chain_{index}_fallback_selectors_must_be_array")
+        for fb in fallbacks:
+            fb_text = str(fb or "").strip()
+            if fb_text.lower().startswith(("/", "./", "//")) or "xpath" in fb_text.lower():
+                raise ValueError(f"frame_chain_{index}_fallback_selector_must_not_be_xpath")
 
 
 def _coerce_scroll_delta(raw: Any) -> int:
@@ -84,8 +90,8 @@ def _coerce_scroll_delta(raw: Any) -> int:
 
 def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: dict[str, Any]) -> None:
     """Raise ValueError with a human-readable message if the patch is not allowed."""
-    if "url_state" in patch:
-        _validate_url_state_patch(patch.get("url_state"))
+    if "frame" in patch:
+        _validate_frame_patch(patch.get("frame"))
 
     merged = _merge_step_shell(step, patch)
 
@@ -97,8 +103,16 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
             raise ValueError("invalid_intent_slug")
 
     act = action_name(merged).lower()
+    spec = action_spec(act)
+    if not is_supported_action(act):
+        raise ValueError("unsupported_action_kind")
+    if spec.marker:
+        invalid_keys = sorted(set(patch))
+        if invalid_keys:
+            raise ValueError("recording_marker_steps_are_read_only")
+        return
     if act == "navigate":
-        invalid_keys = sorted(set(patch) - {"intent", "action", "url", "url_state", "validation", "recovery"})
+        invalid_keys = sorted(set(patch) - {"intent", "action", "url", "validation", "recovery", "frame"})
         if invalid_keys:
             raise ValueError("navigate_step_allows_only_url_intent_validation_recovery")
         action_patch = patch.get("action")
@@ -110,7 +124,7 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
             raise ValueError("navigate_url_must_be_http_url")
         return
     if act == "scroll":
-        invalid_keys = sorted(set(patch) - {"intent", "action", "url_state"})
+        invalid_keys = sorted(set(patch) - {"intent", "action", "frame"})
         if invalid_keys:
             raise ValueError("scroll_step_allows_only_intent_and_action")
         action_patch = patch.get("action")
@@ -126,6 +140,29 @@ def validate_editor_patch(step: dict[str, Any], patch: dict[str, Any], policy: d
             delta = _coerce_scroll_delta(action_patch.get("delta"))
             if abs(delta) > 20000:
                 raise ValueError("scroll_amount_out_of_range")
+        return
+    if act in {"wait", "screenshot"}:
+        invalid_keys = sorted(set(patch) - {"intent", "action", "validation", "recovery", "value", "frame"})
+        if invalid_keys:
+            raise ValueError(f"{act}_step_allows_only_action_intent_validation_recovery")
+    if act in {"check", "assert"}:
+        invalid_keys = sorted(
+            set(patch)
+            - {
+                "intent",
+                "action",
+                "check_kind",
+                "check_pattern",
+                "check_threshold",
+                "check_selector",
+                "check_text",
+                "signals",
+                "recovery",
+                "frame",
+            }
+        )
+        if invalid_keys:
+            raise ValueError("check_step_allows_only_check_fields")
     if act != "scroll":
         eff = get_effective_intent_from_skill_step(merged) or str(merged.get("intent") or "").strip()
         if not eff.strip():

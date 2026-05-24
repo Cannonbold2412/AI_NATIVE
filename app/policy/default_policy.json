@@ -126,9 +126,10 @@
     "canonical_order": ["css", "aria", "text_based", "xpath"],
     "kind_base_scores": {
       "aria": 100,
+      "label": 93,
       "name": 95,
       "text_based": 90,
-      "role": 80,
+      "role": 45,
       "css": 70,
       "xpath": 50
     },
@@ -157,7 +158,6 @@
     "destructive_intent_substrings": ["erase", "trash", "wipe"],
     "destructive_confirm_expected_tokens": ["delete", "remove", "permanently", "confirm", "cannot be undone"],
     "wait_for_recovery_strategy_hints": {
-      "url_change": ["url_state_match"],
       "element_appear": ["overlay_anchor", "role_match"],
       "intent_outcome": ["semantic match", "intent_outcome_probe"]
     }
@@ -195,10 +195,6 @@
     "intent_token_stopwords": ["the", "and", "for", "to", "a", "an", "of", "in", "on"],
     "intent_recovery_from_facets": true,
     "intent_recovery_facets": [
-      {
-        "substrings": ["navigate", "redirect", "follow", "visit"],
-        "add": "url_state_match"
-      },
       {
         "substrings": ["menu", "dropdown", "modal", "dialog", "drawer", "popover"],
         "add": "overlay_anchor"

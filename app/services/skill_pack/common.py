@@ -54,14 +54,22 @@ _STEP_VISUAL_KEYS = ("full_screenshot", "scroll_screenshot", "element_snapshot")
 _STEP_SCREENSHOT_URL_KEYS = ("full_url", "scroll_url", "element_url")
 
 _ALLOWED_STRUCTURED_TYPES = {
-    "navigate",
-    "fill",
-    "type",
-    "click",
-    "select",
-    "focus",
-    "scroll",
-    "check",
+    # legacy / v1
+    "navigate", "fill", "type", "click", "select", "focus", "scroll", "check",
+    # v2 pointer
+    "dblclick", "right_click", "hover",
+    # v2 form
+    "set_checkbox", "set_radio", "select_option", "date_pick",
+    # v2 drag / keyboard
+    "drag_drop", "keyboard_shortcut",
+    # v2 file I/O
+    "upload_intent", "upload",
+    # v2 control
+    "wait", "assert", "screenshot",
+    # v2 context (recording-only markers, included so compiler doesn't strip them)
+    "tab_open", "tab_switch", "popup", "frame_enter", "frame_exit",
+    "download_observed", "dialog_appeared", "dialog_accept", "dialog_dismiss",
+    "file_chooser_opened", "clipboard_copy", "clipboard_paste",
 }
 _TEXT_INPUT_STEP_TYPES = {"fill", "type"}
 _SELECTOR_ONLY_STEP_TYPES = {"select", "focus"}

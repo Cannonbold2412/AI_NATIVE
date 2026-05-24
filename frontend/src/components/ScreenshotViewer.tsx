@@ -6,8 +6,9 @@ import {
   useState,
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
 } from 'react'
-import { BoxSelect, ImageIcon, Minus, Plus, RotateCcw } from 'lucide-react'
+import { BoxSelect, ImageIcon } from 'lucide-react'
 import type { StepScreenshotDTO } from '../types/workflow'
 import { RECORDING_DRAG_MODE_CLEAR_VISUAL, RECORDING_SCREENSHOT_DRAG_MIME } from '@/api/workflowApi'
 import { Button } from '@/components/ui/button'
@@ -66,6 +67,10 @@ function rectToPct(
   }
 }
 
+function clampZoom(value: number): number {
+  return Math.max(1, Math.min(3, value))
+}
+
 type InnerProps = {
   src: string
   bbox: Record<string, unknown>
@@ -88,17 +93,24 @@ function ScreenshotViewInner({
 }: InnerProps) {
   const { x = 0, y = 0, w = 0, h = 0 } = bbox as Record<string, number>
   const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
   const [resolvedSrc, setResolvedSrc] = useState(src || '')
   const [fallbackTried, setFallbackTried] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [natural, setNatural] = useState({ w: 0, h: 0 })
   const imgRef = useRef<HTMLImageElement>(null)
   const dragLiveRef = useRef<null | { ax: number; ay: number; cx: number; cy: number }>(null)
+  const panLiveRef = useRef<null | { pointerId: number; sx: number; sy: number; px: number; py: number }>(null)
   const [drag, setDrag] = useState<null | { ax: number; ay: number; cx: number; cy: number }>(null)
 
   useEffect(() => {
     dragLiveRef.current = null
+    panLiveRef.current = null
     setDrag(null)
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+    setIsPanning(false)
   }, [bboxDrawMode, src])
 
   const overlayPct = useMemo(() => {
@@ -178,6 +190,54 @@ function ScreenshotViewInner({
     }
   }
 
+  const onWheelZoom = (e: ReactWheelEvent<HTMLDivElement>) => {
+    if (bboxDrawMode || !e.ctrlKey) return
+    e.preventDefault()
+    setZoom((current) => {
+      const next = clampZoom(current - e.deltaY * 0.004)
+      if (next === 1) setPan({ x: 0, y: 0 })
+      return next
+    })
+  }
+
+  const onImageDoubleClick = () => {
+    if (bboxDrawMode) return
+    setZoom((current) => {
+      const next = current > 1 ? 1 : 2
+      if (next === 1) setPan({ x: 0, y: 0 })
+      return next
+    })
+  }
+
+  const onPanPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (bboxDrawMode || zoom <= 1) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    panLiveRef.current = { pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y }
+    setIsPanning(true)
+  }
+
+  const onPanPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const live = panLiveRef.current
+    if (!live || live.pointerId !== e.pointerId) return
+    setPan({
+      x: live.px + e.clientX - live.sx,
+      y: live.py + e.clientY - live.sy,
+    })
+  }
+
+  const endPan = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const live = panLiveRef.current
+    if (!live || live.pointerId !== e.pointerId) return
+    panLiveRef.current = null
+    setIsPanning(false)
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* noop */
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -192,11 +252,20 @@ function ScreenshotViewInner({
         />
       ) : null}
       <div
-        className="transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none motion-reduce:duration-0"
+        className={cn(
+          'transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none motion-reduce:duration-0',
+          !bboxDrawMode && zoom > 1 && (isPanning ? 'cursor-grabbing' : 'cursor-grab'),
+        )}
         style={{
-          transform: `scale(${zoom})`,
-          transformOrigin: 'top center',
+          transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+          transformOrigin: 'center center',
         }}
+        onWheel={onWheelZoom}
+        onDoubleClick={onImageDoubleClick}
+        onPointerDown={onPanPointerDown}
+        onPointerMove={onPanPointerMove}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
       >
         <div className="bg-muted/15 relative inline-block min-w-0 w-full">
           <div className="shot-wrap relative inline-block min-w-0 max-w-full">
@@ -261,7 +330,7 @@ function ScreenshotViewInner({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-2">
         <div className="pointer-events-none flex min-w-0 flex-1 items-start gap-1.5">
           <span
-            className="pointer-events-none flex size-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/35 text-zinc-300 backdrop-blur-sm"
+            className="pointer-events-none flex size-7 shrink-0 items-center justify-center rounded-md border border-black/45 bg-transparent text-zinc-950 shadow-sm"
             title="Screenshot"
             aria-hidden
           >
@@ -272,11 +341,13 @@ function ScreenshotViewInner({
               <Button
                 type="button"
                 size="sm"
-                variant={bboxToolUi.active ? 'default' : 'outline'}
+                variant="ghost"
                 disabled={bboxToolUi.saving}
                 className={cn(
-                  'h-7 gap-1 border-white/15 bg-black/35 px-2 text-[11px] font-medium backdrop-blur-sm hover:bg-black/45',
-                  bboxToolUi.active && 'border-primary/40 bg-primary/25 text-primary-foreground hover:bg-primary/35',
+                  'h-7 gap-1 rounded-full border bg-transparent px-2 text-[11px] font-bold text-zinc-950 shadow-sm hover:bg-transparent hover:text-zinc-950',
+                  bboxToolUi.active
+                    ? 'border-black/70'
+                    : 'border-black/50',
                 )}
                 title="Draw a rectangle on the screenshot to save signals.visual bbox and recompute anchors"
                 aria-pressed={bboxToolUi.active}
@@ -287,47 +358,6 @@ function ScreenshotViewInner({
               </Button>
             </div>
           ) : null}
-        </div>
-        <div
-          className="pointer-events-auto ml-auto inline-flex cursor-default items-center gap-px rounded-full border border-white/12 bg-zinc-950/80 py-0.5 pl-0.5 pr-0.5 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-zinc-950/65"
-          role="toolbar"
-          aria-label="Screenshot zoom"
-        >
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="h-7 w-7 cursor-pointer rounded-full text-zinc-300 hover:bg-white/10 hover:text-zinc-50"
-            onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-            aria-label="Zoom out"
-          >
-            <Minus className="size-3.5" strokeWidth={2} aria-hidden />
-          </Button>
-          <span className="text-muted-foreground min-w-[2.5rem] text-center font-mono text-[10px] tabular-nums text-zinc-400">
-            {Math.round(zoom * 100)}
-            <span className="text-zinc-500">%</span>
-          </span>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="h-7 w-7 cursor-pointer rounded-full text-zinc-300 hover:bg-white/10 hover:text-zinc-50"
-            onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
-            aria-label="Zoom in"
-          >
-            <Plus className="size-3.5" strokeWidth={2} aria-hidden />
-          </Button>
-          <div className="mx-px h-4 w-px shrink-0 self-center rounded-full bg-white/15" aria-hidden />
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="h-7 w-7 cursor-pointer rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
-            onClick={() => setZoom(1)}
-            aria-label="Reset zoom"
-          >
-            <RotateCcw className="size-3" strokeWidth={2} aria-hidden />
-          </Button>
         </div>
       </div>
 

@@ -25,7 +25,11 @@ const LOG_FILE        = path.join(CONXA_DATA_DIR, "logs", "runtime.log");
 const RUNTIME_VERSION = require("./package.json").version;
 
 // ─── 2. Playwright browser path (MUST precede any playwright require) ─────────
-process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(CONXA_DIR, "chromium");
+// Respect a caller-supplied PLAYWRIGHT_BROWSERS_PATH (e.g. dev mode where CONXA_DIR
+// points to a data dir that has no chromium/ subfolder).
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(CONXA_DIR, "chromium");
+}
 // Pass both dirs to browser.js
 process.env.CONXA_DIR      = CONXA_DIR;
 process.env.CONXA_DATA_DIR = CONXA_DATA_DIR;
@@ -79,6 +83,7 @@ const sync         = require("./sync");
 const authManager  = require("./auth_manager");
 const { runPlan, enrichStepsWithRecovery, appendRecoveryEvent, clearRetryBudget, checkRetryBudget } = require("./run");
 const { getCachedBrowser, gracefulShutdown } = require("./browser");
+const { createTracker, mapErrorToCode } = require("./tracker");
 
 // ─── 6. Execution state (single lock per process) ─────────────────────────────
 let activeExecution = null;
@@ -484,11 +489,32 @@ async function _handleTool(name, args) {
       cancelRequested: false,
     };
 
+    // Set up lightweight tracker for this execution
+    const _tracker    = createTracker(primary.entry.pack?.tracking || {}, {
+      runtime_version: RUNTIME_VERSION,
+      plugin_id:       primary.entry.slug,
+      plugin_version:  primary.entry.manifest?.version || "0",
+      company_id:      primary.entry.company,
+    });
+    const _runId      = `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const _runTracker = _tracker.forRun(_runId, { uid: "", wid: "" });
+    const _wfStartAt  = Date.now();
+    let   _totalRecovered = 0;
+
+    // Signal LLM/vision recovery retry (L4/L5) when resuming mid-plan
+    if (primary.resumeFrom > 0) {
+      _runTracker.emit("rec_start", { si: primary.resumeFrom, l: 5, sc: "llm_intent" });
+    }
+    _runTracker.emit("wf_start", {});
+
     let page = null;
-    let _browser, _context;
+    let _browser, _context, _protectedUrl;
     try {
-      ({ browser: _browser, context: _context } = await getCachedBrowser(primary.entry.company, authManager, { headless: !watch }));
+      ({ browser: _browser, context: _context, protectedUrl: _protectedUrl } = await getCachedBrowser(primary.entry.company, authManager, { headless: !watch }));
       page = await _context.newPage();
+      if (_protectedUrl) {
+        await page.goto(_protectedUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+      }
 
       const runtimeLog = { consoleErrors: [], pageErrors: [], failedRequests: [] };
       page.on("console", msg => {
@@ -501,14 +527,30 @@ async function _handleTool(name, args) {
           runtimeLog.failedRequests.push({ url: req.url(), failure: req.failure()?.errorText });
       });
 
+      const _downloadsDir = path.join(os.homedir(), ".conxa", "downloads", _runId);
+      const _downloads = [];
+      const _downloadSaves = [];
+      page.on("download", (download) => {
+        const savePromise = (async () => {
+          fs.mkdirSync(_downloadsDir, { recursive: true });
+          const fname = download.suggestedFilename() || `download_${Date.now()}`;
+          const dest  = path.join(_downloadsDir, fname);
+          await download.saveAs(dest);
+          _downloads.push(dest);
+        })().catch(() => {});
+        _downloadSaves.push(savePromise);
+      });
+
       for (let si = 0; si < resolved.length; si++) {
         const { entry, steps, inputs, resumeFrom } = resolved[si];
         const startAt = si === 0 ? resumeFrom : 0;
         try {
-          await runPlan(page, steps, inputs, startAt, entry.slug, {
+          const result = await runPlan(page, steps, inputs, startAt, entry.slug, {
             onStep:      (i) => { if (activeExecution) activeExecution.step = i; },
             cancelCheck: () => activeExecution?.cancelRequested,
+            tracker:     _runTracker,
           });
+          _totalRecovered += (result && result.recoveredSteps) ? result.recoveredSteps : 0;
         } catch (runErr) {
           runErr.fromEntry = entry;
           throw runErr;
@@ -521,6 +563,7 @@ async function _handleTool(name, args) {
 
       const url  = page.url();
       const shot = await page.screenshot({ type: "png" }).catch(() => null);
+      await Promise.allSettled(_downloadSaves);
       await page.close().catch(() => {});
 
       for (const r of resolved) {
@@ -528,15 +571,33 @@ async function _handleTool(name, args) {
         appendRecoveryEvent({ event: "run_success", slug: r.entry.slug, steps_executed: r.steps.length });
       }
 
+      _runTracker.emit("wf_ok", {
+        dur: Date.now() - _wfStartAt,
+        tot: resolved.reduce((n, r) => n + r.steps.length, 0),
+        rec: _totalRecovered,
+      });
+      await _tracker.flush();
+      _tracker.destroy();
+
       log("info", "execute_success", { skill: primary.entry.slug, url });
 
-      const content = [{ type: "text", text: `Done. URL: ${url}` }];
+      const downloadNote = _downloads.length
+        ? `\nDownloaded files:\n${_downloads.map(p => `  ${p}`).join("\n")}`
+        : "";
+      const content = [{ type: "text", text: `Done. URL: ${url}${downloadNote}` }];
       if (shot) content.push({ type: "image", data: shot.toString("base64"), mimeType: "image/png" });
       return { content };
 
     } catch (runErr) {
       log("error", "execute_failed", { skill: primary.entry.slug, error: runErr.message });
       appendRecoveryEvent({ event: "terminal_failure", slug: primary.entry.slug, error: runErr.message });
+      _runTracker.emit("wf_fail", {
+        dur: Date.now() - _wfStartAt,
+        fsi: runErr.failedAt ?? null,
+        fc:  mapErrorToCode(runErr),
+      });
+      await _tracker.flush();
+      _tracker.destroy();
       const failResp = page ? await _buildFailureResponse(page, runErr, runErr.fromEntry || primary.entry) : err(runErr.message);
       if (page) await page.close().catch(() => {});
       return failResp;

@@ -32,7 +32,7 @@ TIER_INFO = {
         "amount": 49900,  # 499 INR in paise
         "currency": "INR",
         "period": "monthly",
-        "features": ["Up to 10 skills", "5 published packages", "Standard support"],
+        "features": ["Up to 10 skills", "5 packaged workflows", "Standard support"],
     },
     "pro": {
         "name": "Pro",

@@ -36,7 +36,7 @@ const VALUES = [
   {
     icon: '✏️',
     headline: 'Human Editing Layer',
-    body: 'After recording, refine AI-interpreted steps in our visual editor. Fix interpretation errors and add conditions before deploying.',
+    body: 'After recording, refine AI-interpreted steps in our visual editor. Fix interpretation errors and add conditions before packaging.',
   },
   {
     icon: '🔄',

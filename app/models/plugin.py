@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,12 @@ class PluginWorkflow(BaseModel):
     recorded_at: float
     status: Literal["recorded", "compiled", "error"] = "recorded"
     skill_id: str | None = None
+    # Pipeline state fields
+    edited_at: float | None = None
+    last_test_at: float | None = None
+    last_test_status: Literal["passed", "failed", "never"] = "never"
+    last_test_error: str | None = None
+    last_test_inputs: dict[str, Any] = Field(default_factory=dict)
 
 
 class PluginAuth(BaseModel):
@@ -44,7 +50,7 @@ class Plugin(BaseModel):
     owner_user_id: str = "local"
     workspace_id: str = ""
     target_url: str
-    protected_url: str
+    protected_url: str = ""
     protected_url_marker_text: str = ""
     status: Literal["needs_auth", "ready", "building", "error"] = "needs_auth"
     auth: PluginAuth | None = None

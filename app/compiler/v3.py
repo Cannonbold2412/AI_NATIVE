@@ -368,10 +368,12 @@ def generate_stable_selector(element: dict[str, Any], policy: dict[str, Any] | N
     input_type = str((element.get("semantic") or {}).get("input_type") or target.get("type") or "").strip().lower()
     aria_label = str(target.get("aria_label") or "").strip()
     placeholder = str(target.get("placeholder") or "").strip()
+    label_text = str(target.get("label_text") or "").strip()
     text_based = str(selectors.get("text_based") or "").strip()
     css = str(selectors.get("css") or "").strip()
     raw_id = str(target.get("id") or "").strip()
     id_selector = f"#{raw_id}" if raw_id else ""
+    tag_hint = str(target.get("tag") or "input").strip() or "input"
 
     def _escape_attr(value: str) -> str:
         return value.replace("\\", "\\\\").replace('"', '\\"')
@@ -379,12 +381,16 @@ def generate_stable_selector(element: dict[str, Any], policy: dict[str, Any] | N
     rows: list[tuple[str, str]] = []
     if name:
         rows.append(("name", f'input[name="{_escape_attr(name)}"]'))
-    if input_type:
-        rows.append(("css", f'input[type="{_escape_attr(input_type)}"]'))
     if aria_label:
         rows.append(("aria", f'[aria-label="{_escape_attr(aria_label)}"]'))
+    if label_text:
+        escaped_label = _escape_attr(label_text)
+        rows.append(("label", f'label:has-text("{escaped_label}") + {tag_hint}'))
+        rows.append(("label", f'label:has-text("{escaped_label}") ~ {tag_hint}'))
     if placeholder:
         rows.append(("css", f'[placeholder="{_escape_attr(placeholder)}"]'))
+    if input_type:
+        rows.append(("css", f'input[type="{_escape_attr(input_type)}"]'))
     if text_based and selector_passes_filters(text_based):
         rows.append(("text_based", text_based))
     if css and not is_dynamic_id(css) and selector_passes_filters(css):

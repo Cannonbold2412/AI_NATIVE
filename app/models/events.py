@@ -7,7 +7,27 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-ActionKind = Literal["click", "type", "scroll", "select", "check"]
+ActionKind = Literal[
+    # pointer interactions
+    "click", "dblclick", "right_click", "hover",
+    # text / form
+    "type", "fill", "set_checkbox", "set_radio", "select", "select_option", "date_pick",
+    # drag / keyboard
+    "drag_drop", "keyboard_shortcut",
+    # scroll / navigation
+    "scroll", "navigate",
+    # browser context
+    "tab_open", "tab_switch", "popup", "frame_enter", "frame_exit",
+    # file I/O affordances
+    "upload_intent", "upload", "download_observed",
+    "dialog_appeared", "dialog_accept", "dialog_dismiss",
+    "file_chooser_opened",
+    "clipboard_copy", "clipboard_paste",
+    # control
+    "wait", "assert", "screenshot",
+    # legacy
+    "focus", "check",
+]
 
 
 class ActionMeta(BaseModel):
@@ -24,6 +44,8 @@ class TargetDom(BaseModel):
     role: str | None = None
     aria_label: str | None = None
     name: str | None = None
+    placeholder: str | None = None
+    label_text: str | None = None
 
 
 class Selectors(BaseModel):
@@ -75,16 +97,10 @@ class Timing(BaseModel):
     timeout: int = 5000
 
 
-class UrlStateEntry(BaseModel):
-    """URL + page title at one moment in time."""
-    url: str = ""
-    title: str = ""
+class FrameContext(BaseModel):
+    """Iframe chain for actions captured inside child documents."""
 
-
-class UrlStatePair(BaseModel):
-    """Before/after URL state bracketing a single step."""
-    before: UrlStateEntry = Field(default_factory=UrlStateEntry)
-    after: UrlStateEntry = Field(default_factory=UrlStateEntry)
+    chain: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RecordedEvent(BaseModel):
@@ -101,4 +117,4 @@ class RecordedEvent(BaseModel):
     state_change: StateChange
     timing: Timing
     extras: dict[str, Any] = Field(default_factory=dict)
-    url_state: UrlStatePair | None = None
+    frame: FrameContext = Field(default_factory=FrameContext)

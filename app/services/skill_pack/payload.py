@@ -28,7 +28,7 @@ from .models import RawWorkflow
 _logger = logging.getLogger(__name__)
 
 _NOISE_ACTION_TYPES = frozenset({
-    "hover", "mousemove", "mousedown", "mouseup",
+    "mousemove", "mousedown", "mouseup",
     "pointerover", "pointermove", "focus", "blur",
     "keydown", "keyup", "pointerdown", "pointerup",
 })
@@ -183,7 +183,7 @@ def _preprocess_declaration_blocks_in_place(node: Any) -> None:
 def sanitize_raw_steps_for_llm(raw_steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Reduce input token size by filtering noise actions and removing low-value fields.
 
-    Filters out non-semantic actions (hover, focus, mousemove, etc.), removes volatile
+    Filters out non-semantic actions (focus, mousemove, etc.), removes volatile
     identifiers and operational metadata, trims long text fields, and deduplicates
     consecutive navigate steps to the same URL. Preserves semantic context needed for
     LLM structuring while minimizing token usage.
@@ -212,7 +212,7 @@ def sanitize_raw_steps_for_llm(raw_steps: list[dict[str, Any]]) -> list[dict[str
 def _sanitize_recording_step_for_llm(step: dict[str, Any]) -> dict[str, Any] | None:
     """Filter noise actions and remove low-value fields from a single step.
 
-    Returns None for noise-action steps (hover, focus, etc.). Otherwise deep-copies
+    Returns None for noise-action steps (focus, mousemove, etc.). Otherwise deep-copies
     and removes: volatile identifiers (id, classes), operational metadata (timing,
     timestamps, session_id, sequence, pipeline_version, etc.), XPath selectors (LLM
     told never to use), and trims long text fields.
@@ -225,6 +225,7 @@ def _sanitize_recording_step_for_llm(step: dict[str, Any]) -> dict[str, Any] | N
     c.pop("screenshot", None)
     c.pop("visual", None)
     c.pop("signals", None)
+    c.pop("frame", None)
     c.pop("timing", None)
 
     action_block = c.get("action")

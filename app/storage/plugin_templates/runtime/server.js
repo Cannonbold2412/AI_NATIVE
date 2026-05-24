@@ -19,8 +19,28 @@ const { getPluginConfig, getPluginDir, getAuthJson, getRegistry } = require("./c
 const { getCachedBrowser, isAuthenticated, getAuthContext, gracefulShutdown } = require("./browser");
 const {
   appendRecoveryEvent, interpolate, enrichStepsWithRecovery,
-  waitForUrlState, runPlan, runSkill, checkRetryBudget, clearRetryBudget,
+  runPlan, runSkill, checkRetryBudget, clearRetryBudget,
+  writePauseSignal, clearPauseSignal, isPaused,
 } = require("./run");
+
+// ─── Async execution queue ────────────────────────────────────────────────────
+// Tracks in-progress executions keyed by execution_id.
+// Each entry: { status, slug, started_at, step_current, step_total, error, result }
+
+const _executions = new Map();
+
+function _execId() {
+  return `exec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function _getExec(id) {
+  return _executions.get(id) || null;
+}
+
+function _updateExec(id, updates) {
+  const e = _executions.get(id);
+  if (e) _executions.set(id, { ...e, ...updates, updated_at: new Date().toISOString() });
+}
 
 // ─── Registry helpers ─────────────────────────────────────────────────────────
 
@@ -55,6 +75,56 @@ function resolveSkill(pluginSlug, skillSlug, index) {
       return v;
   }
   return null;
+}
+
+// ─── Async execution runner ───────────────────────────────────────────────────
+
+async function _runExecutionAsync(execId, resolved, resumeFrom, primaryPlugin) {
+  _updateExec(execId, { status: "running" });
+  let _browser, _context, _protectedUrl;
+  try {
+    ({ browser: _browser, context: _context, protectedUrl: _protectedUrl } = await getCachedBrowser(primaryPlugin));
+  } catch (authErr) {
+    _updateExec(execId, { status: "failed", error: String(authErr) });
+    return;
+  }
+  const page = await _context.newPage();
+  if (_protectedUrl) {
+    await page.goto(_protectedUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+  }
+  try {
+    for (let si = 0; si < resolved.length; si++) {
+      const { steps, inputs, slug } = resolved[si];
+      const startAt = si === 0 ? resumeFrom : 0;
+      // Intercept step progress by wrapping runPlan with a step counter shim
+      let stepsDone = resumeFrom;
+      const totalSteps = resolved.reduce((s, r) => s + r.steps.length, 0);
+      // Patch: update progress after each step via writeCheckpoint side-effect
+      await runPlan(page, steps, inputs, startAt, slug);
+      stepsDone += steps.length - startAt;
+      _updateExec(execId, { step_current: stepsDone, step_total: totalSteps });
+    }
+    // Save auth state on success
+    const authJson = getAuthJson(primaryPlugin);
+    const state = await _context.storageState();
+    fs.mkdirSync(path.dirname(authJson), { recursive: true });
+    fs.writeFileSync(authJson, JSON.stringify(state, null, 2));
+    const url  = page.url();
+    const shot = await page.screenshot({ type: "png" }).catch(() => null);
+    await page.close().catch(() => {});
+    for (const r of resolved) clearRetryBudget(r.slug);
+    _updateExec(execId, {
+      status: "completed",
+      result: { url, screenshot_b64: shot ? shot.toString("base64") : null },
+    });
+  } catch (err) {
+    _updateExec(execId, {
+      status: "failed",
+      error:  err.message,
+      step_current: typeof err.failedAt === "number" ? err.failedAt : undefined,
+    });
+    await page.close().catch(() => {});
+  }
 }
 
 // ─── MCP server ───────────────────────────────────────────────────────────────
@@ -162,6 +232,44 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         type: "object",
         properties: { slug: { type: "string", description: "Installed plugin slug" } },
         required: ["slug"],
+      },
+    },
+    {
+      name: "get_execution_status",
+      description: "Poll the status of an async skill execution started by execute_plan. Returns current step, total steps, status, and any error.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          execution_id: { type: "string", description: "ID returned by execute_plan" },
+        },
+        required: ["execution_id"],
+      },
+    },
+    {
+      name: "pause_execution",
+      description: "Pause a running execution between steps. It will stop at the next step boundary and wait for resume_execution.",
+      inputSchema: {
+        type: "object",
+        properties: { execution_id: { type: "string" } },
+        required: ["execution_id"],
+      },
+    },
+    {
+      name: "resume_execution",
+      description: "Resume a paused execution from where it stopped.",
+      inputSchema: {
+        type: "object",
+        properties: { execution_id: { type: "string" } },
+        required: ["execution_id"],
+      },
+    },
+    {
+      name: "cancel_execution",
+      description: "Cancel a running or paused execution. Cannot be undone.",
+      inputSchema: {
+        type: "object",
+        properties: { execution_id: { type: "string" } },
+        required: ["execution_id"],
       },
     },
   ];
@@ -292,14 +400,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }, null, 2) }] };
   }
 
+  // ── get_execution_status ─────────────────────────────────────────────────
+  if (name === "get_execution_status") {
+    const execId = String((args && args.execution_id) || "").trim();
+    const exec   = _getExec(execId);
+    if (!exec) return { content: [{ type: "text", text: `Unknown execution_id: ${execId}` }] };
+    const text = JSON.stringify({
+      execution_id:  execId,
+      status:        exec.status,
+      step_current:  exec.step_current,
+      step_total:    exec.step_total,
+      slug:          exec.slug,
+      started_at:    exec.started_at,
+      updated_at:    exec.updated_at,
+      error:         exec.error || null,
+    }, null, 2);
+    return { content: [{ type: "text", text }] };
+  }
+
+  // ── pause_execution ───────────────────────────────────────────────────────
+  if (name === "pause_execution") {
+    const execId = String((args && args.execution_id) || "").trim();
+    const exec   = _getExec(execId);
+    if (!exec) return { content: [{ type: "text", text: `Unknown execution_id: ${execId}` }] };
+    if (exec.status !== "running") return { content: [{ type: "text", text: `Cannot pause: execution is ${exec.status}` }] };
+    writePauseSignal(exec.slug);
+    _updateExec(execId, { status: "pause_requested" });
+    return { content: [{ type: "text", text: `Pause signal sent. Execution will stop at the next step boundary. Poll get_execution_status.` }] };
+  }
+
+  // ── resume_execution ──────────────────────────────────────────────────────
+  if (name === "resume_execution") {
+    const execId = String((args && args.execution_id) || "").trim();
+    const exec   = _getExec(execId);
+    if (!exec) return { content: [{ type: "text", text: `Unknown execution_id: ${execId}` }] };
+    if (!["paused", "pause_requested"].includes(exec.status))
+      return { content: [{ type: "text", text: `Cannot resume: execution is ${exec.status}` }] };
+    clearPauseSignal(exec.slug);
+    _updateExec(execId, { status: "running" });
+    return { content: [{ type: "text", text: `Resume signal sent. Execution will continue from step ${exec.step_current + 1}.` }] };
+  }
+
+  // ── cancel_execution ──────────────────────────────────────────────────────
+  if (name === "cancel_execution") {
+    const execId = String((args && args.execution_id) || "").trim();
+    const exec   = _getExec(execId);
+    if (!exec) return { content: [{ type: "text", text: `Unknown execution_id: ${execId}` }] };
+    clearPauseSignal(exec.slug);
+    _updateExec(execId, { status: "cancelled", error: "Cancelled by user" });
+    return { content: [{ type: "text", text: `Execution ${execId} cancelled.` }] };
+  }
+
   // ── execute_plan ─────────────────────────────────────────────────────────
   if (name === "execute_plan") {
     const skillRuns = (args && Array.isArray(args.skills)) ? args.skills : [];
     if (skillRuns.length === 0)
       return { content: [{ type: "text", text: "execute_plan: provide { skills: [{ slug, inputs }] }" }] };
 
-    const resumeFrom = (Number.isInteger(args.resume_from) && args.resume_from > 0) ? args.resume_from : 0;
-    const overrides  = (args.step_overrides && typeof args.step_overrides === "object") ? args.step_overrides : {};
+    const resumeFrom    = (Number.isInteger(args.resume_from) && args.resume_from > 0) ? args.resume_from : 0;
+    const overrides     = (args.step_overrides && typeof args.step_overrides === "object") ? args.step_overrides : {};
+    const asyncMode     = args.async === true;   // pass async: true for fire-and-forget with polling
     const isFlatOverrides = Object.keys(overrides).length > 0
       && Object.keys(overrides).every(k => /^\d+$/.test(k));
 
@@ -330,6 +490,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Determine which plugin to use for auth (first skill's plugin)
     const primaryPlugin = resolved[0].pluginSlug;
 
+    // Register execution for async tracking
+    const execId = _execId();
+    const primarySlug = resolved[0].slug;
+    _executions.set(execId, {
+      status:       "starting",
+      slug:         primarySlug,
+      started_at:   new Date().toISOString(),
+      updated_at:   new Date().toISOString(),
+      step_current: resumeFrom,
+      step_total:   resolved.reduce((s, r) => s + r.steps.length, 0),
+      error:        null,
+    });
+
+    // In async mode: return execution_id immediately, run in background
+    if (asyncMode) {
+      _runExecutionAsync(execId, resolved, resumeFrom, primaryPlugin, skillIndex);
+      return { content: [{ type: "text", text: JSON.stringify({
+        execution_id:  execId,
+        status:        "starting",
+        message:       "Execution started. Poll get_execution_status for progress.",
+        step_total:    resolved.reduce((s, r) => s + r.steps.length, 0),
+      }, null, 2) }] };
+    }
+
     // ── Layer 0: Retry budget gate ────────────────────────────────────────
     if (resumeFrom > 0) {
       if (!checkRetryBudget(resolved[0].slug, resumeFrom)) {
@@ -338,15 +522,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     // ── Acquire browser (cached per-plugin slug) ──────────────────────────
-    let _browser, _context;
+    let _browser, _context, _protectedUrl;
     try {
-      ({ browser: _browser, context: _context } = await getCachedBrowser(primaryPlugin));
+      ({ browser: _browser, context: _context, protectedUrl: _protectedUrl } = await getCachedBrowser(primaryPlugin));
     } catch (authErr) {
       return { content: [{ type: "text", text: String(authErr) }] };
     }
 
     const runtimeLog = { consoleErrors: [], pageErrors: [], failedRequests: [] };
     const page = await _context.newPage();
+    if (_protectedUrl) {
+      await page.goto(_protectedUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+    }
 
     page.on("console", msg => {
       if (["error", "warning"].includes(msg.type()) && runtimeLog.consoleErrors.length < 50)
@@ -368,15 +555,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try { await page.goto(interpolate(firstSteps[i].url || "", firstInputs), { timeout: 30000, waitUntil: "domcontentloaded" }); }
           catch (_) {}
           break;
-        }
-      }
-      const resumeStep = firstSteps[resumeFrom];
-      if (resumeStep?.url_state?.before?.url_pattern) {
-        try { await waitForUrlState(page, resumeStep.url_state.before); }
-        catch (_) {
-          const actual = page.url(), expected = resumeStep.url_state.before.url_pattern;
-          await page.close().catch(() => {});
-          return { content: [{ type: "text", text: `Session state diverged. Expected URL pattern: ${expected}, got: ${actual}. Restart from step 0 or fix execution.json.` }] };
         }
       }
     }

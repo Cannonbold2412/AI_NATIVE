@@ -96,15 +96,44 @@ def describe_step(step: dict[str, Any], step_index: int) -> str:
         if v is not None and str(v):
             return f"Step {n}: Fill{tail} with value"
         return f"Step {n}: Fill{tail}"
-    if act == "click":
+    if act in {"click", "dblclick", "right_click"}:
+        list_label = _click_list_label(label, sel)
+        quoted = _enquote_click_label(list_label) if list_label else ""
+        intent_part = f" ({intent})" if intent else ""
+        verb = {"click": "Click on", "dblclick": "Double click", "right_click": "Right click"}.get(act, "Click on")
+        if quoted:
+            return f"Step {n}: {verb} {quoted}{intent_part}".strip()
+        if sel:
+            return f"Step {n}: {verb} target {sel}{intent_part}".strip()
+        return f"Step {n}: {verb}{intent_part}".strip()
+    if act == "hover":
         list_label = _click_list_label(label, sel)
         quoted = _enquote_click_label(list_label) if list_label else ""
         intent_part = f" ({intent})" if intent else ""
         if quoted:
-            return f"Step {n}: Click on {quoted}{intent_part}".strip()
+            return f"Step {n}: Hover over {quoted}{intent_part}".strip()
         if sel:
-            return f"Step {n}: Click target {sel}{intent_part}".strip()
-        return f"Step {n}: Click{intent_part}".strip()
+            return f"Step {n}: Hover over target {sel}{intent_part}".strip()
+        return f"Step {n}: Hover{intent_part}".strip()
+    if act == "focus":
+        quoted = _enquote_click_label(_click_list_label(label, sel)) if (label or sel) else ""
+        return f"Step {n}: Focus {quoted or sel}".strip()
+    marker_labels = {
+        "tab_open": "Recorded tab open",
+        "tab_switch": "Recorded tab switch",
+        "popup": "Recorded popup",
+        "frame_enter": "Recorded frame enter",
+        "frame_exit": "Recorded frame exit",
+        "download_observed": "Recorded download",
+        "dialog_appeared": "Recorded dialog",
+        "dialog_accept": "Accepted dialog",
+        "dialog_dismiss": "Dismissed dialog",
+        "file_chooser_opened": "Recorded file chooser",
+        "clipboard_copy": "Recorded clipboard copy",
+        "clipboard_paste": "Recorded clipboard paste",
+    }
+    if act in marker_labels:
+        return f"Step {n}: {marker_labels[act]}"
     if act:
         extra = f" — {intent}" if intent else ""
         return f"Step {n}: {act}{extra}".strip()

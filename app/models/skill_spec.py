@@ -1,4 +1,4 @@
-"""Skill package schema (Phase 3+). Stubs only — compiler fills these."""
+"""Skill package schema (Phase 3+). Compiler fills these at compile time."""
 
 from __future__ import annotations
 
@@ -15,6 +15,9 @@ class SkillMeta(BaseModel):
     source_session_id: str | None = None
     compiler_policy_version: str = ""
     compiler_policy_hash: str = ""
+    # Structural fingerprint of the first 3 steps' landmark selectors — used by
+    # drift detection to detect site redesigns before execution begins.
+    structural_fingerprint: dict[str, Any] = Field(default_factory=dict)
 
 
 class SkillPolicies(BaseModel):
@@ -34,9 +37,21 @@ class RecoveryBlock(BaseModel):
     require_diverse_attempts: bool = True
 
 
+class Assertion(BaseModel):
+    """A verifiable post-action condition checked after each step."""
+    # url_pattern | selector_present | selector_absent | text_present | text_absent
+    type: str
+    target: str = ""
+    timeout_ms: int = 5000
+    # If True, assertion failure halts execution. If False, records a warning only.
+    required: bool = True
+
+
 class ValidationBlock(BaseModel):
     wait_for: dict[str, Any] = Field(default_factory=dict)
     success_conditions: dict[str, Any] = Field(default_factory=dict)
+    # Multi-assertion outcome verification — runtime checks all assertions after action.
+    assertions: list[Assertion] = Field(default_factory=list)
 
 
 class DecisionPolicy(BaseModel):
@@ -45,19 +60,37 @@ class DecisionPolicy(BaseModel):
     max_retries: int = 2
 
 
+class ElementFingerprint(BaseModel):
+    """Stable element identity for scoring-based resolution. Compiled from recorded signals."""
+    role: str = ""
+    tag: str = ""
+    inner_text: str = ""       # visible text, max 120 chars
+    aria_label: str = ""
+    name: str = ""
+    placeholder: str = ""
+    label_text: str = ""
+    data_testid: str = ""      # data-testid attribute value — highest-stability signal
+    input_type: str = ""       # for <input> elements
+    css_class_tokens: list[str] = Field(default_factory=list)   # stable class tokens only
+    anchor_phrases: list[str] = Field(default_factory=list)     # relational context phrases
+    position_hint: dict[str, Any] = Field(default_factory=dict) # normalized x/y as 0.0–1.0
+
+
 class SkillStep(BaseModel):
     action: str | dict[str, Any]
     intent: str = ""
     url: str = ""
-    url_state: dict[str, Any] = Field(default_factory=dict)
+    frame: dict[str, Any] = Field(default_factory=dict)
     target: dict[str, Any] = Field(default_factory=dict)
+    # Scoring-based element identity — runtime uses this to rank all candidates
+    # against the recorded element instead of trying selectors blindly in order.
+    element_fingerprint: ElementFingerprint = Field(default_factory=ElementFingerprint)
     signals: dict[str, Any] = Field(default_factory=dict)
     state: dict[str, Any] = Field(default_factory=dict)
     value: Any = None
     input_binding: str | None = None
     validation: ValidationBlock = Field(default_factory=ValidationBlock)
     recovery: RecoveryBlock = Field(default_factory=RecoveryBlock)
-    # Thresholds, weights, and layer rules — deterministic protocol for executors.
     confidence_protocol: dict[str, Any] = Field(default_factory=dict)
     decision_policy: DecisionPolicy = Field(default_factory=DecisionPolicy)
 

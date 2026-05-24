@@ -20,10 +20,12 @@ export type StepEditorDTO = {
   step_index: number
   human_readable_description: string
   action_type: string
+  action_payload: Record<string, unknown>
+  action_spec: Record<string, unknown>
   intent: string
   final_intent: string
   url: string
-  url_state: Record<string, unknown>
+  frame: Record<string, unknown>
   target: Record<string, unknown>
   selectors: Record<string, unknown>
   anchors_signals: Record<string, unknown>[]

@@ -192,22 +192,6 @@ async function tryLocator(page, sel, timeout, step = {}, inputs = {}) {
   }
 }
 
-const URL_STATE_WAIT_MS = 3000;
-const URL_STATE_POLL_MS = 100;
-
-async function waitForUrlState(page, urlState) {
-  if (!urlState || !urlState.url_pattern) return;
-  const pattern  = new RegExp(urlState.url_pattern);
-  const deadline = Date.now() + URL_STATE_WAIT_MS;
-  let currentUrl = page.url();
-  while (Date.now() <= deadline) {
-    currentUrl = page.url();
-    if (pattern.test(currentUrl)) return;
-    await new Promise(r => setTimeout(r, Math.min(URL_STATE_POLL_MS, Math.max(0, deadline - Date.now()))));
-  }
-  throw new Error(`URL ${currentUrl} does not match expected pattern ${urlState.url_pattern}`);
-}
-
 // ─── Fingerprint-based element scoring ───────────────────────────────────────
 // Scores a DOM element against the recorded ElementFingerprint.
 // Returns 0.0 (no match) to 1.0 (perfect match). Score >= 0.5 is usable.
@@ -246,6 +230,19 @@ async function scoreElementAgainstFingerprint(page, selector, step, inputs, fp) 
         if (fpText === innerText) score += 0.75;
         else if (innerText.includes(fpText) || fpText.includes(innerText)) score += 0.45;
       }
+      // label_text: use native .labels API then nearest-label fallback
+      if (fingerprint.label_text) {
+        const fpLabel = fingerprint.label_text.toLowerCase();
+        const labels = el.labels ? Array.from(el.labels) : [];
+        const directMatch = labels.some(l => (l.innerText || "").trim().toLowerCase() === fpLabel);
+        if (directMatch) {
+          score += 0.75;
+        } else {
+          const parent = el.parentElement;
+          const nearLabel = parent ? parent.querySelector("label") : null;
+          if (nearLabel && (nearLabel.innerText || "").trim().toLowerCase() === fpLabel) score += 0.60;
+        }
+      }
       // role + tag
       if (fingerprint.role && role && fingerprint.role.toLowerCase() === role) score += 0.25;
       if (fingerprint.tag && tag && fingerprint.tag.toLowerCase() === tag) score += 0.15;
@@ -264,21 +261,42 @@ async function scoreElementAgainstFingerprint(page, selector, step, inputs, fp) 
 // Collects all candidate selectors, scores each against the fingerprint,
 // and returns the best match above threshold — no arbitrary sequential fallback.
 
+// Bare tag: a selector with no CSS/ARIA characters — matches any element of that type,
+// which is wrong when multiple elements of the same type exist on the page.
+const _BARE_TAG_RE = /^[a-z][a-z0-9]*$/i;
+
 async function resolveElement(page, step, inputs) {
   const fp = step.element_fingerprint || {};
   const primarySel = interpolate(
     step.selector || step.css_selector || (step.target && step.target.css) || "", inputs
   );
+  const primaryIsBareTag = _BARE_TAG_RE.test(primarySel.trim());
 
-  // 1. Try primary selector with a short visibility check
-  if (primarySel) {
+  // 1. Try primary selector with a short visibility check.
+  // Skip bare-tag primaries — they match the first element of that type on the page,
+  // which may be the wrong target. Let fingerprint scoring pick the right one.
+  if (primarySel && !primaryIsBareTag) {
     if (await tryLocator(page, primarySel, 2000, step, inputs)) {
       return { selector: primarySel, via: "primary", score: 1.0 };
     }
   }
 
-  // 2. Build candidate pool from all compiled selectors
+  // 2. Build candidate pool from all compiled selectors.
+  // Fingerprint-derived selectors are pushed to the front when primary is a bare tag
+  // so they are tried first during scoring.
+  const fingerprintDerived = [
+    ...(fp.data_testid ? [`[data-testid="${fp.data_testid}"]`, `[data-test="${fp.data_testid}"]`] : []),
+    ...(fp.aria_label  ? [`[aria-label="${fp.aria_label}"]`] : []),
+    ...(fp.name        ? [`[name="${fp.name}"]`] : []),
+    ...(fp.placeholder ? [`[placeholder="${fp.placeholder}"]`] : []),
+    ...(fp.label_text && fp.tag ? [
+      `label:has-text("${fp.label_text}") + ${fp.tag}`,
+      `label:has-text("${fp.label_text}") ~ ${fp.tag}`,
+    ] : []),
+  ];
   const pool = Array.from(new Set([
+    // Fingerprint-derived first when primary is weak so they score before generic candidates
+    ...(primaryIsBareTag ? fingerprintDerived : []),
     ...(Array.isArray(step.fallback_selectors) ? step.fallback_selectors : []),
     ...(Array.isArray(step.candidates) ? step.candidates : []),
     ...(Array.isArray(step.fallback_text_variants)
@@ -292,11 +310,8 @@ async function resolveElement(page, step, inputs) {
     ...[step.value, step.label, step.aria_label]
       .filter(v => v && typeof v === "string" && v.length < 80)
       .map(v => `text=${JSON.stringify(v.trim())}`),
-    // Fingerprint-derived stable selectors
-    ...(fp.data_testid ? [`[data-testid="${fp.data_testid}"]`, `[data-test="${fp.data_testid}"]`] : []),
-    ...(fp.aria_label  ? [`[aria-label="${fp.aria_label}"]`] : []),
-    ...(fp.name        ? [`[name="${fp.name}"]`] : []),
-    ...(fp.placeholder ? [`[placeholder="${fp.placeholder}"]`] : []),
+    // Fingerprint-derived stable selectors (deduped if already added above)
+    ...(!primaryIsBareTag ? fingerprintDerived : []),
   ].filter(Boolean)));
 
   if (!pool.length) return null;
@@ -636,12 +651,8 @@ async function runSkill(page, skillDir, inputs) {
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     try {
-      if (step.url_state?.before?.url_pattern) await waitForUrlState(page, step.url_state.before);
       await executeStep(page, step, inputs);
-      if (step.url_state?.after?.url_pattern) await waitForUrlState(page, step.url_state.after);
     } catch (err) {
-      if (String(err.message || err).includes("expected pattern"))
-        throw new Error(`Step ${step.id || i} (${step.type}) failed: ${err.message}`);
       const stepNumber = i + 1;
       const rec = (recovery.steps || []).find(r => (step.id && r.id === step.id) || Number(r.step_id) === stepNumber);
       let recovered = false;
@@ -660,7 +671,6 @@ async function runSkill(page, skillDir, inputs) {
           if (await tryLocator(page, cand, 3000, step, inputs)) {
             try {
               await executeStep(page, { ...step, selector: cand }, inputs);
-              if (step.url_state?.after?.url_pattern) await waitForUrlState(page, step.url_state.after);
               recovered = true;
               break;
             } catch (_) {}
@@ -751,21 +761,10 @@ async function runPlan(page, steps, inputs, startFrom, slug) {
       ? await page.screenshot({ type: "png", timeout: 3000 }).catch(() => null)
       : null;
 
-    // Pre-step URL state check
-    try {
-      if (step.url_state?.before?.url_pattern) await waitForUrlState(page, step.url_state.before);
-    } catch (urlErr) {
-      // URL pre-condition failed — enrich error for L4/L5
-      const e = new Error(`Step ${i + 1} (${step.type}) pre-condition failed: ${urlErr.message}`);
-      e.failedAt = i; e.failedStep = step; e.preShot = preShot;
-      throw e;
-    }
-
     // ── Primary attempt ────────────────────────────────────────────────────
     let primaryErr = null;
     try {
       await executeStep(page, step, inputs);
-      if (step.url_state?.after?.url_pattern) await waitForUrlState(page, step.url_state.after);
       // Verify outcome assertions after successful action
       const { warnings } = await verifyAssertions(page, step, inputs);
       if (warnings.length) {
@@ -789,7 +788,6 @@ async function runPlan(page, steps, inputs, startFrom, slug) {
     if (resolved) {
       try {
         await executeStep(page, { ...step, selector: resolved.selector }, inputs);
-        if (step.url_state?.after?.url_pattern) await waitForUrlState(page, step.url_state.after);
         const { warnings } = await verifyAssertions(page, step, inputs);
         if (warnings.length) {
           appendRecoveryEvent({ event: "assertion_warnings", slug, step_index: i, warnings });
@@ -830,7 +828,6 @@ module.exports = {
   appendRecoveryEvent,
   interpolate,
   tryLocator,
-  waitForUrlState,
   waitForStable,
   enrichStepsWithRecovery,
   executeStep,

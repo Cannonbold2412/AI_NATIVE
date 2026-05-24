@@ -19,6 +19,7 @@ import {
   postCompileUpdated,
   postInsertStep,
   postReorder,
+  postSignOff,
   postValidate,
 } from './api/workflowApi'
 import { RecordingScreenshotsPanel } from './components/RecordingScreenshotsPanel'
@@ -298,6 +299,12 @@ export function HumanEditPage() {
           : `${dirtySteps.size} steps (${[...dirtySteps].sort((a, b) => a - b).join(', ')})`
       toast.warning(`Still have unsaved changes on ${label} — switch to each and save before finishing`)
       return
+    }
+    // Sign off — marks the skill as human-reviewed so Build Plugin is unblocked.
+    try {
+      await postSignOff(skillId)
+    } catch {
+      // Non-fatal: sign-off failure only means edited_at may not be set.
     }
     setFlowStatus('Finished editing; your skill stays the same id and title on disk.')
     void qc.invalidateQueries({ queryKey: ['skillList'] })

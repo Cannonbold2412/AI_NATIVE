@@ -16,7 +16,6 @@ from app.editor.patch_gate import validate_editor_patch
 from app.editor.workflow_service import (
     build_workflow_response,
     delete_step_at,
-    ensure_initial_navigation_step,
     insert_step_after,
     merge_skill_inputs,
     reorder_steps,
@@ -110,9 +109,6 @@ def get_workflow(skill_id: str, request: Request) -> dict[str, Any]:
     doc = read_skill(skill_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Unknown skill_id")
-    doc, changed = ensure_initial_navigation_step(doc)
-    if changed:
-        write_skill(skill_id, doc)
     wf = build_workflow_response(skill_id, doc, asset_base_url=_asset_base_url(request))
     return wf.model_dump(mode="json")
 
@@ -397,6 +393,16 @@ async def compile_updated(skill_id: str, body: CompileUpdatedBody) -> dict[str, 
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"compile_updated_failed: {exc!s}") from exc
     return {"skill_id": skill_id, "version": package_json["meta"]["version"], "step_count": len(package.skills[0].steps)}
+
+
+@router.post("/{skill_id}/sign-off")
+def post_sign_off(skill_id: str) -> dict[str, Any]:
+    """Mark a skill as human-reviewed. Writes the doc back in place to trigger edited_at tracking."""
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    write_skill(skill_id, doc)
+    return {"skill_id": skill_id, "signed_off": True}
 
 
 @router.get("/{skill_id}/assets")

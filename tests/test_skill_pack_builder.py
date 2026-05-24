@@ -200,6 +200,31 @@ class SkillPackPreprocessTests(unittest.TestCase):
         self.assertEqual(slim[0]["extras"], {"meta": {}})
         self.assertIn("screenshot", heavy[0])  # original untouched
 
+    def test_sanitize_raw_steps_for_llm_keeps_hover(self) -> None:
+        from app.services.skill_pack.compiler import sanitize_raw_steps_for_llm
+
+        raw_steps = [
+            {
+                "action": "hover",
+                "target": {"inner_text": "More actions", "id": "menu-root"},
+                "selectors": {
+                    "css": "button[aria-label='More actions']",
+                    "xpath": "/html/body/button[1]",
+                },
+            },
+            {"action": "focus", "selectors": {"css": "#field"}},
+            {"action": "mousemove", "selectors": {"css": "body"}},
+        ]
+
+        slim = sanitize_raw_steps_for_llm(raw_steps)
+
+        self.assertEqual([step["action"] for step in slim], ["hover"])
+        self.assertEqual(
+            slim[0]["selectors"],
+            {"selector": "button[aria-label='More actions']"},
+        )
+        self.assertEqual(slim[0]["target"], {"inner_text": "More actions"})
+
     def test_structure_steps_with_llm_passes_trimmed_steps_to_provider(self) -> None:
         from app.services.skill_pack.compiler import structure_steps_with_llm
 
@@ -1261,94 +1286,76 @@ class TestNormalizeUrlPattern(unittest.TestCase):
         self.assertTrue(pattern.endswith("$"))
 
 
-# ─────────────────────────────────────────────────
-# url_state attachment to compiled steps
-# ─────────────────────────────────────────────────
-
-def _make_raw_steps_with_url_state(before_urls: list[str], after_urls: list[str]) -> list[dict]:
-    """Build fake recorded events that carry url_state."""
-    assert len(before_urls) == len(after_urls)
-    steps = []
-    for b, a in zip(before_urls, after_urls):
-        steps.append({
-            "action": {"action": "click"},
-            "target": {"inner_text": "Click"},
-            "page": {"url": b},
-            "url_state": {
-                "before": {"url": b, "title": "Before Page"},
-                "after": {"url": a, "title": "After Page"},
-            },
-        })
-    return steps
-
-
-class TestBuildUrlStateForSteps(unittest.TestCase):
+class TestAttachRecordedFrameContext(unittest.TestCase):
     def _call(self, exec_plan, raw_steps, skill_name="test_skill"):
-        from app.services.skill_pack.compiler import _build_url_state_for_steps
-        return _build_url_state_for_steps(exec_plan, raw_steps, skill_name)
+        from app.services.skill_pack.compiler import _attach_recorded_frame_context_for_steps
+        return _attach_recorded_frame_context_for_steps(exec_plan, raw_steps, skill_name)
 
-    def test_attaches_url_state_to_each_step(self) -> None:
-        exec_plan = [
-            {"type": "click", "selector": "text=Deploy"},
-            {"type": "fill", "selector": "input[name=branch]", "value": "{{branch}}"},
+    def test_raw_url_state_is_ignored(self) -> None:
+        exec_plan = [{"type": "click", "selector": "text=Deploy"}]
+        raw = [
+            {
+                "action": {"action": "click"},
+                "target": {"inner_text": "Deploy"},
+                "url_state": {
+                    "before": {"url": "https://app.example.com/page"},
+                    "after": {"url": "https://app.example.com/next"},
+                },
+            }
         ]
-        raw = _make_raw_steps_with_url_state(
-            ["https://dashboard.render.com/services/srv-cg1234567890abcdef",
-             "https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys"],
-            ["https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys",
-             "https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys/dep-0q1234567890abcdef"],
-        )
-        augmented, url_state_json = self._call(exec_plan, raw)
-        self.assertEqual(len(augmented), 2)
-        for step in augmented:
-            self.assertIn("url_state", step)
-            us = step["url_state"]
-            self.assertIn("before", us)
-            self.assertIn("after", us)
-            self.assertEqual(set(us["before"]), {"url_pattern"})
-            self.assertEqual(set(us["after"]), {"url_pattern"})
-            self.assertNotIn("edited_by_user", us)
-
-    def test_url_patterns_have_dynamic_id_replaced(self) -> None:
-        exec_plan = [{"type": "click", "selector": "text=Deploy"}]
-        raw = _make_raw_steps_with_url_state(
-            ["https://dashboard.render.com/services/srv-cg1234567890abcdef"],
-            ["https://dashboard.render.com/services/srv-cg1234567890abcdef/deploys"],
-        )
-        augmented, _ = self._call(exec_plan, raw)
-        before_pattern = augmented[0]["url_state"]["before"]["url_pattern"]
-        self.assertIn("[^/]+", before_pattern)
-        import re
-        self.assertIsNotNone(re.match(before_pattern, "https://dashboard.render.com/services/srv-aaaaaaaaaaaaaaaa"))
-
-    def test_url_state_json_is_not_generated(self) -> None:
-        exec_plan = [{"type": "click", "selector": "text=Deploy"}]
-        raw = _make_raw_steps_with_url_state(
-            ["https://app.example.com/page"],
-            ["https://app.example.com/next"],
-        )
-        augmented, url_state_json = self._call(exec_plan, raw, skill_name="my_skill")
-        self.assertEqual(url_state_json, "")
-        self.assertIn("url_state", augmented[0])
-
-    def test_no_url_state_in_raw_steps_produces_empty_states(self) -> None:
-        exec_plan = [{"type": "click", "selector": "text=Deploy"}]
-        raw = [{"action": {"action": "click"}, "target": {"inner_text": "Deploy"}}]
-        augmented, url_state_json = self._call(exec_plan, raw)
-        # No url_state attached when raw steps have none
+        augmented = self._call(exec_plan, raw)
         self.assertNotIn("url_state", augmented[0])
-        self.assertEqual(url_state_json, "")
+        self.assertNotIn("frame", augmented[0])
 
-    def test_empty_execution_plan_returns_empty_states(self) -> None:
-        _, url_state_json = self._call([], [])
-        self.assertEqual(url_state_json, "")
+    def test_frame_context_is_attached_by_selector_match(self) -> None:
+        exec_plan = [
+            {"type": "fill", "selector": 'input[name="firstname"]', "value": "Ada"},
+            {"type": "click", "selector": 'text="Create"'},
+        ]
+        raw = [
+            {
+                "action": {"action": "type"},
+                "target": {"name": "firstname", "inner_text": ""},
+                "selectors": {"css": "#firstName"},
+                "frame": {
+                    "chain": [
+                        {
+                            "selector": 'iframe[id="object-builder-ui"]',
+                            "fallback_selectors": ['iframe[data-test-id="object-builder-ui-iframe"]'],
+                            "url": "https://app-na2.hubspot.com/object-builder/246242636/0-1/embed?",
+                        }
+                    ]
+                },
+            },
+            {
+                "action": {"action": "click"},
+                "target": {"inner_text": "Create"},
+                "selectors": {"text_based": 'text="Create"'},
+                "frame": {
+                    "chain": [
+                        {
+                            "selector": 'iframe[id="object-builder-ui"]',
+                            "fallback_selectors": ['iframe[data-test-id="object-builder-ui-iframe"]'],
+                            "url": "https://app-na2.hubspot.com/object-builder/246242636/0-1/embed?",
+                        }
+                    ]
+                },
+            },
+        ]
 
-    def test_url_state_stays_inline_and_no_url_state_file_written_to_skill_bundle(self) -> None:
+        augmented = self._call(exec_plan, raw)
+
+        self.assertEqual(augmented[0]["frame"]["chain"][0]["selector"], 'iframe[id="object-builder-ui"]')
+        self.assertEqual(augmented[1]["frame"]["chain"][0]["fallback_selectors"], ['iframe[data-test-id="object-builder-ui-iframe"]'])
+        self.assertIn("[^/]+", augmented[0]["frame"]["chain"][0]["url_pattern"])
+
+    def test_empty_execution_plan_returns_empty_list(self) -> None:
+        self.assertEqual(self._call([], []), [])
+
+    def test_url_state_is_not_written_to_skill_bundle(self) -> None:
         from app.services.skill_pack.compiler import build_skill_package
-        from app.storage.skill_packages import read_skill_package_files
 
         raw = _raw_workflow()
-        # Inject url_state into raw steps
         for step in raw["steps"]:
             step["url_state"] = {
                 "before": {"url": "https://app.example.com/before", "title": "Before"},
@@ -1356,44 +1363,25 @@ class TestBuildUrlStateForSteps(unittest.TestCase):
             }
 
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler._generate_recovery_with_visuals", return_value={}), patch(
+                "app.services.skill_pack.compiler.structure_steps_with_llm",
+                return_value=_structured_workflow(),
+            ):
                 result = build_skill_package(json.dumps(raw), package_name="delete_database", bundle_slug="default")
 
         files = result.get("files") or {}
         self.assertNotIn("url_state.json", files)
-        self.assertIn("url_state", result.get("execution_json", ""))
+        self.assertNotIn("url_state", result.get("execution_json", ""))
 
         from app.storage.skill_packages import read_skill_package_files
         with _temporary_skill_package_root():
-            with patch("app.services.skill_pack.compiler.structure_steps_with_llm", return_value=_structured_workflow()):
+            with patch("app.services.skill_pack.compiler._generate_recovery_with_visuals", return_value={}), patch(
+                "app.services.skill_pack.compiler.structure_steps_with_llm",
+                return_value=_structured_workflow(),
+            ):
                 build_skill_package(json.dumps(raw), package_name="delete_database", bundle_slug="default")
             pkg_files = read_skill_package_files("default", "delete_database")
             self.assertIsNotNone(pkg_files)
             if pkg_files:
                 self.assertNotIn("url_state.json", pkg_files)
-                self.assertIn("url_state", pkg_files.get("execution.json", ""))
-
-
-class TestCompilerBuildUrlState(unittest.TestCase):
-    def test_compiler_url_state_contains_only_patterns(self) -> None:
-        from app.compiler.build import _build_url_state
-
-        state = _build_url_state({
-            "url_state": {
-                "before": {
-                    "url": "https://dashboard.render.com/",
-                    "title": "Render Dashboard",
-                },
-                "after": {
-                    "url": "https://dashboard.render.com/d/dpg-d7v5mqvavr4c739h2or0-a",
-                    "title_includes": "conxa-db Database Render Dashboard",
-                },
-                "edited_by_user": False,
-            }
-        })
-
-        self.assertEqual(set(state), {"before", "after"})
-        self.assertEqual(set(state["before"]), {"url_pattern"})
-        self.assertEqual(set(state["after"]), {"url_pattern"})
-        self.assertEqual(state["before"]["url_pattern"], r"^https://dashboard\.render\.com/$")
-        self.assertEqual(state["after"]["url_pattern"], r"^https://dashboard\.render\.com/d/[^/]+$")
+                self.assertNotIn("url_state", pkg_files.get("execution.json", ""))

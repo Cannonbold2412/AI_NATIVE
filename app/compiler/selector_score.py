@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.compiler.selector_filters import is_dynamic_id, prefilter_selector_candidate, selector_passes_filters
+from app.compiler.selector_filters import is_dynamic_id, selector_passes_filters
+
+# Lower index = higher reliability; used as tie-breaker when scores are equal.
+_KIND_PRIORITY: dict[str, int] = {
+    "aria": 0,
+    "label": 1,
+    "name": 2,
+    "text_based": 3,
+    "css": 4,
+    "role": 5,
+    "xpath": 6,
+}
 
 
 def score_selector_row(kind: str, value: str, policy: dict[str, Any]) -> float:
@@ -40,14 +51,14 @@ def rank_selectors_scored(selectors: dict[str, Any], policy: dict[str, Any]) -> 
     ]
     seen: set[str] = set()
     for kind, val in mapping:
-        if not val or not prefilter_selector_candidate(val):
+        if not val:
             continue
         s = score_selector_row(kind, val, policy)
         if s < 0 or val in seen:
             continue
         seen.add(val)
         rows.append((s, kind, val))
-    rows.sort(key=lambda r: (r[0], r[1]), reverse=True)
+    rows.sort(key=lambda r: (r[0], -_KIND_PRIORITY.get(r[1], 99)), reverse=True)
     return rows
 
 
@@ -63,12 +74,12 @@ def rank_labeled_selector_candidates(
     seen: set[str] = set()
     for kind, val in candidates:
         v = (val or "").strip()
-        if not v or not prefilter_selector_candidate(v):
+        if not v:
             continue
-        s = score_selector_row(kind, val, policy)
+        s = score_selector_row(kind, v, policy)
         if s < 0.0 or v in seen:
             continue
         seen.add(v)
         rows.append((s, kind, v))
-    rows.sort(key=lambda r: (r[0], r[1]), reverse=True)
+    rows.sort(key=lambda r: (r[0], -_KIND_PRIORITY.get(r[1], 99)), reverse=True)
     return [r[2] for r in rows]

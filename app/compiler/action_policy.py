@@ -5,8 +5,19 @@ from __future__ import annotations
 from typing import Any
 
 
-RECOVERY_ACTION_TYPES = frozenset({"type", "fill", "click", "select", "focus"})
-NO_RECOVERY_ACTION_TYPES = frozenset({"navigate", "goto", "go_to", "open", "check", "scroll"})
+RECOVERY_ACTION_TYPES = frozenset({
+    "click", "dblclick", "right_click", "hover",
+    "type", "fill", "set_checkbox", "set_radio", "select", "select_option", "date_pick",
+    "drag_drop", "keyboard_shortcut",
+    "upload", "focus",
+})
+NO_RECOVERY_ACTION_TYPES = frozenset({
+    "navigate", "goto", "go_to", "open", "check", "scroll",
+    "wait", "assert", "screenshot",
+    "tab_open", "tab_switch", "popup", "frame_enter", "frame_exit",
+    "upload_intent", "download_observed", "dialog_appeared", "dialog_accept", "dialog_dismiss",
+    "file_chooser_opened", "clipboard_copy", "clipboard_paste",
+})
 ELEMENT_ACTION_TOTAL_ATTEMPTS = 2
 NAVIGATE_CHECK_TOTAL_ATTEMPTS = 3
 SCROLL_MODES = frozenset({"scroll_only", "scroll_to_locate"})

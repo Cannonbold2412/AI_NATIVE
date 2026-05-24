@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.routes import CompileBody, compile_skill
 from app.api.skill_pack_routes import SkillPackBuildBody
+from app.api.workflow_routes import CompileUpdatedBody, compile_updated
 from app.services.jobs import enqueue_job, job_store
 from app.services.skill_pack.compiler import build_skill_package
 
@@ -76,6 +77,16 @@ def stream_job_events(job_id: str) -> StreamingResponse:
 @router.post("/compile")
 async def enqueue_compile_job(body: CompileBody) -> dict[str, Any]:
     job = await enqueue_job("compile_skill", lambda: compile_skill(body), resource_id=f"skill_{body.session_id}")
+    return {"job_id": job.job_id, "status": job.status, "resource_id": job.resource_id}
+
+
+@router.post("/skills/{skill_id}/compile-updated")
+async def enqueue_compile_updated_job(skill_id: str, body: CompileUpdatedBody) -> dict[str, Any]:
+    job = await enqueue_job(
+        "recompile_skill",
+        lambda: compile_updated(skill_id, body),
+        resource_id=skill_id,
+    )
     return {"job_id": job.job_id, "status": job.status, "resource_id": job.resource_id}
 
 
