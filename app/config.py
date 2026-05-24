@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     snapshot_dedup_enabled: bool = True
     snapshot_surrounding_text_radius_px: int = 200
     snapshot_capture_a11y: bool = True
+    snapshot_retention_days: int = 30
     # Directory name at project root for generated bundles (default skill_package). Overrides .skill_bundle_root after UI rename.
     package_bundle_root: str = "skill_package"
     environment: str = "local"

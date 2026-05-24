@@ -55,6 +55,8 @@ def is_obviously_invalid(selector: str) -> bool:
             return True
     if s in _TOO_GENERIC:
         return True
+    if low.startswith(":has-text("):
+        return True
     # Sanity: must contain at least one of CSS's selector hooks.
     if not re.search(r"[#.\[\]:>~+\s]|[a-z][a-z0-9-]*", low):
         return True
@@ -64,16 +66,15 @@ def is_obviously_invalid(selector: str) -> bool:
 def _count_matches_in_html(selector: str, html: str) -> int:
     """Best-effort match count via parsing the recorded snapshot.
 
-    Uses html.parser + a tiny CSS subset because we only need a coarse check
-    (1 vs many vs zero) — full Playwright validation is reserved for ambiguous
-    cases at runtime. Returns -1 if the parser can't evaluate the selector.
+    Uses lxml parser to support modern CSS selectors (:has, :is, etc).
+    Returns -1 if the parser can't evaluate the selector.
     """
     try:
-        from bs4 import BeautifulSoup, SoupStrainer  # type: ignore  # noqa: F401
+        from bs4 import BeautifulSoup  # type: ignore
     except ImportError:
         return -1
     try:
-        soup = BeautifulSoup(html or "", "html.parser")
+        soup = BeautifulSoup(html or "", "lxml")
         matches = soup.select(selector)
         return len(matches)
     except Exception:  # noqa: BLE001 — selector grammar mismatch, etc.
