@@ -1,7 +1,7 @@
 """High-level LLM abstraction for selector generation + runtime recovery.
 
-Wraps app.llm.client.call_llm with task-specific helpers and adaptive model routing.
-All endpoints are OpenAPI-compatible (configured via SKILL_LLM_*_ENDPOINT env vars).
+Wraps app.llm.client.call_llm with task-specific helpers.
+Endpoint = `settings.llm_text_endpoint`. Model = `arg → settings.llm_text_model`.
 """
 
 from __future__ import annotations
@@ -60,13 +60,13 @@ def generate_selector_candidates(
     """
     if not settings.llm_enabled:
         return []
-    if not (settings.llm_text_endpoint or settings.llm_selector_model):
+    if not settings.llm_text_endpoint:
         return []
 
     n = candidates_wanted or settings.llm_selector_candidates
     payload = {
         "task": "selector_generation",
-        "model": model or settings.llm_selector_model or None,
+        "model": model or settings.llm_text_model or None,
         "input": {
             "dom_snippet": dom_snippet,
             "element_bbox": element_bbox,
@@ -101,21 +101,6 @@ def generate_selector_candidates(
     return out
 
 
-def generate_selector_candidates_with_fallback(
-    **kwargs: Any,
-) -> list[SelectorCandidate]:
-    """Try primary model; if validation fails (empty), retry with fallback model."""
-    error_sink: list[str] = []
-    out = generate_selector_candidates(error_detail=error_sink, **kwargs)
-    if out:
-        return out
-    fallback_model = settings.llm_selector_model_fallback
-    if not fallback_model or fallback_model == kwargs.get("model"):
-        return out
-    kwargs["model"] = fallback_model
-    return generate_selector_candidates(error_detail=error_sink, **kwargs)
-
-
 def resolve_element_recovery(
     *,
     semantic_description: str,
@@ -136,7 +121,7 @@ def resolve_element_recovery(
         return None
     payload = {
         "task": "recovery_resolve",
-        "model": model or settings.llm_selector_model or None,
+        "model": model or settings.llm_text_model or None,
         "input": {
             "semantic_description": semantic_description,
             "original_bbox": original_bbox or {},
@@ -173,11 +158,11 @@ def infer_workflow_intent(
     """Single LLM call to build workflow intent graph (Claude Browser-style)."""
     if not settings.llm_enabled:
         return None
-    if not (settings.llm_text_endpoint or settings.llm_selector_model):
+    if not settings.llm_text_endpoint:
         return None
     payload = {
         "task": "workflow_intent",
-        "model": model or settings.llm_selector_model or None,
+        "model": model or settings.llm_text_model or None,
         "input": {
             "steps": steps_summary,
             "page_urls": page_urls,

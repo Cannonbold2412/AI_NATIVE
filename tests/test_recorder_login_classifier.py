@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.models.events import (
-    ActionMeta, DomContext, PageContext, RecordedEvent,
+    ActionMeta, DomContext, PageContext, RecordedEvent, SnapshotRef,
     SemanticFeatures, Selectors, StateChange, TargetDom, Timing, VisualFeatures,
 )
 from app.recorder.session import classify_login_flow
@@ -29,6 +29,9 @@ def _make_event(
         page=PageContext(url=url, title=title),
         state_change=StateChange(before="", after=""),
         timing=Timing(),
+        ancestors=[],
+        surrounding_text="",
+        snapshot=SnapshotRef(ref="", dom_hash=""),
     )
 
 

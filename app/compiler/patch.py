@@ -37,6 +37,81 @@ def _build_reference_from_signals(step: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _target_identity_changed(patch: dict[str, Any]) -> bool:
+    """True if patch touches fields that define which element is being targeted."""
+    identity_keys = {"target", "element_fingerprint"}
+    signals_patch = patch.get("signals") or {}
+    if signals_patch.get("dom") is not None or signals_patch.get("selectors") is not None:
+        return True
+    return any(k in patch for k in identity_keys)
+
+
+def _regenerate_compiled_selectors(step: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
+    """Regenerate compiled_selectors and semantic_description when user edits the target.
+
+    Reads the original recorded event from the session, re-runs selector compilation
+    against the same DOM snapshot with the new bbox/element, and updates the step.
+    On failure (missing snapshot, missing event, LLM disabled): leaves fields empty.
+    """
+    out = dict(step)
+    snapshot_ref = ((step.get("signals") or {}).get("snapshot") or {}).get("ref")
+    snapshot_hash = ((step.get("signals") or {}).get("snapshot") or {}).get("dom_hash")
+
+    if not snapshot_ref or not snapshot_hash:
+        return out
+
+    try:
+        source_session_id = (document.get("meta") or {}).get("source_session_id")
+        if not source_session_id:
+            return out
+
+        from app.compiler.llm_selector_generator import (
+            SelectorCompileTask,
+            compile_selectors_for_task,
+            task_from_recorded_event,
+        )
+        from app.storage.session_events import read_session_events
+
+        events = read_session_events(source_session_id)
+        matching_event = None
+        for ev in events:
+            ev_snapshot = ev.get("snapshot") or {}
+            if ev_snapshot.get("ref") == snapshot_ref:
+                matching_event = ev
+                break
+
+        if not matching_event:
+            return out
+
+        target_bbox = ((step.get("signals") or {}).get("visual") or {}).get("bbox")
+        if not target_bbox:
+            return out
+
+        task = task_from_recorded_event(matching_event, step.get("index", 0) or 0)
+        if task.snapshot_hash != snapshot_hash:
+            return out
+
+        task.element_bbox = target_bbox
+        task.target_dom = (step.get("target") or {})
+
+        candidates = compile_selectors_for_task(task, session_id=source_session_id)
+        if not candidates:
+            signals = dict(step.get("signals") or {})
+            signals["compiled_selectors"] = []
+            out["signals"] = signals
+            return out
+
+        signals = dict(step.get("signals") or {})
+        signals["compiled_selectors"] = [c.selector for c in candidates[:3]]
+        if candidates[0].intent:
+            signals["semantic_description"] = candidates[0].intent
+        out["signals"] = signals
+    except Exception:
+        pass
+
+    return out
+
+
 def _enhance_step_with_llm(step: dict[str, Any], *, user_edited_recovery: bool = False) -> dict[str, Any]:
     """1-click fix enhancement: improve intent + anchors + strategies (assist-only).
 
@@ -230,6 +305,8 @@ def apply_step_patch(
     user_edited_recovery = "recovery" in patch and isinstance(patch.get("recovery"), dict)
     if assist_llm:
         step = _enhance_step_with_llm(step, user_edited_recovery=user_edited_recovery)
+        if _target_identity_changed(patch):
+            step = _regenerate_compiled_selectors(step, doc)
     else:
         step = _sync_recovery_deterministic(step)
     steps[step_index] = step

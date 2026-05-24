@@ -11,8 +11,7 @@ from urllib import error, request
 from urllib.parse import urlparse, urlunparse
 
 from app.config import settings
-from app.llm.pack_llm_config import resolved_pack_llm_config
-from app.llm.pack_llm_keys import configured_pack_keys, next_pack_api_key
+from app.llm.text_llm_keys import configured_text_keys, next_text_api_key
 from app.services.skill_pack_build_log import (
     skill_pack_json_metrics,
     skill_pack_log_append,
@@ -226,23 +225,22 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
         raise ValueError(
             "Skill package generation requires the LLM structuring layer; SKILL_PACK_LLM_ENABLED is disabled."
         )
-    llm_config = resolved_pack_llm_config()
-    endpoint = llm_config.endpoint
-    model = llm_config.model
+    endpoint = settings.llm_text_endpoint
+    model = settings.llm_text_model
     if not endpoint or not model:
         raise ValueError(
-            "Skill package generation requires a configured Skill Pack LLM endpoint and model. "
-            "Set SKILL_LLM_PACK_ENDPOINT and SKILL_LLM_PACK_MODEL in .env."
+            "Skill package generation requires a configured Text LLM endpoint and model. "
+            "Set SKILL_LLM_TEXT_ENDPOINT and SKILL_LLM_TEXT_MODEL in .env."
         )
-    if not configured_pack_keys():
+    if not configured_text_keys():
         skill_pack_log_append(
             {
                 "kind": "llm_missing_api_key",
-                "required_env": "SKILL_LLM_PACK_API_KEY",
+                "required_env": "SKILL_LLM_TEXT_API_KEY",
             }
         )
         raise ValueError(
-            "Skill package generation requires an API key configured in SKILL_LLM_PACK_API_KEY."
+            "Skill package generation requires an API key configured in SKILL_LLM_TEXT_API_KEY."
         )
 
     parsed_ep = urlparse(endpoint)
@@ -295,9 +293,9 @@ def _call_structuring_llm(raw_steps: list[dict[str, Any]]) -> dict[str, Any]:
     raw = ""
     for attempt in range(max_tries):
         headers = {"Content-Type": "application/json"}
-        pack_key, _, _ = next_pack_api_key()
-        if pack_key:
-            headers["Authorization"] = f"Bearer {pack_key}"
+        api_key, _, _ = next_text_api_key()
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
         req = request.Request(url, data=raw_body, headers=headers, method="POST")
         system_prompt_metrics = skill_pack_text_metrics(

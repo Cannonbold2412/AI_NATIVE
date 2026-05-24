@@ -345,3 +345,32 @@ def get_metrics() -> dict[str, Any]:
 
     snap["alerts"] = alerts
     return snap
+
+
+@router.post("/admin/cache/invalidate/{skill_id}")
+def invalidate_selector_cache(skill_id: str) -> dict[str, Any]:
+    """Admin: Invalidate selector cache for all snapshots in a skill."""
+    try:
+        doc = read_skill(skill_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="skill_not_found")
+
+    from app.storage import selector_cache  # noqa: PLC0415
+
+    dom_hashes = set()
+    for skill in (doc.get("skills") or []):
+        for step in (skill.get("steps") or []):
+            snapshot = ((step.get("signals") or {}).get("snapshot") or {})
+            dom_hash = snapshot.get("dom_hash")
+            if dom_hash:
+                dom_hashes.add(dom_hash)
+
+    deleted = 0
+    for dom_hash in dom_hashes:
+        deleted += selector_cache.invalidate(dom_hash)
+
+    return {
+        "skill_id": skill_id,
+        "dom_hashes_invalidated": len(dom_hashes),
+        "cache_entries_deleted": deleted,
+    }

@@ -26,11 +26,21 @@ class Settings(BaseSettings):
     llm_parallel_fanout_anchor_vision: bool = True
     llm_debug: bool = False
 
-    # LLM 1: Skill Pack Structuring (compile time)
+    # LLM endpoint A: Vision (anchor generation + Tier 4 vision recovery, multimodal)
+    llm_vision_endpoint: str = ""
+    llm_vision_api_key: str = ""
+    llm_vision_model: str = ""
+    llm_vision_timeout_ms: int = 120000
+
+    # LLM endpoint B: Text (everything else — structuring, skill.md, selector compilation,
+    # intent inference, runtime Tier 3 recovery). One endpoint, one model, per-task tuning below.
+    llm_text_endpoint: str = ""
+    llm_text_api_key: str = ""
+    llm_text_model: str = ""
+    llm_text_timeout_ms: int = 2000
+
+    # Pack structuring + skill.md tuning (calls Text endpoint above)
     llm_pack_enabled: bool = True
-    llm_pack_endpoint: str = ""
-    llm_pack_api_key: str = ""
-    llm_pack_model: str = ""
     llm_pack_timeout_ms: int = 600000
     llm_pack_max_attempts: int = 1
     llm_pack_structure_temperature: float = 0.0
@@ -38,22 +48,9 @@ class Settings(BaseSettings):
     llm_pack_markdown_temperature: float = 0.15
     llm_pack_markdown_max_tokens: int = 8000
     llm_pack_top_p: float | None = None
+    pack_recovery_vision_enabled: bool = True
 
-    # LLM 2: Vision (anchor generation + visual recovery, multimodal)
-    llm_vision_endpoint: str = ""
-    llm_vision_api_key: str = ""
-    llm_vision_model: str = ""
-    llm_vision_timeout_ms: int = 120000
-
-    # LLM 3: Runtime Text (semantic enrichment, intent generation, recovery assist)
-    llm_text_endpoint: str = ""
-    llm_text_api_key: str = ""
-    llm_text_model: str = ""
-    llm_text_timeout_ms: int = 2000
-
-    # LLM 4: Selector compilation (Phase 3 — LLM-generated selectors at compile time)
-    llm_selector_model: str = ""              # primary model (e.g. gpt-4o-mini, claude-haiku)
-    llm_selector_model_fallback: str = ""     # higher-capability model if validation fails
+    # Selector compilation tuning (calls Text endpoint above)
     llm_selector_timeout_ms: int = 60000
     llm_selector_candidates: int = 8          # candidates to request per element
 
@@ -65,6 +62,7 @@ class Settings(BaseSettings):
     snapshot_dedup_enabled: bool = True
     snapshot_surrounding_text_radius_px: int = 200
     snapshot_capture_a11y: bool = True
+    snapshot_retention_days: int = 30
     # Directory name at project root for generated bundles (default skill_package). Overrides .skill_bundle_root after UI rename.
     package_bundle_root: str = "skill_package"
     environment: str = "local"

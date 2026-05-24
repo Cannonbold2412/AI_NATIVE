@@ -552,16 +552,33 @@
     const out = [];
     let cur = el && el.parentElement;
     let depth = 0;
+    // Detect if we're in a cross-origin frame by trying to access parent.location
+    let isCrossOrigin = false;
+    try {
+      void window.parent.location.href;
+    } catch (_e) {
+      isCrossOrigin = true;
+    }
     while (cur && cur.nodeType === 1 && depth < max) {
       const tag = (cur.tagName || "").toLowerCase();
       const id = cur.id || "";
       const classes = cur.classList ? Array.from(cur.classList).slice(0, 32) : [];
       // outer_html truncated to keep payload bounded; LLM compiler can request full blob if needed.
       let oh = "";
+      let outerHtmlError = null;
       try {
         oh = (cur.outerHTML || "").slice(0, 2000);
-      } catch (_e) {}
-      out.push({ tag: tag, id: id, classes: classes, outer_html: oh });
+      } catch (_e) {
+        outerHtmlError = `cross_origin_iframe`;
+      }
+      const ancestor = { tag: tag, id: id, classes: classes, outer_html: oh };
+      if (isCrossOrigin && depth === 0) {
+        ancestor.cross_origin = true;
+      }
+      if (outerHtmlError) {
+        ancestor.outer_html_error = outerHtmlError;
+      }
+      out.push(ancestor);
       if (tag === "body" || tag === "html") break;
       cur = cur.parentElement;
       depth++;
@@ -579,14 +596,20 @@
     const elemBot = rect.bottom + r;
     const elemLeft = rect.left - r;
     const elemRight = rect.right + r;
+    const elemCenterX = (rect.left + rect.right) / 2;
+    const elemCenterY = (rect.top + rect.bottom) / 2;
+    const maxDist = 500;
     // Walk text nodes in the document; cheap heuristic for "near" via getBoundingClientRect of parent.
     const out = [];
     const totalCharBudget = 1500;
+    const maxNodes = 2000;
     let used = 0;
+    let nodeCount = 0;
     try {
       const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT, null);
       let node;
-      while ((node = walker.nextNode()) && used < totalCharBudget) {
+      while ((node = walker.nextNode()) && used < totalCharBudget && nodeCount < maxNodes) {
+        nodeCount++;
         const text = (node.nodeValue || "").trim();
         if (text.length < 2) continue;
         const parent = node.parentElement;
@@ -597,6 +620,10 @@
         if (!pr || (pr.width === 0 && pr.height === 0)) continue;
         if (pr.bottom < elemTop || pr.top > elemBot) continue;
         if (pr.right < elemLeft || pr.left > elemRight) continue;
+        const prCenterX = (pr.left + pr.right) / 2;
+        const prCenterY = (pr.top + pr.bottom) / 2;
+        const dist = Math.sqrt(Math.pow(prCenterX - elemCenterX, 2) + Math.pow(prCenterY - elemCenterY, 2));
+        if (dist > maxDist) continue;
         const chunk = text.slice(0, Math.min(200, totalCharBudget - used));
         out.push(chunk);
         used += chunk.length + 1;

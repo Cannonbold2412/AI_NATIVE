@@ -137,9 +137,8 @@ class RecordedEvent(BaseModel):
     extras: dict[str, Any] = Field(default_factory=dict)
     frame: FrameContext = Field(default_factory=FrameContext)
 
-    # Phase 2: compile-time signals for LLM-based selector generation.
-    # All optional so existing recordings stay valid; populated when bridge.js
-    # and session.py capture them.
-    ancestors: list[Ancestor] = Field(default_factory=list)
-    surrounding_text: str = ""
-    snapshot: SnapshotRef = Field(default_factory=SnapshotRef)
+    # Phase 2: compile-time signals for LLM-based selector generation (REQUIRED).
+    # Recordings without these cannot validate; must be re-recorded.
+    ancestors: list[Ancestor]
+    surrounding_text: str
+    snapshot: SnapshotRef

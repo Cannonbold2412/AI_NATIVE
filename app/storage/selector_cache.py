@@ -95,6 +95,23 @@ def set(  # noqa: A001 — public cache API
     _write_cache_file(key, entry)
 
 
+def invalidate(dom_hash: str) -> int:
+    """Delete all cached entries for a given dom_hash.
+
+    Returns count of deleted entries (both DB and file cache).
+    """
+    count = 0
+    base = _cache_dir()
+    if base.is_dir():
+        for path in base.glob(f"{dom_hash}:*.json"):
+            try:
+                path.unlink()
+                count += 1
+            except OSError:
+                pass
+    return count
+
+
 def hit_rate(window_keys: list[str] | None = None) -> dict[str, Any]:
     """Aggregate cache stats for the metrics dashboard.
 

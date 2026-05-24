@@ -130,15 +130,17 @@ Multiple recordings → multiple skills
 
 ---
 
-### 5. Self-Healing Execution
+### 5. Deterministic Execution with Self-Healing Fallbacks
 
-Failures are handled via layered recovery:
+Runtime tries selectors in order; only Claude LLM fires on Tier 3+ fallback:
 
-- Layer `1`: selector alternatives / text-variant fallback
-- Layer `2`: anchors
-- Layer `3`: LLM intent recovery
-- Layer `4`: vision recovery
-- Layer `0`: terminal failure state after all layers are exhausted
+- **Tier 1 (compiled)**: Use `step.compiled_selectors` generated at compile time from recorded DOM. Fast, reliable, no LLM cost.
+- **Tier 2 (a11y)**: Query a11y tree by role + name. Works when DOM shifts slightly. No LLM.
+- **Tier 3 (LLM recovery)**: Claude LLM locates element on current DOM given semantic description. Expensive, used only when Tiers 1-2 fail.
+- **Tier 4 (vision)**: Claude vision model locates by screenshot. Last resort; used when text-based recovery fails.
+- **Escalation**: All 4 tiers fail → human review queue. No silent fallback or guessing.
+
+Each recording session produces a DOM snapshot (SHA256 hash). Selectors are cached by (dom_hash, bbox, model). When the page layout changes, the next tier activates automatically.
 
 ---
 

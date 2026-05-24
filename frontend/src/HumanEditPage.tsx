@@ -50,6 +50,7 @@ import {
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
+  Zap,
 } from 'lucide-react'
 
 /** Monospace caption — max width + truncate only; alignment set per placement. */
@@ -81,6 +82,7 @@ export function HumanEditPage() {
   const [showSuggestionsPane, setShowSuggestionsPane] = useState(true)
   const [showVariablesPane, setShowVariablesPane] = useState(false)
   const [showScreenshotsPane, setShowScreenshotsPane] = useState(false)
+  const [showSelectorsPane, setShowSelectorsPane] = useState(false)
   const [recordingShotDragActive, setRecordingShotDragActive] = useState(false)
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null)
   const splitPaneRef = useRef<HTMLDivElement | null>(null)
@@ -312,16 +314,18 @@ export function HumanEditPage() {
     router.push(fromPath ?? '/edit')
   }
 
-  const toggleToolsPane = (pane: 'validation' | 'suggestions' | 'variables' | 'screenshots') => {
+  const toggleToolsPane = (pane: 'validation' | 'suggestions' | 'variables' | 'screenshots' | 'selectors') => {
     const isValidationNext = pane === 'validation'
     const isSuggestionsNext = pane === 'suggestions'
     const isVariablesNext = pane === 'variables'
     const isScreenshotsNext = pane === 'screenshots'
+    const isSelectorsNext = pane === 'selectors'
 
     setShowValidationPane(isValidationNext)
     setShowSuggestionsPane(isSuggestionsNext)
     setShowVariablesPane(isVariablesNext)
     setShowScreenshotsPane(isScreenshotsNext)
+    setShowSelectorsPane(isSelectorsNext)
   }
 
   const onDroppedRecordingScreenshot = useCallback(
@@ -858,7 +862,7 @@ export function HumanEditPage() {
                 </span>
               </Button>
               <Button
-                type="button"
+                type=”button”
                 variant={showScreenshotsPane ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
@@ -868,15 +872,15 @@ export function HumanEditPage() {
                 )}
                 onClick={() => toggleToolsPane('screenshots')}
                 aria-pressed={showScreenshotsPane}
-                aria-controls="recording-screenshots-pane"
+                aria-controls=”recording-screenshots-pane”
               >
-                <span className="flex min-w-0 items-center gap-2">
+                <span className=”flex min-w-0 items-center gap-2”>
                   <ImageIcon className={cn('size-4 shrink-0', showScreenshotsPane ? 'text-black' : 'text-fuchsia-300')} />
-                  <span className="truncate text-sm font-medium">Recording screenshots</span>
+                  <span className=”truncate text-sm font-medium”>Recording screenshots</span>
                 </span>
-                <span className="ml-auto flex items-center gap-1.5 pr-3">
+                <span className=”ml-auto flex items-center gap-1.5 pr-3”>
                   <Badge
-                    variant="outline"
+                    variant=”outline”
                     className={cn(
                       'text-[0.65rem]',
                       showScreenshotsPane ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300',
@@ -889,10 +893,37 @@ export function HumanEditPage() {
                       'absolute top-1 right-1 inline-flex shrink-0',
                       showScreenshotsPane ? 'text-zinc-700' : 'text-zinc-400',
                     )}
-                    title="Recording frames plus “No image” (default): drag onto the preview or a step — swap frame, attach, or strip the screenshot."
+                    title=”Recording frames plus “No image” (default): drag onto the preview or a step — swap frame, attach, or strip the screenshot.”
                   >
-                    <Info className="size-3" />
+                    <Info className=”size-3” />
                   </span>
+                </span>
+              </Button>
+              <Button
+                type=”button”
+                variant={showSelectorsPane ? 'default' : 'outline'}
+                className={cn(
+                  'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
+                  showSelectorsPane
+                    ? 'bg-white text-black hover:bg-zinc-200'
+                    : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
+                )}
+                onClick={() => toggleToolsPane('selectors')}
+                aria-pressed={showSelectorsPane}
+                aria-controls=”compiled-selectors-pane”
+              >
+                <span className=”flex min-w-0 items-center gap-2”>
+                  <Zap className={cn('size-4 shrink-0', showSelectorsPane ? 'text-black' : 'text-cyan-300')} />
+                  <span className=”truncate text-sm font-medium”>Compiled selectors</span>
+                </span>
+                <span
+                  className={cn(
+                    'absolute top-1 right-1 inline-flex shrink-0',
+                    showSelectorsPane ? 'text-zinc-700' : 'text-zinc-400',
+                  )}
+                  title=”View and regenerate compiled selectors for this step.”
+                >
+                  <Info className=”size-3” />
                 </span>
               </Button>
             </div>
@@ -918,6 +949,56 @@ export function HumanEditPage() {
                   onDragShotStart={() => setRecordingShotDragActive(true)}
                   onDragShotEnd={() => setRecordingShotDragActive(false)}
                 />
+              ) : null}
+            </div>
+            <div id="compiled-selectors-pane" className="min-h-0 space-y-2 px-1 py-2">
+              {showSelectorsPane ? (
+                <>
+                  {currentStep ? (
+                    <Card className="border-white/10 bg-white/[0.02]">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Semantic Description</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2 pb-3">
+                        <p className="text-xs text-zinc-300 leading-relaxed">
+                          {(currentStep as any)?.semantic_description || '(none)'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                  {currentStep ? (
+                    <Card className="border-white/10 bg-white/[0.02]">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Compiled Selectors</CardTitle>
+                        <CardDescription className="text-xs">Ranked by confidence</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-1 pb-3">
+                        {Array.isArray((currentStep as any)?.compiled_selectors) && (currentStep as any).compiled_selectors.length > 0 ? (
+                          (currentStep as any).compiled_selectors.map((sel: string, idx: number) => (
+                            <div key={idx} className="text-xs font-mono text-cyan-200 bg-black/20 p-2 rounded break-all">
+                              {idx + 1}. {sel}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-zinc-400">(no compiled selectors)</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                  {currentStep && (currentStep as any)?.intent ? (
+                    <Card className="border-white/10 bg-white/[0.02]">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Step Intent</CardTitle>
+                      </CardHeader>
+                      <CardContent className="pb-3">
+                        <p className="text-xs text-zinc-300">{(currentStep as any).intent}</p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                  {!currentStep ? (
+                    <p className="text-xs text-zinc-400 px-1">Select a step to view compiled selectors.</p>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </ScrollArea>

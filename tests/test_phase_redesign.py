@@ -122,13 +122,10 @@ class RecordedEventExtensionsTests(unittest.TestCase):
             "page": {"url": "about:blank", "title": ""},
             "state_change": {"before": "", "after": ""},
             "timing": {"wait_for": "load", "timeout": 5000},
+            "ancestors": [],
+            "surrounding_text": "",
+            "snapshot": {"ref": "", "dom_hash": ""},
         }
-
-    def test_legacy_event_still_validates(self):
-        ev = RecordedEvent.model_validate(self._base_event())
-        self.assertEqual(ev.snapshot.ref, "")
-        self.assertEqual(ev.ancestors, [])
-        self.assertEqual(ev.surrounding_text, "")
 
     def test_new_signals_populate(self):
         data = self._base_event()
