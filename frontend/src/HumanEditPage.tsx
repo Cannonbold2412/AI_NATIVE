@@ -862,7 +862,7 @@ export function HumanEditPage() {
                 </span>
               </Button>
               <Button
-                type=”button”
+                type="button"
                 variant={showScreenshotsPane ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
@@ -872,15 +872,15 @@ export function HumanEditPage() {
                 )}
                 onClick={() => toggleToolsPane('screenshots')}
                 aria-pressed={showScreenshotsPane}
-                aria-controls=”recording-screenshots-pane”
+                aria-controls="recording-screenshots-pane"
               >
-                <span className=”flex min-w-0 items-center gap-2”>
+                <span className="flex min-w-0 items-center gap-2">
                   <ImageIcon className={cn('size-4 shrink-0', showScreenshotsPane ? 'text-black' : 'text-fuchsia-300')} />
-                  <span className=”truncate text-sm font-medium”>Recording screenshots</span>
+                  <span className="truncate text-sm font-medium">Recording screenshots</span>
                 </span>
-                <span className=”ml-auto flex items-center gap-1.5 pr-3”>
+                <span className="ml-auto flex items-center gap-1.5 pr-3">
                   <Badge
-                    variant=”outline”
+                    variant="outline"
                     className={cn(
                       'text-[0.65rem]',
                       showScreenshotsPane ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300',
@@ -893,14 +893,14 @@ export function HumanEditPage() {
                       'absolute top-1 right-1 inline-flex shrink-0',
                       showScreenshotsPane ? 'text-zinc-700' : 'text-zinc-400',
                     )}
-                    title=”Recording frames plus “No image” (default): drag onto the preview or a step — swap frame, attach, or strip the screenshot.”
+                    title="Recording frames plus 'No image' (default): drag onto the preview or a step - swap frame, attach, or strip the screenshot."
                   >
-                    <Info className=”size-3” />
+                    <Info className="size-3" />
                   </span>
                 </span>
               </Button>
               <Button
-                type=”button”
+                type="button"
                 variant={showSelectorsPane ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
@@ -910,20 +910,20 @@ export function HumanEditPage() {
                 )}
                 onClick={() => toggleToolsPane('selectors')}
                 aria-pressed={showSelectorsPane}
-                aria-controls=”compiled-selectors-pane”
+                aria-controls="compiled-selectors-pane"
               >
-                <span className=”flex min-w-0 items-center gap-2”>
+                <span className="flex min-w-0 items-center gap-2">
                   <Zap className={cn('size-4 shrink-0', showSelectorsPane ? 'text-black' : 'text-cyan-300')} />
-                  <span className=”truncate text-sm font-medium”>Compiled selectors</span>
+                  <span className="truncate text-sm font-medium">Compiled selectors</span>
                 </span>
                 <span
                   className={cn(
                     'absolute top-1 right-1 inline-flex shrink-0',
                     showSelectorsPane ? 'text-zinc-700' : 'text-zinc-400',
                   )}
-                  title=”View and regenerate compiled selectors for this step.”
+                  title="View and regenerate compiled selectors for this step."
                 >
-                  <Info className=”size-3” />
+                  <Info className="size-3" />
                 </span>
               </Button>
             </div>
