@@ -466,7 +466,6 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
 
     // L1: Transient retry — recovery, not a tier (still part of deterministic L1 layer).
     if (!recovered) {
-      t.emit("rec_start", { si: i, l: 1, sc: "selector_retry" });
       try {
         await page.waitForTimeout(1500);
         if (primarySel && await tryLocator(page, primarySel, 3500, step, inputs)) {
@@ -474,15 +473,12 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
           recovered = true;
           recoveredSteps++;
           appendRecoveryEvent({ event: "transient_recovered", slug, step_index: i });
-          t.emit("rec_ok", { si: i, l: 1, sc: "selector_retry" });
         }
       } catch (_) {}
-      if (!recovered) t.emit("rec_fail", { si: i, l: 1, sc: "selector_retry" });
     }
 
     // L2: Predefined alternatives
     if (!recovered) {
-      t.emit("rec_start", { si: i, l: 2, sc: "candidate_fallback" });
       const l2 = Array.from(new Set([
         ...(Array.isArray(step.candidates)         ? step.candidates         : []),
         ...(Array.isArray(step.fallback_selectors) ? step.fallback_selectors : []),
@@ -503,17 +499,14 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
             recovered = true;
             recoveredSteps++;
             appendRecoveryEvent({ event: "layer_recovered", layer: 2, slug, step_index: i, recovery_selector: cand });
-            t.emit("rec_ok", { si: i, l: 2, sc: "candidate_fallback" });
             break;
           } catch (_) {}
         }
       }
-      if (!recovered) t.emit("rec_fail", { si: i, l: 2, sc: "candidate_fallback" });
     }
 
     // L3a: Dialog-scoped
     if (!recovered && step.type === "click" && primarySel) {
-      t.emit("rec_start", { si: i, l: 3, sc: "dialog_scope" });
       for (const container of ['[role="dialog"]', '[role="alertdialog"]', '[aria-modal="true"]', ".modal"]) {
         const scoped = `${container} ${primarySel}`;
         if (await tryLocator(page, scoped, 2000, step, inputs)) {
@@ -522,18 +515,15 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
             recovered = true;
             recoveredSteps++;
             appendRecoveryEvent({ event: "layer_recovered", layer: 3, slug, step_index: i, mode: "dialog" });
-            t.emit("rec_ok", { si: i, l: 3, sc: "dialog_scope" });
             break;
           } catch (_) {}
         }
         if (recovered) break;
       }
-      if (!recovered) t.emit("rec_fail", { si: i, l: 3, sc: "dialog_scope" });
     }
 
     // L3b: Fuzzy tag+text DOM match
     if (!recovered) {
-      t.emit("rec_start", { si: i, l: 4, sc: "fuzzy_dom" });
       const intent  = [step.value, step.label, step.aria_label, step._intent]
         .filter(v => v && typeof v === "string" && v.trim()).map(v => v.trim())[0];
       const tagMatch = primarySel.match(/^(button|a|input|select|textarea)/i);
@@ -557,13 +547,11 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
                 recovered = true;
                 recoveredSteps++;
                 appendRecoveryEvent({ event: "layer_recovered", layer: 3, slug, step_index: i, mode: "fuzzy" });
-                t.emit("rec_ok", { si: i, l: 4, sc: "fuzzy_dom" });
               } catch (_) {}
             }
           }
         } catch (_) {}
       }
-      if (!recovered) t.emit("rec_fail", { si: i, l: 4, sc: "fuzzy_dom" });
     }
 
     if (!recovered) {

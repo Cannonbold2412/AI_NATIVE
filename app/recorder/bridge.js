@@ -552,16 +552,33 @@
     const out = [];
     let cur = el && el.parentElement;
     let depth = 0;
+    // Detect if we're in a cross-origin frame by trying to access parent.location
+    let isCrossOrigin = false;
+    try {
+      void window.parent.location.href;
+    } catch (_e) {
+      isCrossOrigin = true;
+    }
     while (cur && cur.nodeType === 1 && depth < max) {
       const tag = (cur.tagName || "").toLowerCase();
       const id = cur.id || "";
       const classes = cur.classList ? Array.from(cur.classList).slice(0, 32) : [];
       // outer_html truncated to keep payload bounded; LLM compiler can request full blob if needed.
       let oh = "";
+      let outerHtmlError = null;
       try {
         oh = (cur.outerHTML || "").slice(0, 2000);
-      } catch (_e) {}
-      out.push({ tag: tag, id: id, classes: classes, outer_html: oh });
+      } catch (_e) {
+        outerHtmlError = `cross_origin_iframe`;
+      }
+      const ancestor = { tag: tag, id: id, classes: classes, outer_html: oh };
+      if (isCrossOrigin && depth === 0) {
+        ancestor.cross_origin = true;
+      }
+      if (outerHtmlError) {
+        ancestor.outer_html_error = outerHtmlError;
+      }
+      out.push(ancestor);
       if (tag === "body" || tag === "html") break;
       cur = cur.parentElement;
       depth++;
