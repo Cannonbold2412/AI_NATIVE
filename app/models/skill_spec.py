@@ -94,6 +94,28 @@ class SkillStep(BaseModel):
     confidence_protocol: dict[str, Any] = Field(default_factory=dict)
     decision_policy: DecisionPolicy = Field(default_factory=DecisionPolicy)
 
+    # Phase 3: LLM-compiled selector candidates (ranked, validated against snapshot).
+    # Runtime Tier 1 tries these in order; runtime never calls LLM unless all fail.
+    compiled_selectors: list[str] = Field(default_factory=list)
+    semantic_description: str = ""        # "First Name input in Add Person dialog"
+    snapshot_ref: str = ""                # which recorded DOM blob this step compiled against
+    snapshot_dom_hash: str = ""           # for cross-compilation cache lookup
+
+
+class WorkflowIntentStep(BaseModel):
+    index: int
+    intent: str = ""
+    verification_anchor: str = ""
+
+
+class WorkflowIntentGraph(BaseModel):
+    """Compile-time semantic understanding of the workflow (Claude Browser-style)."""
+
+    goal: str = ""
+    steps: list[WorkflowIntentStep] = Field(default_factory=list)
+    decision_points: list[dict[str, Any]] = Field(default_factory=list)
+    expected_end_state: dict[str, Any] = Field(default_factory=dict)
+
 
 class SkillBlock(BaseModel):
     name: str = "default"
@@ -106,3 +128,6 @@ class SkillPackage(BaseModel):
     skills: list[SkillBlock] = Field(default_factory=list)
     policies: SkillPolicies = Field(default_factory=SkillPolicies)
     llm: dict[str, Any] = Field(default_factory=dict)
+
+    # Phase 3: workflow-level semantic understanding (one LLM call per workflow).
+    intent_graph: WorkflowIntentGraph = Field(default_factory=WorkflowIntentGraph)

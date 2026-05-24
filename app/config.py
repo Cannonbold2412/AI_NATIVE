@@ -50,6 +50,21 @@ class Settings(BaseSettings):
     llm_text_api_key: str = ""
     llm_text_model: str = ""
     llm_text_timeout_ms: int = 2000
+
+    # LLM 4: Selector compilation (Phase 3 — LLM-generated selectors at compile time)
+    llm_selector_model: str = ""              # primary model (e.g. gpt-4o-mini, claude-haiku)
+    llm_selector_model_fallback: str = ""     # higher-capability model if validation fails
+    llm_selector_timeout_ms: int = 60000
+    llm_selector_candidates: int = 8          # candidates to request per element
+
+    # Selector cache (Phase 1)
+    selector_cache_ttl_days: int = 30
+    selector_cache_enabled: bool = True
+
+    # DOM snapshot (Phase 2)
+    snapshot_dedup_enabled: bool = True
+    snapshot_surrounding_text_radius_px: int = 200
+    snapshot_capture_a11y: bool = True
     # Directory name at project root for generated bundles (default skill_package). Overrides .skill_bundle_root after UI rename.
     package_bundle_root: str = "skill_package"
     environment: str = "local"

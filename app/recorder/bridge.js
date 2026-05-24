@@ -545,6 +545,77 @@
     return safeText(el, 500).toLowerCase();
   }
 
+  // Phase 2: capture full ancestor chain up to <body> for compile-time LLM context.
+  // Returns array of {tag, id, classes, outer_html} from immediate parent up.
+  function captureAncestors(el, maxDepth) {
+    const max = maxDepth || 32;
+    const out = [];
+    let cur = el && el.parentElement;
+    let depth = 0;
+    while (cur && cur.nodeType === 1 && depth < max) {
+      const tag = (cur.tagName || "").toLowerCase();
+      const id = cur.id || "";
+      const classes = cur.classList ? Array.from(cur.classList).slice(0, 32) : [];
+      // outer_html truncated to keep payload bounded; LLM compiler can request full blob if needed.
+      let oh = "";
+      try {
+        oh = (cur.outerHTML || "").slice(0, 2000);
+      } catch (_e) {}
+      out.push({ tag: tag, id: id, classes: classes, outer_html: oh });
+      if (tag === "body" || tag === "html") break;
+      cur = cur.parentElement;
+      depth++;
+    }
+    return out;
+  }
+
+  // Phase 2: extract visible text within a pixel radius of the element bbox.
+  // Used by the LLM compiler to anchor selectors against nearby labels/headers.
+  function captureSurroundingText(el, radiusPx) {
+    const r = radiusPx || 200;
+    const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    if (!rect) return "";
+    const elemTop = rect.top - r;
+    const elemBot = rect.bottom + r;
+    const elemLeft = rect.left - r;
+    const elemRight = rect.right + r;
+    // Walk text nodes in the document; cheap heuristic for "near" via getBoundingClientRect of parent.
+    const out = [];
+    const totalCharBudget = 1500;
+    let used = 0;
+    try {
+      const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while ((node = walker.nextNode()) && used < totalCharBudget) {
+        const text = (node.nodeValue || "").trim();
+        if (text.length < 2) continue;
+        const parent = node.parentElement;
+        if (!parent) continue;
+        if (parent === el || el.contains(parent)) continue;
+        let pr;
+        try { pr = parent.getBoundingClientRect(); } catch (_e) { continue; }
+        if (!pr || (pr.width === 0 && pr.height === 0)) continue;
+        if (pr.bottom < elemTop || pr.top > elemBot) continue;
+        if (pr.right < elemLeft || pr.left > elemRight) continue;
+        const chunk = text.slice(0, Math.min(200, totalCharBudget - used));
+        out.push(chunk);
+        used += chunk.length + 1;
+      }
+    } catch (_e) {}
+    return out.join(" | ").slice(0, totalCharBudget);
+  }
+
+  // Phase 2: stable hash of the document's interactive surface for dedup-by-state.
+  // Cheap djb2 over interactiveSignature() — the Python session computes the full sha256
+  // from the captured outerHTML.
+  function _domSignatureHash(sig) {
+    let h = 5381;
+    for (let i = 0; i < sig.length; i++) {
+      h = ((h << 5) + h + sig.charCodeAt(i)) | 0;
+    }
+    return ("00000000" + (h >>> 0).toString(16)).slice(-8);
+  }
+
   function intentHint(tag, type, role, _text) {
     const t = (type || "").toLowerCase();
     const r = (role || "").toLowerCase();
@@ -613,6 +684,13 @@
     const anchors = pickAnchors(el);
     const page = { url: location.href, title: document.title || "" };
     const before = pageFingerprint();
+    // Phase 2 signals (compile-time LLM input). Failures fall back to empty defaults.
+    let ancestorsChain = [];
+    let surroundingText = "";
+    let domSigShort = "";
+    try { ancestorsChain = captureAncestors(el, 24); } catch (_e) {}
+    try { surroundingText = captureSurroundingText(el, 200); } catch (_e) {}
+    try { domSigShort = _domSignatureHash(interactiveSignature()); } catch (_e) {}
     return {
       action: {
         action: actionKind,
@@ -641,6 +719,10 @@
       },
       page,
       state_probe: { before, dom_before: interactiveSignature() },
+      // Phase 2: compile-time signals for LLM selector generation.
+      ancestors: ancestorsChain,
+      surrounding_text: surroundingText,
+      dom_signature_short: domSigShort,
     };
   }
 

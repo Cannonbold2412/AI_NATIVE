@@ -615,6 +615,7 @@ def _build_step(
             success_conditions=validation.success_conditions,
             assertions=assertions,
         )
+    snapshot = ev.get("snapshot") or {}
     return SkillStep(
         action=action_payload,
         intent=intent,
@@ -629,6 +630,8 @@ def _build_step(
         recovery=recovery,
         confidence_protocol=confidence_protocol,
         decision_policy=DecisionPolicy(),
+        snapshot_ref=str(snapshot.get("ref") or ""),
+        snapshot_dom_hash=str(snapshot.get("dom_hash") or ""),
     )
 
 
@@ -652,6 +655,12 @@ def compile_skill_package(
     session_root = (settings.data_dir / "sessions" / sid).resolve()
     cleaned_events = fix_step_order(clean_steps(events, pol), pol)
     steps = [_build_step(e, bundle, session_root=session_root, step_index=i) for i, e in enumerate(cleaned_events)]
+
+    # Phase 3: LLM-driven selector compilation. Only runs when snapshots exist and
+    # LLM is enabled. Failures degrade gracefully — runtime falls back to existing
+    # heuristic selectors plus a11y tier 2.
+    intent_graph = _llm_compile_selectors(steps, cleaned_events, session_id=sid)
+
     now = datetime.now(timezone.utc).isoformat()
     structural_fp = _build_structural_fingerprint(steps)
     meta = SkillMeta(
@@ -678,4 +687,69 @@ def compile_skill_package(
             "max_calls_per_step": settings.llm_max_calls_per_step,
             "timeout_ms": settings.llm_pack_timeout_ms,
         },
+        intent_graph=intent_graph,
     )
+
+
+def _llm_compile_selectors(
+    steps: list[SkillStep],
+    cleaned_events: list[dict[str, Any]],
+    *,
+    session_id: str,
+) -> "WorkflowIntentGraph":
+    """Populate steps[i].compiled_selectors + semantic_description from LLM.
+
+    Returns the workflow intent graph (empty if LLM is disabled or fails).
+    """
+    from app.models.skill_spec import WorkflowIntentGraph  # noqa: PLC0415 — local import to avoid circular ref
+    if not settings.llm_enabled:
+        return WorkflowIntentGraph()
+    if not (settings.llm_selector_model or settings.llm_text_endpoint):
+        return WorkflowIntentGraph()
+
+    try:
+        from app.compiler.llm_selector_generator import (  # noqa: PLC0415
+            build_workflow_intent_graph,
+            compile_workflow_selectors,
+            task_from_recorded_event,
+        )
+    except ImportError:
+        return WorkflowIntentGraph()
+
+    # Build compile tasks for steps that have snapshot data.
+    tasks = []
+    for i, ev in enumerate(cleaned_events):
+        snap = ev.get("snapshot") or {}
+        if not snap.get("dom_hash"):
+            continue
+        tasks.append(task_from_recorded_event(ev, step_index=i))
+
+    if tasks:
+        candidates_by_step = compile_workflow_selectors(tasks, session_id=session_id)
+        for i, step in enumerate(steps):
+            cands = candidates_by_step.get(i) or []
+            if not cands:
+                continue
+            step.compiled_selectors = [c.selector for c in cands[:3]]
+            # Use the top candidate's intent string as semantic description.
+            for c in cands:
+                if c.intent:
+                    step.semantic_description = c.intent
+                    break
+
+    # Workflow-level intent graph (one LLM call).
+    steps_summary = [
+        {
+            "index": i,
+            "action": ev.get("action", {}).get("action"),
+            "target_text": (ev.get("target") or {}).get("inner_text") or "",
+            "url": (ev.get("page") or {}).get("url") or "",
+            "semantic_intent": (ev.get("semantic") or {}).get("intent_hint") or "",
+        }
+        for i, ev in enumerate(cleaned_events)
+    ]
+    page_urls = sorted({(ev.get("page") or {}).get("url") or "" for ev in cleaned_events} - {""})
+    try:
+        return build_workflow_intent_graph(steps_summary, page_urls)
+    except Exception:  # noqa: BLE001 — LLM failure is non-fatal at compile time
+        return WorkflowIntentGraph()
