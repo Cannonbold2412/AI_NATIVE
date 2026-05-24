@@ -8,8 +8,7 @@ from urllib import error, request
 from urllib.parse import urlparse, urlunparse
 
 from app.config import settings
-from app.llm.pack_llm_config import resolved_pack_llm_config
-from app.llm.pack_llm_keys import next_pack_api_key
+from app.llm.text_llm_keys import next_text_api_key
 
 _SYSTEM_PROMPT = (
     "You are an expert AI agent designer. "
@@ -56,9 +55,8 @@ def _extract_message_content(payload: dict[str, Any]) -> str:
 def generate_skill_markdown_with_llm(summary: dict[str, Any]) -> str | None:
     if not settings.llm_pack_enabled:
         return None
-    llm_config = resolved_pack_llm_config()
-    endpoint = llm_config.endpoint
-    model = llm_config.model
+    endpoint = settings.llm_text_endpoint
+    model = settings.llm_text_model
     if not endpoint or not model:
         return None
 
@@ -125,9 +123,9 @@ def generate_skill_markdown_with_llm(summary: dict[str, Any]) -> str | None:
     if settings.llm_pack_top_p is not None:
         body["top_p"] = settings.llm_pack_top_p
     headers = {"Content-Type": "application/json"}
-    pack_key, _, _ = next_pack_api_key()
-    if pack_key:
-        headers["Authorization"] = f"Bearer {pack_key}"
+    api_key, _, _ = next_text_api_key()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     req = request.Request(
         _chat_completions_url(endpoint),

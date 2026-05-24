@@ -1,4 +1,9 @@
-"""API key management for Skill Pack Builder."""
+"""API key management for the unified Text LLM endpoint.
+
+The Text LLM endpoint is used for all non-vision compile-time and runtime LLM
+calls (structuring, skill.md generation, selector generation, intent inference,
+runtime recovery). Supports a comma-separated rotation pool in SKILL_LLM_TEXT_API_KEY.
+"""
 
 from __future__ import annotations
 
@@ -16,14 +21,13 @@ def _split_keys(value: object) -> list[str]:
     return keys
 
 
-def configured_pack_keys() -> list[str]:
-    """Get comma-separated API keys for Skill Pack Builder."""
-    return _split_keys(settings.llm_pack_api_key)
+def configured_text_keys() -> list[str]:
+    return _split_keys(settings.llm_text_api_key)
 
 
-def next_pack_api_key() -> tuple[str | None, int, int]:
+def next_text_api_key() -> tuple[str | None, int, int]:
     """Return the first available bearer token and metadata (1-based slot index, pool size)."""
-    keys = configured_pack_keys()
+    keys = configured_text_keys()
     if not keys:
         return None, 0, 0
     return keys[0], 1, len(keys)

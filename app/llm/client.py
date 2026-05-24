@@ -104,8 +104,6 @@ def _legacy_payload(task: str, payload: dict[str, Any]) -> bytes:
 def _resolved_model(task: str, payload: dict[str, Any]) -> Any:
     if _is_vision_task(task):
         return payload.get("model") or settings.llm_vision_model
-    if task in {"selector_generation", "recovery_resolve", "workflow_intent"}:
-        return payload.get("model") or settings.llm_selector_model or settings.llm_text_model
     return payload.get("model") or settings.llm_text_model
 
 

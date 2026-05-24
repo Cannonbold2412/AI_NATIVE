@@ -704,7 +704,7 @@ def _llm_compile_selectors(
     from app.models.skill_spec import WorkflowIntentGraph  # noqa: PLC0415 — local import to avoid circular ref
     if not settings.llm_enabled:
         return WorkflowIntentGraph()
-    if not (settings.llm_selector_model or settings.llm_text_endpoint):
+    if not settings.llm_text_endpoint:
         return WorkflowIntentGraph()
 
     try:

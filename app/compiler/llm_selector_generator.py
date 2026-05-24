@@ -18,7 +18,7 @@ from typing import Any
 from app.config import settings
 from app.llm.openapi_client import (
     SelectorCandidate,
-    generate_selector_candidates_with_fallback,
+    generate_selector_candidates,
     infer_workflow_intent,
 )
 from app.storage import selector_cache, snapshots
@@ -143,7 +143,7 @@ def compile_selectors_for_task(
 ) -> list[SelectorCandidate]:
     """Generate, validate, rank, and cache selector candidates for one element."""
     # Cache lookup.
-    effective_model = model or settings.llm_selector_model or "default"
+    effective_model = model or settings.llm_text_model or "default"
     cached = selector_cache.get(task.snapshot_hash, task.element_bbox, effective_model)
     if cached:
         return [SelectorCandidate.from_dict(c) for c in cached]
@@ -151,8 +151,7 @@ def compile_selectors_for_task(
     # Load DOM snapshot for validation.
     dom_snapshot = snapshots.read_dom_snapshot(session_id, task.snapshot_hash) if task.snapshot_hash else None
 
-    # LLM call with adaptive fallback.
-    raw_candidates = generate_selector_candidates_with_fallback(
+    raw_candidates = generate_selector_candidates(
         dom_snippet=_dom_snippet_for_llm(dom_snapshot or ""),
         element_bbox=task.element_bbox,
         element_ancestors=task.element_ancestors,
