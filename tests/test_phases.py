@@ -50,6 +50,9 @@ def _minimal_click_event() -> dict:
         "page": {"url": "https://example.com/app", "title": "App"},
         "state_change": {"before": "aaa", "after": "bbb"},
         "timing": {"wait_for": "load", "timeout": 5000},
+        "ancestors": [],
+        "surrounding_text": "",
+        "snapshot": {"ref": "", "dom_hash": ""},
         "extras": {},
     }
 
