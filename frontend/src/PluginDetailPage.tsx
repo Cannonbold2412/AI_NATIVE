@@ -1,35 +1,32 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   deleteWorkflow,
   fetchPlugin,
-  fetchRuns,
   finalizeAuth,
   finalizeWorkflow,
   getPluginRecordingStatus,
   reRecordAuth,
   startAuthRecord,
   startWorkflowRecord,
-  updateWorkflow,
   type Plugin,
-  type Run,
 } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CompiledSkillsTab } from '@/components/CompiledSkillsTab'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Edit2, FileJson, KeyRound, Loader2, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { postCompileSession } from '@/api/workflowApi'
+import { Copy, FileJson, KeyRound, Loader2, MousePointer2, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { usePluginWorkflowCompileTracker } from '@/hooks/usePluginWorkflowCompileTracker'
+import { enqueueRecompileSkillJob, fetchJob, type JobStatus } from '@/api/workflowApi'
 
 // ─────────────────────────────────────────────────
 // Auth panel
@@ -62,6 +59,7 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
     },
     onError: (e: Error) => {
       setError(e.message)
+      setActiveSession(null)
       setAutoFinalizing(false)
     },
   })
@@ -83,14 +81,11 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
 
   useEffect(() => {
     if (!isRecording || autoFinalizing || finalizeMut.isPending) return
-    if (statusQ.data?.reached_wait_url) {
+    if (statusQ.data?.browser_open === false) {
       setAutoFinalizing(true)
       finalizeMut.mutate()
-    } else if (statusQ.data?.browser_open === false) {
-      setActiveSession(null)
-      setError('Browser was closed before reaching the protected page. No session was saved.')
     }
-  }, [isRecording, autoFinalizing, finalizeMut, statusQ.data?.browser_open, statusQ.data?.reached_wait_url])
+  }, [isRecording, autoFinalizing, finalizeMut, statusQ.data?.browser_open])
 
   return (
     <Card className="border-white/8 bg-white/[0.03] shadow-none">
@@ -137,7 +132,7 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
             <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
               <Loader2 className="size-4 animate-spin text-blue-400" />
               <p className="text-xs text-blue-300">
-                {autoFinalizing ? 'Auth detected, saving session…' : 'Browser is open — authenticate naturally. Session saves automatically once you reach the protected page.'}
+                {autoFinalizing ? 'Chromium closed, saving session…' : 'Browser is open — log in, navigate to the page where workflows should start, then close Chromium.'}
               </p>
             </div>
             {!autoFinalizing && (
@@ -173,7 +168,7 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
           <div className="space-y-2">
             <p className="text-xs text-zinc-500">
               A browser will open at <span className="font-mono text-zinc-300">{plugin.target_url}</span>.
-              Log in naturally — the session will be captured automatically.
+              Log in, navigate to the page where workflows should start, then close Chromium.
             </p>
             <Button
               size="sm"
@@ -205,45 +200,101 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
 // Workflow row
 // ─────────────────────────────────────────────────
 
+type RecompileStatus = JobStatus | 'idle' | 'enqueuing'
+
+function isRecompileActive(status: RecompileStatus) {
+  return status === 'enqueuing' || status === 'queued' || status === 'running'
+}
+
 function WorkflowRow({
   workflow,
   pluginId,
   onDelete,
+  onCompiled,
 }: {
   workflow: Plugin['workflows'][number]
   pluginId: string
   onDelete: () => void
+  onCompiled: () => void
 }) {
-  const router = useRouter()
-  const qc = useQueryClient()
+  const queryClient = useQueryClient()
   const [showJson, setShowJson] = useState(false)
-  const [jsonData, setJsonData] = useState<any>(null)
+  const [jsonData, setJsonData] = useState<unknown>(null)
   const [loadingJson, setLoadingJson] = useState(false)
-  const [compileError, setCompileError] = useState('')
+  const [recompileJobId, setRecompileJobId] = useState<string | null>(null)
+  const [recompileStatus, setRecompileStatus] = useState<RecompileStatus>('idle')
+  const [recompileError, setRecompileError] = useState('')
+  const [recompileSuccess, setRecompileSuccess] = useState('')
+  const compileCompletedRef = useRef(false)
+  const { clearCompile, getCompile, isCompileActive, startCompile } = usePluginWorkflowCompileTracker()
+  const compileEntry = getCompile(pluginId, workflow.id)
+  const isCompiling = isCompileActive(pluginId, workflow.id)
+  const compileError = compileEntry?.error ?? ''
+  const isRecompiling = isRecompileActive(recompileStatus)
 
   const deleteMut = useMutation({
     mutationFn: () => deleteWorkflow(pluginId, workflow.id),
     onSuccess: onDelete,
   })
 
-  const editMut = useMutation({
-    mutationFn: async () => {
-      if (workflow.skill_id) {
-        return { skill_id: workflow.skill_id }
+  useEffect(() => {
+    if (isCompiling) {
+      compileCompletedRef.current = true
+      return
+    }
+    if (compileCompletedRef.current && workflow.skill_id) {
+      compileCompletedRef.current = false
+      onCompiled()
+    }
+  }, [isCompiling, onCompiled, workflow.skill_id])
+
+  useEffect(() => {
+    if (workflow.skill_id && compileEntry) {
+      clearCompile(pluginId, workflow.id)
+    }
+  }, [clearCompile, compileEntry, pluginId, workflow.id, workflow.skill_id])
+
+  useEffect(() => {
+    if (!recompileJobId || !isRecompiling || recompileStatus === 'enqueuing') return
+
+    let canceled = false
+    const poll = async () => {
+      try {
+        const job = await fetchJob(recompileJobId)
+        if (canceled) return
+        setRecompileStatus(job.status)
+        if (job.status === 'failed' || job.status === 'canceled') {
+          setRecompileError(job.user_error || `Recompile job ${job.status}.`)
+          return
+        }
+        if (job.status === 'succeeded') {
+          const version = job.result?.version
+          setRecompileSuccess(typeof version === 'number' ? `Recompiled v${version}` : 'Recompiled')
+          setRecompileError('')
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['plugin', pluginId] }),
+            queryClient.invalidateQueries({ queryKey: ['plugins'] }),
+            queryClient.invalidateQueries({ queryKey: ['skillList'] }),
+            workflow.skill_id
+              ? queryClient.invalidateQueries({ queryKey: ['workflow', workflow.skill_id] })
+              : Promise.resolve(),
+            queryClient.invalidateQueries({ queryKey: ['compiled-skill', pluginId, workflow.slug] }),
+          ])
+        }
+      } catch (err) {
+        if (canceled) return
+        setRecompileStatus('failed')
+        setRecompileError(err instanceof Error && err.message ? err.message : 'Could not check recompile status.')
       }
-      const compiled = await postCompileSession(workflow.session_id, workflow.name)
-      await updateWorkflow(pluginId, workflow.id, { skill_id: compiled.skill_id })
-      return compiled
-    },
-    onSuccess: (data) => {
-      setCompileError('')
-      void qc.invalidateQueries({ queryKey: ['plugin', pluginId] })
-      router.push(`/edit/${data.skill_id}?from=${encodeURIComponent('/plugins/' + pluginId)}`)
-    },
-    onError: (error: Error) => {
-      setCompileError(error.message || 'Compile failed')
-    },
-  })
+    }
+
+    void poll()
+    const timer = window.setInterval(() => void poll(), 1500)
+    return () => {
+      canceled = true
+      window.clearInterval(timer)
+    }
+  }, [isRecompiling, pluginId, queryClient, recompileJobId, recompileStatus, workflow.skill_id, workflow.slug])
 
   const handleViewJson = async () => {
     setLoadingJson(true)
@@ -260,8 +311,29 @@ function WorkflowRow({
     }
   }
 
-  const handleEdit = () => {
-    editMut.mutate()
+  const handleCompile = () => {
+    void startCompile({
+      pluginId,
+      workflowId: workflow.id,
+      sessionId: workflow.session_id,
+      workflowName: workflow.name,
+    })
+  }
+
+  const handleRecompile = async () => {
+    if (!workflow.skill_id) return
+    setRecompileStatus('enqueuing')
+    setRecompileError('')
+    setRecompileSuccess('')
+    try {
+      const job = await enqueueRecompileSkillJob(workflow.skill_id)
+      setRecompileJobId(job.job_id)
+      setRecompileStatus(job.status)
+    } catch (err) {
+      setRecompileJobId(null)
+      setRecompileStatus('failed')
+      setRecompileError(err instanceof Error && err.message ? err.message : 'Could not start recompile.')
+    }
   }
 
   return (
@@ -302,30 +374,51 @@ function WorkflowRow({
                 size="sm"
                 variant="outline"
                 className="border-amber-500/30 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10"
-                onClick={handleEdit}
-                disabled={editMut.isPending}
+                onClick={handleCompile}
+                disabled={isCompiling}
               >
-                {editMut.isPending ? (
+                {isCompiling ? (
                   <><Loader2 className="size-3.5 animate-spin" /> Compiling… (15–40s)</>
                 ) : (
-                  <><Play className="size-3.5" /> Compile & Edit</>
+                  <><Play className="size-3.5" /> Compile</>
                 )}
               </Button>
             ) : (
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              className="text-zinc-500 hover:text-amber-400"
-              onClick={handleEdit}
-              disabled={editMut.isPending}
-              title="Edit workflow"
-            >
-              {editMut.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Edit2 className="size-4" />
-            )}
-          </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-500/30 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10"
+                    disabled={isRecompiling}
+                    title="Recompile"
+                  >
+                    {isRecompiling ? (
+                      <><Loader2 className="size-3.5 animate-spin" /> Recompiling</>
+                    ) : (
+                      <><RefreshCw className="size-3.5" /> Recompile</>
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="border-white/10 bg-[#0d0f12] text-zinc-100">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-white">Recompile &ldquo;{workflow.name}&rdquo;?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-zinc-400">
+                      This rebuilds the skill package from the original raw recording. Saved editor changes to
+                      selectors, validation, screenshots, and inputs will be replaced by the fresh compile.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="border-white/10 bg-white/5 text-zinc-200">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-amber-600 text-white hover:bg-amber-700"
+                      onClick={() => void handleRecompile()}
+                    >
+                      Recompile
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -353,9 +446,12 @@ function WorkflowRow({
           </AlertDialog>
           </div>
         </div>
-        {compileError && (
-          <p className="text-xs text-red-400 px-0.5">{compileError}</p>
-        )}
+        {compileError || recompileError ? (
+          <p className="text-xs text-red-400 px-0.5">{compileError || recompileError}</p>
+        ) : null}
+        {recompileSuccess && !isRecompiling ? (
+          <p className="text-xs text-emerald-400 px-0.5">{recompileSuccess}</p>
+        ) : null}
       </div>
 
       {/* JSON Viewer Modal */}
@@ -409,27 +505,26 @@ function NewWorkflowDialog({
   plugin: Plugin
   onCreated: () => void
 }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [urlVariables, setUrlVariables] = useState<Record<string, string>>({})
+  const [captureHover, setCaptureHover] = useState(false)
   const [activeSession, setActiveSession] = useState<{ sessionId: string; workflowId: string } | null>(null)
   const [error, setError] = useState('')
-  const [autoFinalizing, setAutoFinalizing] = useState(false)
-  const [compiling, setCompiling] = useState(false)
-  const [compileError, setCompileError] = useState('')
+  const [workflowFinalizeRequested, setWorkflowFinalizeRequested] = useState(false)
   const [promoteToAuth, setPromoteToAuth] = useState<{ sessionId: string; workflowId: string } | null>(null)
 
   // Extract variable names from protected_url (e.g., {{team_url}} → ['team_url'])
   const varPattern = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g
   const requiredVars = Array.from(plugin.protected_url.matchAll(varPattern), (m) => m[1])
+  const hasProtectedUrl = !!plugin.protected_url.trim()
 
   const startMut = useMutation({
-    mutationFn: () => startWorkflowRecord(plugin.id, name, requiredVars.length > 0 ? urlVariables : undefined),
+    mutationFn: () => startWorkflowRecord(plugin.id, name, requiredVars.length > 0 ? urlVariables : undefined, captureHover),
     onSuccess: (data) => {
       setActiveSession({ sessionId: data.session_id, workflowId: data.workflow_id })
       setError('')
-      setAutoFinalizing(false)
+      setWorkflowFinalizeRequested(false)
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -440,6 +535,7 @@ function NewWorkflowDialog({
       setPromoteToAuth(null)
       setOpen(false)
       setName('')
+      setCaptureHover(false)
       setActiveSession(null)
       onCreated()
     },
@@ -452,8 +548,6 @@ function NewWorkflowDialog({
     onSuccess: async (data) => {
       const sessionId = data.session_id
       const workflowId = data.workflow_id
-      const workflowName = name
-      setAutoFinalizing(false)
 
       // If the classifier detected a login recording, prompt to save as auth instead.
       if (data.workflow_kind === 'login') {
@@ -461,31 +555,21 @@ function NewWorkflowDialog({
         return
       }
 
-      setCompiling(true)
-      setCompileError('')
-      try {
-        const compiled = await postCompileSession(sessionId, workflowName)
-        await updateWorkflow(plugin.id, workflowId, { skill_id: compiled.skill_id })
-        router.push(`/edit/${compiled.skill_id}?from=${encodeURIComponent('/plugins/' + plugin.id)}`)
-        setOpen(false)
-        setName('')
-        setActiveSession(null)
-        setCompiling(false)
-        onCreated()
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Compile failed'
-        setCompileError(msg)
-        setCompiling(false)
-        setOpen(false)
-        setName('')
-        setActiveSession(null)
-        setAutoFinalizing(false)
-        onCreated()
-      }
+      setOpen(false)
+      setName('')
+      setCaptureHover(false)
+      setActiveSession(null)
+      setWorkflowFinalizeRequested(false)
+      onCreated()
     },
     onError: (e: Error) => {
-      setError(e.message)
-      setAutoFinalizing(false)
+      const message = e.message
+      setError(message)
+      if (message.toLowerCase().startsWith('no workflow actions were recorded')) {
+        setActiveSession(null)
+        setWorkflowFinalizeRequested(false)
+        onCreated()
+      }
     },
   })
 
@@ -493,27 +577,32 @@ function NewWorkflowDialog({
   const statusQ = useQuery({
     queryKey: ['plugin-workflow-recording-status', plugin.id, activeSession?.workflowId, activeSession?.sessionId],
     queryFn: () => getPluginRecordingStatus(activeSession!.sessionId),
-    enabled: isRecording && !finalizeMut.isPending && !autoFinalizing,
+    enabled: isRecording && !finalizeMut.isPending,
     refetchInterval: 1000,
     retry: false,
   })
+  const workflowBrowserClosed = statusQ.data?.browser_open === false
 
   useEffect(() => {
-    if (!isRecording || autoFinalizing || finalizeMut.isPending) return
-    if (statusQ.data?.browser_open === false || statusQ.data?.reached_wait_url) {
-      setAutoFinalizing(true)
-      finalizeMut.mutate()
-    }
-  }, [isRecording, autoFinalizing, finalizeMut, statusQ.data?.browser_open, statusQ.data?.reached_wait_url])
+    if (!isRecording || !workflowBrowserClosed || workflowFinalizeRequested || finalizeMut.isPending) return
+    setWorkflowFinalizeRequested(true)
+    finalizeMut.mutate()
+  }, [isRecording, workflowBrowserClosed, workflowFinalizeRequested, finalizeMut])
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && activeSession && !workflowBrowserClosed && !finalizeMut.isPending) return
+        setOpen(nextOpen)
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           size="sm"
           variant="outline"
           className="border-white/10 bg-white/[0.04] text-zinc-200"
-          disabled={plugin.status !== 'ready'}
+          disabled={plugin.status !== 'ready' || !hasProtectedUrl}
         >
           <Plus className="size-4" />
           Create a Workflow
@@ -554,6 +643,26 @@ function NewWorkflowDialog({
                 ))}
               </div>
             )}
+            <div
+              className="flex items-start gap-3 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2.5"
+            >
+              <Checkbox
+                id="workflowCaptureHover"
+                checked={captureHover}
+                disabled={startMut.isPending}
+                onCheckedChange={(checked) => setCaptureHover(checked === true)}
+                className="mt-0.5"
+              />
+              <Label htmlFor="workflowCaptureHover" className="grid min-w-0 cursor-pointer gap-1">
+                <span className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+                  <MousePointer2 className="size-3.5 text-zinc-400" />
+                  Workflow contains hover-only elements
+                </span>
+                <span className="text-xs leading-5 text-zinc-500">
+                  Turn this on when menus, tooltips, or drawers only appear after hovering.
+                </span>
+              </Label>
+            </div>
             <p className="text-xs text-zinc-500">
               The browser will open pre-authenticated at{' '}
               <span className="font-mono text-zinc-300">
@@ -563,7 +672,7 @@ function NewWorkflowDialog({
                         url.replace(new RegExp(`{{\\s*${varName}\\s*}}`), urlVariables[varName] || `{{${varName}}}`),
                       plugin.protected_url,
                     )
-                  : plugin.target_url}
+                  : plugin.protected_url}
               </span>
               . Record your workflow without needing to log in again.
             </p>
@@ -576,6 +685,7 @@ function NewWorkflowDialog({
                 onClick={() => {
                   setName('')
                   setUrlVariables({})
+                  setCaptureHover(false)
                   setError('')
                 }}
               >
@@ -587,7 +697,8 @@ function NewWorkflowDialog({
                 disabled={
                   !name ||
                   startMut.isPending ||
-                  plugin.status !== 'ready'
+                  plugin.status !== 'ready' ||
+                  !hasProtectedUrl
                 }
               >
                 {startMut.isPending ? (
@@ -595,7 +706,7 @@ function NewWorkflowDialog({
                     <Loader2 className="size-4 animate-spin" />
                     Launching browser…
                   </>
-                ) : plugin.status !== 'ready' ? (
+                ) : plugin.status !== 'ready' || !hasProtectedUrl ? (
                   'Record auth first'
                 ) : (
                   <>
@@ -611,42 +722,14 @@ function NewWorkflowDialog({
             <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
               <Loader2 className="size-4 animate-spin text-blue-400" />
               <p className="text-xs text-blue-300">
-                {compiling
-                  ? 'Compiling workflow — opening editor…'
-                  : autoFinalizing
-                  ? 'Closing browser and saving workflow…'
+                {finalizeMut.isPending
+                  ? 'Saving workflow…'
+                  : workflowBrowserClosed
+                  ? 'Chromium is closed — saving the workflow…'
                   : 'Browser is open — perform your workflow, then close it when done.'}
               </p>
             </div>
-            {compileError ? <p className="text-sm text-red-400">{compileError}</p> : null}
-            {error && !compileError ? <p className="text-sm text-red-400">{error}</p> : null}
-            {!autoFinalizing && !compiling && (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 border-white/10 bg-white/5 text-zinc-300"
-                  onClick={() => setActiveSession(null)}
-                  disabled={finalizeMut.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => finalizeMut.mutate()}
-                  disabled={finalizeMut.isPending}
-                >
-                  {finalizeMut.isPending ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Saving…
-                    </>
-                  ) : (
-                    'Save Workflow Now'
-                  )}
-                </Button>
-              </div>
-            )}
+            {error ? <p className="text-sm text-red-400">{error}</p> : null}
           </div>
         )}
 
@@ -668,6 +751,7 @@ function NewWorkflowDialog({
                   setPromoteToAuth(null)
                   setOpen(false)
                   setName('')
+                  setCaptureHover(false)
                   setActiveSession(null)
                   onCreated()
                 }}
@@ -696,150 +780,12 @@ function NewWorkflowDialog({
 }
 
 // ─────────────────────────────────────────────────
-// Runs timeline
-// ─────────────────────────────────────────────────
-
-function outcomeColor(status: string) {
-  if (status === 'success') return 'text-emerald-400'
-  if (status === 'aborted') return 'text-amber-400'
-  return 'text-red-400'
-}
-
-function OutcomeIcon({ status }: { status: string }) {
-  if (status === 'success') return <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />
-  if (status === 'aborted') return <CircleAlert className="size-4 text-amber-400 shrink-0" />
-  return <CircleAlert className="size-4 text-red-400 shrink-0" />
-}
-
-function RunRow({ run }: { run: Run }) {
-  const [expanded, setExpanded] = useState(false)
-  const outcome = run.outcome
-  const status = outcome?.status ?? 'unknown'
-  const failures = run.events.filter((e) => e.event === 'step_failure')
-  const recoveries = run.events.filter((e) => e.event === 'recovery_attempt')
-  const runTime = run.events[0]?.ts
-    ? new Date(run.events[0].ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-    : null
-
-  return (
-    <div className="border-t border-white/6 first:border-t-0">
-      <button
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/[0.02]"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          {outcome ? <OutcomeIcon status={status} /> : <Loader2 className="size-4 animate-spin text-zinc-500 shrink-0" />}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-white">
-              {run.skill_slug || run.run_id.slice(0, 8)}
-            </p>
-            {runTime ? <p className="text-xs text-zinc-500">{runTime}</p> : null}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {outcome ? (
-            <>
-              <Badge
-                variant="outline"
-                className={
-                  status === 'success'
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                    : status === 'aborted'
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                    : 'border-red-500/30 bg-red-500/10 text-red-300'
-                }
-              >
-                {status}
-              </Badge>
-              {outcome.recovered_steps > 0 ? (
-                <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
-                  {outcome.recovered_steps} recovered
-                </Badge>
-              ) : null}
-              <span className="text-xs text-zinc-500">{outcome.duration_ms}ms</span>
-            </>
-          ) : null}
-          {expanded ? <ChevronDown className="size-4 text-zinc-500" /> : <ChevronRight className="size-4 text-zinc-500" />}
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="border-t border-white/6 bg-white/[0.015] px-4 py-3 space-y-2">
-          {outcome ? (
-            <div className="grid grid-cols-3 gap-3 text-xs text-zinc-400 mb-3">
-              <div><span className="text-zinc-600">Steps</span><br />{outcome.total_steps}</div>
-              <div><span className="text-zinc-600">Recovered</span><br />{outcome.recovered_steps}</div>
-              <div><span className="text-zinc-600">Duration</span><br />{outcome.duration_ms}ms</div>
-            </div>
-          ) : null}
-          {failures.length === 0 && recoveries.length === 0 ? (
-            <p className="text-xs text-zinc-600">No failures or recovery events.</p>
-          ) : null}
-          {failures.map((e, i) => (
-            <div key={i} className="rounded-lg border border-red-500/15 bg-red-500/5 px-3 py-2 text-xs">
-              <div className="flex items-center gap-2 mb-1">
-                <CircleAlert className="size-3 text-red-400 shrink-0" />
-                <span className="font-medium text-red-300">step_failure</span>
-                {e.step_id ? <span className="text-zinc-500">· {e.step_id}</span> : null}
-              </div>
-              {e.data.reason ? <p className="text-zinc-400">{String(e.data.reason)}</p> : null}
-              {e.data.selector ? <p className="font-mono text-zinc-500">{String(e.data.selector)}</p> : null}
-            </div>
-          ))}
-          {recoveries.map((e, i) => {
-            const success = e.data.success === true
-            return (
-              <div key={i} className={`rounded-lg border px-3 py-2 text-xs ${success ? 'border-emerald-500/15 bg-emerald-500/5' : 'border-amber-500/15 bg-amber-500/5'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <RefreshCw className={`size-3 shrink-0 ${success ? 'text-emerald-400' : 'text-amber-400'}`} />
-                  <span className={`font-medium ${success ? 'text-emerald-300' : 'text-amber-300'}`}>
-                    recovery_attempt · {success ? 'resolved' : 'failed'}
-                  </span>
-                  {e.step_id ? <span className="text-zinc-500">· {e.step_id}</span> : null}
-                </div>
-                {e.data.strategy ? <p className="text-zinc-400">Strategy: {String(e.data.strategy)}</p> : null}
-                {e.data.latency_ms != null ? <p className="text-zinc-500">{String(e.data.latency_ms)}ms</p> : null}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function RunsTab({ pluginId }: { pluginId: string }) {
-  const q = useQuery({
-    queryKey: ['runs', pluginId],
-    queryFn: () => fetchRuns(pluginId),
-    staleTime: 10_000,
-    refetchInterval: 15_000,
-  })
-  const runs = q.data?.runs ?? []
-
-  return (
-    <Card className="border-white/8 bg-white/[0.03] shadow-none">
-      <CardHeader className="border-b border-white/8 pb-3">
-        <CardTitle className="text-sm font-medium text-white">Run history</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {q.isLoading ? <p className="px-4 py-6 text-sm text-zinc-500">Loading runs…</p> : null}
-        {q.isError ? <p className="px-4 py-6 text-sm text-red-400">{(q.error as Error).message}</p> : null}
-        {!q.isLoading && !q.isError && runs.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-zinc-500">No runs yet. Execute a skill to see the timeline here.</p>
-        ) : null}
-        {runs.map((run) => <RunRow key={run.run_id} run={run} />)}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ─────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────
 
 export function PluginDetailPage({ pluginId }: { pluginId: string }) {
   const qc = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'auth' | 'workflows' | 'compiled'>('auth')
   const q = useQuery({
     queryKey: ['plugin', pluginId],
     queryFn: () => fetchPlugin(pluginId),
@@ -847,6 +793,15 @@ export function PluginDetailPage({ pluginId }: { pluginId: string }) {
     refetchInterval: 10_000,
   })
   const refresh = () => qc.invalidateQueries({ queryKey: ['plugin', pluginId] })
+
+  useEffect(() => {
+    const hasAuth = q.data?.plugin.auth
+    if (hasAuth === undefined) return
+    setActiveTab((current) => {
+      if (!hasAuth) return 'auth'
+      return current === 'auth' ? 'workflows' : current
+    })
+  }, [q.data?.plugin.auth])
 
   if (q.isLoading) {
     return (
@@ -896,17 +851,22 @@ export function PluginDetailPage({ pluginId }: { pluginId: string }) {
               </span>
             </>
           ) : null}
-          <span className="text-white/20">·</span>
-          <span>Protected URL: <span className="font-mono text-zinc-300">{plugin.protected_url}</span></span>
         </div>
 
-        <Tabs defaultValue="workflows">
+        <Tabs
+          key={`${plugin.id}-${plugin.auth ? 'auth-captured' : 'needs-auth'}`}
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as 'auth' | 'workflows' | 'compiled')}
+        >
           <TabsList className="border border-white/10 bg-white/[0.03] text-zinc-400">
-            <TabsTrigger value="workflows">Workflows</TabsTrigger>
             <TabsTrigger value="auth">Auth</TabsTrigger>
+            <TabsTrigger value="workflows">Workflows</TabsTrigger>
             <TabsTrigger value="compiled">Compiled Skills</TabsTrigger>
-            <TabsTrigger value="runs">Runs</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="auth" className="mt-4">
+            <AuthPanel plugin={plugin} onRefresh={refresh} />
+          </TabsContent>
 
           <TabsContent value="workflows" className="mt-4">
             <div className="space-y-4">
@@ -927,7 +887,13 @@ export function PluginDetailPage({ pluginId }: { pluginId: string }) {
                 ) : (
                   <CardContent className="p-0">
                     {plugin.workflows.map((wf) => (
-                      <WorkflowRow key={wf.id} workflow={wf} pluginId={plugin.id} onDelete={refresh} />
+                      <WorkflowRow
+                        key={wf.id}
+                        workflow={wf}
+                        pluginId={plugin.id}
+                        onDelete={refresh}
+                        onCompiled={() => setActiveTab('compiled')}
+                      />
                     ))}
                   </CardContent>
                 )}
@@ -935,16 +901,8 @@ export function PluginDetailPage({ pluginId }: { pluginId: string }) {
             </div>
           </TabsContent>
 
-          <TabsContent value="auth" className="mt-4">
-            <AuthPanel plugin={plugin} onRefresh={refresh} />
-          </TabsContent>
-
           <TabsContent value="compiled" className="mt-4">
             <CompiledSkillsTab plugin={plugin} />
-          </TabsContent>
-
-          <TabsContent value="runs" className="mt-4">
-            <RunsTab pluginId={plugin.id} />
           </TabsContent>
         </Tabs>
       </div>

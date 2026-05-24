@@ -94,6 +94,11 @@ export type PluginWorkflow = {
   recorded_at: number
   status: 'recorded' | 'compiled' | 'error'
   skill_id: string | null
+  edited_at: number | null
+  last_test_at: number | null
+  last_test_status: 'passed' | 'failed' | 'never'
+  last_test_error: string | null
+  last_test_inputs: Record<string, unknown>
 }
 
 export type PluginAuth = {
@@ -155,7 +160,7 @@ export function fetchPlugin(id: string): Promise<{ plugin: Plugin }> {
 export function createPlugin(body: {
   name: string
   target_url: string
-  protected_url: string
+  protected_url?: string
   protected_url_marker_text?: string
 }): Promise<{ plugin: Plugin }> {
   return apiFetch('/plugins', {
@@ -185,12 +190,12 @@ export function startAuthRecord(
 export function finalizeAuth(
   pluginId: string,
   sessionId: string,
-): Promise<{ plugin_status: string; storage_state_saved: boolean }> {
+): Promise<{ plugin_status: string; storage_state_saved: boolean; protected_url: string }> {
   return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/auth/finalize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId }),
-  }).then((r) => json<{ plugin_status: string; storage_state_saved: boolean }>(r))
+  }).then((r) => json<{ plugin_status: string; storage_state_saved: boolean; protected_url: string }>(r))
 }
 
 export function getPluginRecordingStatus(sessionId: string): Promise<{
@@ -200,6 +205,8 @@ export function getPluginRecordingStatus(sessionId: string): Promise<{
   ended_by_user: boolean
   binding_errors: string[]
   reached_wait_url?: boolean
+  capture_hover?: boolean
+  current_url?: string
 }> {
   return apiFetch(`/record/${encodeURIComponent(sessionId)}/status`).then((r) =>
     json<{
@@ -209,6 +216,8 @@ export function getPluginRecordingStatus(sessionId: string): Promise<{
       ended_by_user: boolean
       binding_errors: string[]
       reached_wait_url?: boolean
+      capture_hover?: boolean
+      current_url?: string
     }>(r),
   )
 }
@@ -223,11 +232,12 @@ export function startWorkflowRecord(
   pluginId: string,
   name: string,
   urlVariables?: Record<string, string>,
+  captureHover = false,
 ): Promise<{ session_id: string; workflow_id: string }> {
   return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/workflows/record`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, url_variables: urlVariables || {} }),
+    body: JSON.stringify({ name, url_variables: urlVariables || {}, capture_hover: captureHover }),
   }).then((r) => json<{ session_id: string; workflow_id: string }>(r))
 }
 
@@ -267,12 +277,14 @@ export function updateWorkflow(
   pluginId: string,
   workflowId: string,
   body: { skill_id?: string | null },
-): Promise<{ plugin_id: string; workflow_id: string; skill_id: string | null }> {
+): Promise<{ plugin_id: string; workflow_id: string; skill_id: string | null; status: PluginWorkflow['status'] }> {
   return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/workflows/${encodeURIComponent(workflowId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  }).then((r) => json<{ plugin_id: string; workflow_id: string; skill_id: string | null }>(r))
+  }).then((r) =>
+    json<{ plugin_id: string; workflow_id: string; skill_id: string | null; status: PluginWorkflow['status'] }>(r),
+  )
 }
 
 export function downloadPlugin(pluginId: string): string {
@@ -312,7 +324,7 @@ export type Run = {
 export type RunsResponse = { runs: Run[] }
 
 // ─────────────────────────────────────────────────
-// Compiled skill inspect + url_state editing
+// Compiled skill inspect
 // ─────────────────────────────────────────────────
 
 export type CompiledSkillFiles = {
@@ -330,22 +342,6 @@ export function getCompiledSkill(
   )
 }
 
-export function updateStepUrlState(
-  pluginId: string,
-  skillSlug: string,
-  stepId: string,
-  body: { before?: Record<string, unknown>; after?: Record<string, unknown> },
-): Promise<{ plugin_id: string; skill_slug: string; step_id: string; updated: boolean }> {
-  return apiFetch(
-    `/plugins/${encodeURIComponent(pluginId)}/skills/${encodeURIComponent(skillSlug)}/steps/${encodeURIComponent(stepId)}/url_state`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-  ).then((r) => json<{ plugin_id: string; skill_slug: string; step_id: string; updated: boolean }>(r))
-}
-
 export function fetchRuns(pluginId?: string, since?: number): Promise<RunsResponse> {
   const params = new URLSearchParams()
   if (pluginId) params.set('plugin_id', pluginId)
@@ -356,6 +352,69 @@ export function fetchRuns(pluginId?: string, since?: number): Promise<RunsRespon
 
 export function fetchRun(runId: string): Promise<{ run: Run }> {
   return apiFetch(`/runs/${encodeURIComponent(runId)}`).then((r) => json<{ run: Run }>(r))
+}
+
+// ─────────────────────────────────────────────────
+// Company-scoped tracking (lightweight telemetry)
+// ─────────────────────────────────────────────────
+
+export type TrackingEvent = {
+  e: string
+  ts: number
+  si?: number
+  l?: number
+  sc?: string
+  fc?: string
+  dur?: number
+  tot?: number
+  rec?: number
+  fsi?: number | null
+}
+
+export type TrackingRunSummary = {
+  run_id: string
+  plugin_id: string
+  plugin_ver: string
+  runtime_ver: string
+  uid: string
+  wid: string
+  status: 'ok' | 'fail' | 'running'
+  duration_ms: number
+  total_steps: number
+  recovered_steps: number
+  failed_step_id: number | null
+  failure_code: string | null
+  started_at: number
+  server_ts: number
+}
+
+export type TrackingRunsResponse = { runs: TrackingRunSummary[]; total: number }
+
+export type TrackingRunDetail = {
+  run_id: string
+  company: string
+  plugin_id: string
+  plugin_ver: string
+  runtime_ver: string
+  uid: string
+  wid: string
+  timeline: TrackingEvent[]
+}
+
+export function fetchTrackingRuns(
+  company: string,
+  limit = 50,
+  offset = 0,
+): Promise<TrackingRunsResponse> {
+  return apiFetch(`/tracking/${encodeURIComponent(company)}/runs?limit=${limit}&offset=${offset}`).then(
+    (r) => json<TrackingRunsResponse>(r),
+  )
+}
+
+export function fetchTrackingRun(company: string, runId: string): Promise<TrackingRunDetail> {
+  return apiFetch(
+    `/tracking/${encodeURIComponent(company)}/runs/${encodeURIComponent(runId)}`,
+  ).then((r) => json<TrackingRunDetail>(r))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -379,4 +438,21 @@ export function buildInstaller(pluginId: string): Promise<Response> {
 /** Returns the URL to download the compiled installer EXE. */
 export function installerDownloadUrl(pluginId: string): string {
   return apiUrl(`/plugins/${encodeURIComponent(pluginId)}/installer/download`)
+}
+
+/** Stream a workflow test run (SSE). Returns a raw Response for readPluginSse(). */
+export function testWorkflow(
+  pluginId: string,
+  workflowId: string,
+  inputs: Record<string, unknown> = {},
+  headless = false,
+): Promise<Response> {
+  return apiFetch(
+    `/plugins/${encodeURIComponent(pluginId)}/workflows/${encodeURIComponent(workflowId)}/test/stream`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs, headless }),
+    },
+  )
 }

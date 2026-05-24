@@ -35,16 +35,14 @@ function CreatePluginDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [targetUrl, setTargetUrl] = useState('')
-  const [protectedUrl, setProtectedUrl] = useState('')
   const [error, setError] = useState('')
 
   const mutation = useMutation({
-    mutationFn: () => createPlugin({ name, target_url: targetUrl, protected_url: protectedUrl }),
+    mutationFn: () => createPlugin({ name, target_url: targetUrl }),
     onSuccess: (data) => {
       setOpen(false)
       setName('')
       setTargetUrl('')
-      setProtectedUrl('')
       setError('')
       onCreated()
       router.push(`/plugins/${data.plugin.id}`)
@@ -86,25 +84,13 @@ function CreatePluginDialog({ onCreated }: { onCreated: () => void }) {
               className="border-white/10 bg-white/5 text-zinc-100"
               disabled={mutation.isPending}
             />
-            <p className="text-xs text-zinc-500">The site your plugin automates.</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-zinc-300">Protected URL</Label>
-            <Input
-              value={protectedUrl}
-              onChange={(e) => setProtectedUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && mutation.mutate()}
-              placeholder="https://dashboard.render.com/{{team_slug}}"
-              className="border-white/10 bg-white/5 text-zinc-100"
-              disabled={mutation.isPending}
-            />
-            <p className="text-xs text-zinc-500">A page only accessible when logged in. Use <code className="bg-white/10 px-1.5 py-0.5 rounded text-white">{'{{variable_name}}'}</code> for user-specific URL segments (e.g., team IDs, workspace slugs).</p>
+            <p className="text-xs text-zinc-500">The login or landing page for the site your plugin automates.</p>
           </div>
           {error ? <p className="text-sm text-red-400">{error}</p> : null}
           <Button
             className="w-full"
             onClick={() => mutation.mutate()}
-            disabled={!name || !targetUrl || !protectedUrl || mutation.isPending}
+            disabled={!name || !targetUrl || mutation.isPending}
           >
             {mutation.isPending ? 'Creating…' : 'Create Plugin'}
           </Button>

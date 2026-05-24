@@ -64,15 +64,6 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
-      - key: GITHUB_OAUTH_CLIENT_ID
-        sync: false
-      - key: GITHUB_OAUTH_CLIENT_SECRET
-        sync: false
-      - key: GITHUB_OAUTH_REDIRECT_URI
-        value: https://conxa-backend.onrender.com/api/v1/integrations/github/callback
-      # Set to your Vercel app URL after frontend is deployed, e.g. https://conxa.vercel.app
-      - key: GITHUB_OAUTH_FRONTEND_ORIGIN
-        sync: false
 
 databases:
   - name: conxa-db

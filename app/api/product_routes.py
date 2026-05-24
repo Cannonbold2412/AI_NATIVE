@@ -39,11 +39,6 @@ class ReleasePatchBody(BaseModel):
     release_notes: str | None = Field(default=None, max_length=20_000)
 
 
-class PublishBody(BaseModel):
-    version: str | None = Field(default=None, min_length=1, max_length=64)
-    release_notes: str = Field(default="", max_length=20_000)
-
-
 def _require_bundle(bundle_slug: str) -> None:
     root = bundle_root_dir(bundle_slug)
     if root is None or not root.is_dir():
@@ -161,29 +156,6 @@ async def post_stripe_webhook(request: Request) -> dict[str, Any]:
             },
         )
     return {"received": True}
-
-
-@router.post("/packages/bundles/{bundle_slug}/publish")
-def publish_bundle(
-    bundle_slug: str,
-    body: PublishBody,
-    principal: Principal = Depends(current_principal),
-) -> dict[str, Any]:
-    _require_bundle(bundle_slug)
-    previous = release_for(principal, bundle_slug)
-    release = update_release(
-        principal,
-        bundle_slug,
-        {
-            "state": "published",
-            "version": body.version or previous.get("version") or "0.1.0",
-            "release_notes": body.release_notes,
-            "published_by": principal.user_id,
-            "published_at": time.time(),
-            "archived_at": None,
-        },
-    )
-    return {"release": release}
 
 
 @router.patch("/packages/bundles/{bundle_slug}/release")

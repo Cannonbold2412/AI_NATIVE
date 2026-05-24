@@ -146,17 +146,6 @@ export function fetchRelease(bundleSlug: string): Promise<{ release: PackageRele
   )
 }
 
-export function publishBundle(
-  bundleSlug: string,
-  body: { version?: string; release_notes: string },
-): Promise<{ release: PackageRelease }> {
-  return apiFetch(`/packages/bundles/${encodeURIComponent(bundleSlug)}/publish`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).then((r) => json<{ release: PackageRelease }>(r))
-}
-
 export function patchRelease(
   bundleSlug: string,
   body: Partial<Pick<PackageRelease, 'state' | 'version' | 'release_notes'>>,
