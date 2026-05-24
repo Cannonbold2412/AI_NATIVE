@@ -27,6 +27,7 @@ from app.models.events import RecordedEvent
 from app.policy.bundle import get_policy_bundle
 from app.policy.timing import resolve_event_timing
 from app.recorder.visual import save_action_images
+from app.storage import snapshots as snapshot_store
 
 
 _URL_DYNAMIC_SEG = re.compile(r"^(?:[0-9]+|[0-9a-f]{8,}|[A-Za-z0-9_-]{16,})$")
@@ -290,6 +291,10 @@ class RecordingSession:
     auth_mode: bool = False  # skip bridge/events — only capture storage state
     capture_hover: bool = False
     current_url: str = ""
+    # Phase 2: dedup state for DOM snapshots. Maps short bridge signature -> snapshot_ref.
+    _snapshot_refs_by_sig: dict[str, str] = field(default_factory=dict)
+    _last_snapshot_hash: str = ""
+    _last_snapshot_ref: str = ""
 
     def _remember_current_url(self, url: str) -> None:
         value = str(url or "").strip()
@@ -557,6 +562,68 @@ class RecordingSession:
         self._rewrite_events_jsonl(session_dir)
         metrics.inc("events_captured")
 
+    def _capture_dom_snapshot_sync(self, page: Any, dom_sig_short: str) -> dict[str, Any]:
+        """Capture (and dedupe) the full DOM + a11y tree for the current page.
+
+        Returns dict with keys: ref, dom_hash, dom_path, a11y_path. Empty on failure.
+        Skips capture if the short bridge signature matches the previous one (dedup).
+        """
+        if not settings.snapshot_dedup_enabled:
+            return {}
+        if page is None:
+            return {}
+        try:
+            if page.is_closed():
+                return {}
+        except Exception:  # noqa: BLE001
+            return {}
+
+        # Dedup fast path: same short signature as last action → reuse ref.
+        if dom_sig_short and dom_sig_short == getattr(self, "_last_dom_sig_short", ""):
+            return {
+                "ref": self._last_snapshot_ref,
+                "dom_hash": self._last_snapshot_hash,
+                "dom_path": snapshot_store.relative_blob_path(self.session_id, self._last_snapshot_hash, "html.gz") if self._last_snapshot_hash else None,
+                "a11y_path": snapshot_store.relative_blob_path(self.session_id, self._last_snapshot_hash, "a11y.json") if self._last_snapshot_hash else None,
+            }
+
+        # Capture full HTML.
+        try:
+            html = page.content()
+        except Exception as exc:  # noqa: BLE001
+            self.binding_errors.append(f"dom_snapshot_error: {exc!s}")
+            return {}
+
+        h, _ = snapshot_store.save_dom_snapshot(self.session_id, html or "")
+
+        # Capture a11y tree (best-effort, may be unavailable on some pages).
+        a11y_path_str: str | None = None
+        if settings.snapshot_capture_a11y:
+            try:
+                tree = page.accessibility.snapshot()
+                if isinstance(tree, dict):
+                    if snapshot_store.save_a11y_snapshot(self.session_id, tree, h):
+                        a11y_path_str = snapshot_store.relative_blob_path(self.session_id, h, "a11y.json")
+            except Exception as exc:  # noqa: BLE001
+                self.binding_errors.append(f"a11y_snapshot_error: {exc!s}")
+
+        # Assign ref (UUID) per unique hash so events can join back to a snapshot.
+        if h == self._last_snapshot_hash and self._last_snapshot_ref:
+            ref = self._last_snapshot_ref
+        else:
+            ref = snapshot_store.new_snapshot_ref()
+        self._last_snapshot_hash = h
+        self._last_snapshot_ref = ref
+        if dom_sig_short:
+            self._last_dom_sig_short = dom_sig_short  # type: ignore[attr-defined]
+
+        return {
+            "ref": ref,
+            "dom_hash": h,
+            "dom_path": snapshot_store.relative_blob_path(self.session_id, h, "html.gz"),
+            "a11y_path": a11y_path_str,
+        }
+
     def _finalize_payload_sync(self, page, session_dir: Path, payload: dict[str, Any]) -> RecordedEvent:
         self._seq += 1
         seq = self._seq
@@ -592,6 +659,15 @@ class RecordingSession:
             self.binding_errors.append(f"visual_capture_error:{action_name}: {exc!s}")
         pol = get_policy_bundle().data
         timing = resolve_event_timing(action_name, pol)
+
+        # Phase 2: capture full DOM + a11y snapshot (deduped by hash).
+        dom_sig_short = str(payload.get("dom_signature_short") or "")
+        snapshot_info: dict[str, Any] = {}
+        try:
+            snapshot_info = self._capture_dom_snapshot_sync(page, dom_sig_short)
+        except Exception as exc:  # noqa: BLE001
+            self.binding_errors.append(f"snapshot_capture_error:{action_name}: {exc!s}")
+
         body = {
             "action": action,
             "target": payload["target"],
@@ -611,6 +687,15 @@ class RecordingSession:
             "timing": timing,
             "extras": {"sequence": seq, "session_id": self.session_id},
             "frame": payload.get("frame") if isinstance(payload.get("frame"), dict) else {},
+            # Phase 2 signals.
+            "ancestors": payload.get("ancestors") or [],
+            "surrounding_text": str(payload.get("surrounding_text") or ""),
+            "snapshot": {
+                "ref": str(snapshot_info.get("ref") or ""),
+                "dom_hash": str(snapshot_info.get("dom_hash") or ""),
+                "dom_path": snapshot_info.get("dom_path"),
+                "a11y_path": snapshot_info.get("a11y_path"),
+            },
         }
         return RecordedEvent.model_validate(body)
 
@@ -637,6 +722,10 @@ class RecordingSession:
             "visual_placeholder": {"bbox": {"x": 0, "y": 0, "w": 0, "h": 0}, "viewport": "", "scroll_position": "0,0"},
             "page": {"url": page_url, "title": ""},
             "state_change": {"before": "", "after": ""},
+            # Phase 2 defaults (synthetic events have no bridge signals).
+            "ancestors": [],
+            "surrounding_text": "",
+            "dom_signature_short": "",
         }
 
     def _enqueue_synthetic(self, kind: str, value_str: str) -> None:

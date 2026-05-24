@@ -193,7 +193,37 @@ function enrichStepsWithRecovery(steps, recovery) {
 // ─── Step executor ────────────────────────────────────────────────────────────
 
 function _sel(step, inputs) {
+  // Tier 1: LLM-compiled selectors (Phase 3) are tried first when present.
+  const compiled = Array.isArray(step.compiled_selectors) ? step.compiled_selectors : [];
+  for (const candidate of compiled) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return interpolate(candidate, inputs);
+    }
+  }
   return interpolate(step.selector || step.css_selector || (step.target && step.target.css) || "", inputs);
+}
+
+// Tier 1 fallback: try each compiled selector individually before tier 2 / recovery.
+function _compiledFallbackList(step, inputs) {
+  const compiled = Array.isArray(step.compiled_selectors) ? step.compiled_selectors : [];
+  return compiled
+    .filter(s => typeof s === "string" && s.trim())
+    .map(s => interpolate(s, inputs));
+}
+
+// Tier 2: build a11y-based locators from the element fingerprint when role+name are known.
+function _a11ySelectors(step) {
+  const fp = step.element_fingerprint || {};
+  const role = (fp.role || "").trim();
+  const name = (fp.aria_label || fp.name || fp.label_text || fp.inner_text || "").trim();
+  const out = [];
+  if (role && name) {
+    out.push(`role=${role}[name=${JSON.stringify(name)}]`);
+  }
+  if (name) {
+    out.push(`text=${JSON.stringify(name.slice(0, 80))}`);
+  }
+  return out;
 }
 
 const _HANDLERS = {
@@ -393,24 +423,61 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
     let primaryErr = null;
     try {
       await executeStep(page, step, inputs);
+      t.emit("tier_ok", { si: i, tier: "tier1_compiled" });
       continue;
     } catch (e) { primaryErr = e; }
 
     let recovered = false;
 
-    // L1: Transient retry
-    t.emit("rec_start", { si: i, l: 1, sc: "selector_retry" });
-    try {
-      await page.waitForTimeout(1500);
-      if (primarySel && await tryLocator(page, primarySel, 3500, step, inputs)) {
-        await executeStep(page, step, inputs);
-        recovered = true;
-        recoveredSteps++;
-        appendRecoveryEvent({ event: "transient_recovered", slug, step_index: i });
-        t.emit("rec_ok", { si: i, l: 1, sc: "selector_retry" });
+    // Tier 1: compiled selectors (Phase 3) — try each ranked LLM-generated selector.
+    // executeStep already used compiled_selectors[0] via _sel(); here we cycle through
+    // the remaining ranked alternatives before any retry/recovery.
+    const compiledList = _compiledFallbackList(step, inputs);
+    for (const cand of compiledList.slice(1)) {
+      if (await tryLocator(page, cand, 2500, step, inputs)) {
+        try {
+          await executeStep(page, { ...step, selector: cand }, inputs);
+          recovered = true;
+          recoveredSteps++;
+          appendRecoveryEvent({ event: "tier1_compiled_alt", slug, step_index: i, recovery_selector: cand });
+          t.emit("tier_ok", { si: i, tier: "tier1_compiled", sel: cand });
+          break;
+        } catch (_) {}
       }
-    } catch (_) {}
-    if (!recovered) t.emit("rec_fail", { si: i, l: 1, sc: "selector_retry" });
+    }
+
+    // Tier 2: a11y-based locator (role + name from element_fingerprint) — deterministic.
+    if (!recovered) {
+      const a11ySels = _a11ySelectors(step);
+      for (const cand of a11ySels) {
+        if (await tryLocator(page, cand, 2500, step, inputs)) {
+          try {
+            await executeStep(page, { ...step, selector: cand }, inputs);
+            recovered = true;
+            recoveredSteps++;
+            appendRecoveryEvent({ event: "tier2_a11y", slug, step_index: i, recovery_selector: cand });
+            t.emit("tier_ok", { si: i, tier: "tier2_a11y", sel: cand });
+            break;
+          } catch (_) {}
+        }
+      }
+    }
+
+    // L1: Transient retry — recovery, not a tier (still part of deterministic L1 layer).
+    if (!recovered) {
+      t.emit("rec_start", { si: i, l: 1, sc: "selector_retry" });
+      try {
+        await page.waitForTimeout(1500);
+        if (primarySel && await tryLocator(page, primarySel, 3500, step, inputs)) {
+          await executeStep(page, step, inputs);
+          recovered = true;
+          recoveredSteps++;
+          appendRecoveryEvent({ event: "transient_recovered", slug, step_index: i });
+          t.emit("rec_ok", { si: i, l: 1, sc: "selector_retry" });
+        }
+      } catch (_) {}
+      if (!recovered) t.emit("rec_fail", { si: i, l: 1, sc: "selector_retry" });
+    }
 
     // L2: Predefined alternatives
     if (!recovered) {

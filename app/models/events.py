@@ -103,6 +103,24 @@ class FrameContext(BaseModel):
     chain: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class Ancestor(BaseModel):
+    """One ancestor element in the chain up to <body>."""
+
+    tag: str
+    id: str | None = None
+    classes: list[str] = Field(default_factory=list)
+    outer_html: str = ""  # truncated by bridge.js to keep payloads bounded
+
+
+class SnapshotRef(BaseModel):
+    """Pointer to a deduplicated DOM+a11y blob captured at compile time."""
+
+    ref: str = ""  # uuid assigned by session.py on first capture of this hash
+    dom_hash: str = ""  # sha256 of full HTML
+    a11y_path: str | None = None  # relative blob path
+    dom_path: str | None = None   # relative blob path
+
+
 class RecordedEvent(BaseModel):
     """Single user action with all attached signals (paths, not bytes)."""
 
@@ -118,3 +136,10 @@ class RecordedEvent(BaseModel):
     timing: Timing
     extras: dict[str, Any] = Field(default_factory=dict)
     frame: FrameContext = Field(default_factory=FrameContext)
+
+    # Phase 2: compile-time signals for LLM-based selector generation.
+    # All optional so existing recordings stay valid; populated when bridge.js
+    # and session.py capture them.
+    ancestors: list[Ancestor] = Field(default_factory=list)
+    surrounding_text: str = ""
+    snapshot: SnapshotRef = Field(default_factory=SnapshotRef)

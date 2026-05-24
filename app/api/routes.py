@@ -315,5 +315,33 @@ def get_metrics() -> dict[str, Any]:
                 "detail": "Compile success rate dropped; consider re-recording or 1-click fixes.",
             }
         )
+
+    # Phase 4: tiered resolution metrics for the redesign dashboard.
+    try:
+        from app.execution.element_resolver import (  # noqa: PLC0415
+            escalation_queue,
+            promotion_state,
+            tier_metrics,
+        )
+        snap["tier_metrics"] = tier_metrics.snapshot()
+        snap["selector_promotion"] = promotion_state.snapshot()
+        snap["escalations_pending"] = len(escalation_queue.pending())
+        # Alert when recovery rate (tier 3 + 4) exceeds 5%: signal to recompile workflows.
+        rr = snap["tier_metrics"].get("recovery_rate", 0.0)
+        if rr > 0.05 and snap["tier_metrics"].get("total", 0) > 20:
+            alerts.append({
+                "type": "recovery_rate_high",
+                "detail": f"Recovery rate {rr:.1%} exceeds 5% — consider recompiling workflows.",
+            })
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Phase 1: selector cache stats.
+    try:
+        from app.storage import selector_cache  # noqa: PLC0415
+        snap["selector_cache"] = selector_cache.hit_rate()
+    except Exception:  # noqa: BLE001
+        pass
+
     snap["alerts"] = alerts
     return snap

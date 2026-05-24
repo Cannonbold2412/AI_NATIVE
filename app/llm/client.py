@@ -104,6 +104,8 @@ def _legacy_payload(task: str, payload: dict[str, Any]) -> bytes:
 def _resolved_model(task: str, payload: dict[str, Any]) -> Any:
     if _is_vision_task(task):
         return payload.get("model") or settings.llm_vision_model
+    if task in {"selector_generation", "recovery_resolve", "workflow_intent"}:
+        return payload.get("model") or settings.llm_selector_model or settings.llm_text_model
     return payload.get("model") or settings.llm_text_model
 
 
@@ -154,6 +156,50 @@ def _openai_messages_for_task(task: str, payload: dict[str, Any]) -> list[dict[s
                 "content": "Return strict JSON with key: intent (single snake_case string).",
             },
             {"role": "user", "content": intent_prompt or json.dumps(data or {}, ensure_ascii=False)},
+        ]
+    if task == "selector_generation":
+        # Compile-time: generate N selector candidates for one element.
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You generate Playwright CSS selectors. Return strict JSON with key "
+                    "'candidates' (array of objects with keys: selector (CSS string), rank (1=best), "
+                    "rationale (short string), intent (snake_case action description)). "
+                    "Prioritize: data-testid > aria-label > name > placeholder > text content > position. "
+                    "Avoid: hashed classes, auto-IDs, fragile nth-of-type chains, XPath. "
+                    "Each selector MUST be valid Playwright CSS. No markdown, no extra keys."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or payload, ensure_ascii=False)},
+        ]
+    if task == "recovery_resolve":
+        # Runtime tier 3: locate one element on current DOM given semantic description.
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You locate one element on a current DOM given a semantic description "
+                    "and the original element's bbox/ancestors. Return strict JSON with keys: "
+                    "selector (Playwright CSS string, single best match), "
+                    "confidence (0 to 1 number), reason (short string)."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or payload, ensure_ascii=False)},
+        ]
+    if task == "workflow_intent":
+        # Compile-time: single call to infer high-level workflow goal + per-step intents.
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You build a workflow intent graph from a sequence of recorded actions. "
+                    "Return strict JSON with keys: goal (one sentence), steps (array of "
+                    "{index, intent, verification_anchor}), decision_points (array of "
+                    "{step_index, description}), expected_end_state (object with brief description)."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or payload, ensure_ascii=False)},
         ]
     if task == "anchor_vision":
         image_b64 = str(payload.get("image_base64") or "")
