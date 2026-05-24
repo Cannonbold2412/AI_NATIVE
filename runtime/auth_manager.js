@@ -5,7 +5,7 @@ const path   = require("path");
 const https  = require("https");
 
 const SERVICE    = "conxa";
-const CONXA_API  = process.env.CONXA_API_URL || "https://api.conxa.io";
+const CONXA_API  = process.env.CONXA_API_URL || "https://api.conxa.in";
 
 // keytar loaded at runtime (native .node file alongside exe or regular require)
 let _keytar = null;
@@ -105,7 +105,7 @@ function _doRefresh(company, oldToken) {
 
 function getAuthChallengeUrl(company) {
   const nonce = crypto.randomBytes(16).toString("hex");
-  const url   = `https://app.conxa.io/auth/cli?company=${encodeURIComponent(company)}&nonce=${nonce}`;
+  const url   = `https://app.conxa.in/auth/cli?company=${encodeURIComponent(company)}&nonce=${nonce}`;
   return { url, nonce };
 }
 

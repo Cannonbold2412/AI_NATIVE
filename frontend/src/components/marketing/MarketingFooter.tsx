@@ -32,7 +32,7 @@ export function MarketingFooter() {
             </div>
             <div className="flex flex-col gap-3">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6b7280]">Company</p>
-              <Link href="mailto:founders@conxa.ai" className="text-sm text-[#9ba3af] hover:text-white">Contact</Link>
+              <Link href="mailto:founders@conxa.in" className="text-sm text-[#9ba3af] hover:text-white">Contact</Link>
               <Link href="/sign-in" className="text-sm text-[#9ba3af] hover:text-white">Sign in</Link>
             </div>
           </div>
