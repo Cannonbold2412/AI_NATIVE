@@ -12,7 +12,7 @@ Backend and worker:
 - `render.yaml` defines `ai-native-api` and `ai-native-worker`.
 - The API exposes legacy local routes plus `/api/v1/*`.
 - Set `SKILL_AUTH_REQUIRED=true`, Clerk issuer/JWKS values, allowed origins, DB, Redis, Blob, Stripe, app URL, and LLM secrets in Render/Vercel environment settings.
-- Product endpoints include `/api/v1/me`, `/workspaces/current`, `/dashboard`, `/usage`, `/jobs`, `/billing/*`, `/packages/bundles/{bundle}/publish`, `/packages/bundles/{bundle}/release`, and `/audit-events`.
+- Product endpoints include `/api/v1/me`, `/workspaces/current`, `/dashboard`, `/usage`, `/jobs`, `/billing/*`, `/packages/bundles/{bundle}/release`, and `/audit-events`.
 
 Frontend product shell:
 - `/` is the dashboard.

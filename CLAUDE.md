@@ -65,6 +65,14 @@ Example:
 
 ---
 
+## Token & File Constraints
+- DO NOT read files larger than 25KB completely into context.
+- When inspecting large files, logs, or databases, ALWAYS use `offset` and `limit` parameters to look at relevant chunks.
+- Prioritize using terminal utilities (like `grep`, `awk`, or `tail`) to locate lines before attempting to read a file chunk.
+
+---
+
+
 # Conxa: AI-Driven Workflow Automation Platform
 
 ## Overview
