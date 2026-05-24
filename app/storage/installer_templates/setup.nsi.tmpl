@@ -16,7 +16,7 @@
 !define INSTALL_DIR    "$PROGRAMFILES64\Conxa"
 !define RUNTIME_DIR    "${INSTALL_DIR}\runtime"
 !define CHROMIUM_DIR   "${INSTALL_DIR}\chromium"
-!define SKILL_DIR      "${INSTALL_DIR}\skill-packs\${COMPANY_SLUG}"
+!define SKILL_DIR      "${INSTALL_DIR}\plugins\${COMPANY_SLUG}"
 !define CLAUDE_CONFIG       "$APPDATA\Claude\claude_desktop_config.json"
 !define CLAUDE_CODE_CONFIG  "$PROFILE\.claude.json"
 !define UNINSTALL_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\Conxa-${COMPANY_SLUG}"
@@ -66,7 +66,7 @@ SectionEnd
 Section "SkillPacks" SEC_SKILLS
   SetOutPath "${SKILL_DIR}"
   ; Copy company skill pack — preserves other companies' directories
-  File /r "${STAGING_DIR}\skill-packs\${COMPANY_SLUG}\*.*"
+  File /r "${STAGING_DIR}\plugins\${COMPANY_SLUG}\*.*"
 SectionEnd
 
 ; ── Deep-link registration ─────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ Section "MCPRegistration" SEC_MCP
   ; Try Claude Desktop LOCALAPPDATA path
   IfFileExists "$LOCALAPPDATA\Claude\claude_desktop_config.json" mcp_localappdata
   ; Neither Claude Code nor Claude Desktop found
-  MessageBox MB_OK "Claude not found.$\n$\nInstall Claude from https://claude.ai/download and then re-run this installer to enable ${COMPANY_NAME} skills.$\n$\nYou can also manually add Conxa to your .claude.json or claude_desktop_config.json."
+  MessageBox MB_OK "Claude not found.$\n$\nInstall Claude from https://claude.in/download and then re-run this installer to enable ${COMPANY_NAME} skills.$\n$\nYou can also manually add Conxa to your .claude.json or claude_desktop_config.json."
   Goto mcp_skip
   mcp_localappdata:
   StrCpy $0 "$LOCALAPPDATA\Claude\claude_desktop_config.json"
@@ -113,11 +113,11 @@ Section "Uninstall"
   ; Remove this company's skill packs only
   RMDir /r "${SKILL_DIR}"
   ; Remove deep-link registration (shared — only remove if no other skill packs remain)
-  IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_deeplink_removal
+  IfFileExists "${INSTALL_DIR}\plugins\*.*" skip_deeplink_removal
   DeleteRegKey HKCR "conxa-runtime"
   skip_deeplink_removal:
   ; Remove MCP registration only if no other companies remain
-  IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_mcp_removal
+  IfFileExists "${INSTALL_DIR}\plugins\*.*" skip_mcp_removal
   IfFileExists "${CLAUDE_CODE_CONFIG}" do_unregister_code
   IfFileExists "${CLAUDE_CONFIG}" do_unregister_mcp
   IfFileExists "$LOCALAPPDATA\Claude\claude_desktop_config.json" do_unregister_localappdata
@@ -132,7 +132,7 @@ Section "Uninstall"
   ExecWait '"${RUNTIME_DIR}\runtime.exe" "--unregister-mcp" "${CLAUDE_CONFIG}"'
   skip_mcp_removal:
   ; Remove runtime only if no skill packs remain
-  IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_runtime_removal
+  IfFileExists "${INSTALL_DIR}\plugins\*.*" skip_runtime_removal
   RMDir /r "${RUNTIME_DIR}"
   RMDir /r "${CHROMIUM_DIR}"
   RMDir /r "${INSTALL_DIR}\cache"
@@ -148,6 +148,6 @@ Section -Post
   WriteRegStr HKLM "${UNINSTALL_KEY}" "UninstallString" "${INSTALL_DIR}\uninstall-${COMPANY_SLUG}.exe"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayVersion"  "${VERSION}"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher"       "Conxa"
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "URLInfoAbout"    "https://conxa.io"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "URLInfoAbout"    "https://conxa.in"
   WriteUninstaller "${INSTALL_DIR}\uninstall-${COMPANY_SLUG}.exe"
 SectionEnd
