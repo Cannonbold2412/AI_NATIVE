@@ -80,17 +80,9 @@ class Settings(BaseSettings):
     stripe_price_id: str = ""
     app_url: str = "http://localhost:5173"
 
-    # GitHub OAuth integration. These intentionally do not use the SKILL_ prefix.
-    github_oauth_client_id: str = Field(default="", validation_alias="GITHUB_OAUTH_CLIENT_ID")
-    github_oauth_client_secret: str = Field(default="", validation_alias="GITHUB_OAUTH_CLIENT_SECRET")
-    github_oauth_redirect_uri: str = Field(
-        default="http://localhost:8000/api/v1/integrations/github/callback",
-        validation_alias="GITHUB_OAUTH_REDIRECT_URI",
-    )
-    github_oauth_frontend_origin: str = Field(
-        default="http://localhost:3000",
-        validation_alias="GITHUB_OAUTH_FRONTEND_ORIGIN",
-    )
+    # Tracking HMAC secret for signing runtime telemetry tokens.
+    # Set SKILL_TRACKING_HMAC_SECRET in production to enable company-scoped tracking.
+    tracking_hmac_secret: str = ""
 
     # Razorpay payment gateway. These intentionally do not use the SKILL_ prefix.
     razorpay_key_id: str = Field(default="", validation_alias="RAZORPAY_KEY_ID")

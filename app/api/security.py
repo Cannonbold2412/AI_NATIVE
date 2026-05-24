@@ -17,8 +17,10 @@ PUBLIC_PATHS = {
     "/health",
     "/api/v1/health",
     "/api/v1/webhooks/stripe",
-    "/api/v1/integrations/github/callback",
 }
+
+# Runtime telemetry ingestion uses its own package token; tracking reads stay behind Clerk.
+PUBLIC_TRACKING_EVENT_PREFIXES = ("/api/tracking/", "/api/v1/tracking/")
 
 
 def _request_id(request: Request) -> str:
@@ -26,9 +28,13 @@ def _request_id(request: Request) -> str:
     return rid[:128] if rid else secrets.token_hex(12)
 
 
-def _is_public_path(path: str) -> bool:
+def _is_public_path(path: str, method: str = "GET") -> bool:
     normalized = path.rstrip("/") or "/"
-    return normalized in PUBLIC_PATHS
+    if normalized in PUBLIC_PATHS:
+        return True
+    if method.upper() == "POST" and normalized.endswith("/events"):
+        return any(normalized.startswith(p) for p in PUBLIC_TRACKING_EVENT_PREFIXES)
+    return False
 
 
 def _bearer_token(request: Request) -> str:
@@ -92,7 +98,7 @@ class ProductionRequestMiddleware(BaseHTTPMiddleware):
                     headers={"x-request-id": rid},
                 )
 
-        is_public = _is_public_path(request.url.path)
+        is_public = _is_public_path(request.url.path, request.method)
         if settings.auth_required and not is_public:
             try:
                 claims = verify_clerk_jwt(_bearer_token(request))
