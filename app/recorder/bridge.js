@@ -579,14 +579,20 @@
     const elemBot = rect.bottom + r;
     const elemLeft = rect.left - r;
     const elemRight = rect.right + r;
+    const elemCenterX = (rect.left + rect.right) / 2;
+    const elemCenterY = (rect.top + rect.bottom) / 2;
+    const maxDist = 500;
     // Walk text nodes in the document; cheap heuristic for "near" via getBoundingClientRect of parent.
     const out = [];
     const totalCharBudget = 1500;
+    const maxNodes = 2000;
     let used = 0;
+    let nodeCount = 0;
     try {
       const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT, null);
       let node;
-      while ((node = walker.nextNode()) && used < totalCharBudget) {
+      while ((node = walker.nextNode()) && used < totalCharBudget && nodeCount < maxNodes) {
+        nodeCount++;
         const text = (node.nodeValue || "").trim();
         if (text.length < 2) continue;
         const parent = node.parentElement;
@@ -597,6 +603,10 @@
         if (!pr || (pr.width === 0 && pr.height === 0)) continue;
         if (pr.bottom < elemTop || pr.top > elemBot) continue;
         if (pr.right < elemLeft || pr.left > elemRight) continue;
+        const prCenterX = (pr.left + pr.right) / 2;
+        const prCenterY = (pr.top + pr.bottom) / 2;
+        const dist = Math.sqrt(Math.pow(prCenterX - elemCenterX, 2) + Math.pow(prCenterY - elemCenterY, 2));
+        if (dist > maxDist) continue;
         const chunk = text.slice(0, Math.min(200, totalCharBudget - used));
         out.push(chunk);
         used += chunk.length + 1;

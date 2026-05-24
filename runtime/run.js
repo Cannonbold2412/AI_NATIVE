@@ -212,18 +212,18 @@ function _compiledFallbackList(step, inputs) {
 }
 
 // Tier 2: build a11y-based locators from the element fingerprint when role+name are known.
-function _a11ySelectors(step) {
+function _a11yLocate(page, step) {
   const fp = step.element_fingerprint || {};
   const role = (fp.role || "").trim();
   const name = (fp.aria_label || fp.name || fp.label_text || fp.inner_text || "").trim();
-  const out = [];
+  const candidates = [];
   if (role && name) {
-    out.push(`role=${role}[name=${JSON.stringify(name)}]`);
+    candidates.push(page.getByRole(role, { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }));
   }
   if (name) {
-    out.push(`text=${JSON.stringify(name.slice(0, 80))}`);
+    candidates.push(page.getByText(name.slice(0, 80), { exact: false }));
   }
-  return out;
+  return candidates;
 }
 
 const _HANDLERS = {
@@ -448,18 +448,19 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
 
     // Tier 2: a11y-based locator (role + name from element_fingerprint) — deterministic.
     if (!recovered) {
-      const a11ySels = _a11ySelectors(step);
-      for (const cand of a11ySels) {
-        if (await tryLocator(page, cand, 2500, step, inputs)) {
-          try {
-            await executeStep(page, { ...step, selector: cand }, inputs);
-            recovered = true;
-            recoveredSteps++;
-            appendRecoveryEvent({ event: "tier2_a11y", slug, step_index: i, recovery_selector: cand });
-            t.emit("tier_ok", { si: i, tier: "tier2_a11y", sel: cand });
-            break;
-          } catch (_) {}
-        }
+      const a11yLocators = _a11yLocate(page, step);
+      for (let idx = 0; idx < a11yLocators.length; idx++) {
+        const locator = a11yLocators[idx];
+        try {
+          await locator.first().waitFor({ state: "visible", timeout: 2500 });
+          await executeStep(page, step, inputs);
+          recovered = true;
+          recoveredSteps++;
+          const locStr = idx === 0 ? "a11y:role" : "a11y:text";
+          appendRecoveryEvent({ event: "tier2_a11y", slug, step_index: i, recovery_method: locStr });
+          t.emit("tier_ok", { si: i, tier: "tier2_a11y", sel: locStr });
+          break;
+        } catch (_) {}
       }
     }
 
