@@ -1,7 +1,7 @@
 """High-level LLM abstraction for selector generation + runtime recovery.
 
 Wraps app.llm.client.call_llm with task-specific helpers.
-Endpoint = `settings.llm_text_endpoint`. Model = `arg → settings.llm_text_model`.
+call_llm internally uses the multi-provider router (if available) or falls back to single-endpoint config.
 """
 
 from __future__ import annotations

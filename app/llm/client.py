@@ -503,6 +503,20 @@ def call_llm(
     *,
     error_detail: list[str] | None = None,
 ) -> dict[str, Any] | None:
+    # Try multi-provider router first
+    try:
+        from app.llm.router import get_router
+        router = get_router()
+        if router.pool:  # Only use router if it has providers
+            is_vision = task in {"anchor_vision", "vision_reasoning"}
+            if is_vision:
+                return router.route_vision(task, payload, timeout_ms, error_detail=error_detail)
+            else:
+                return router.route_text(task, payload, timeout_ms, error_detail=error_detail)
+    except Exception:  # Graceful fallback on import or router error
+        pass
+
+    # Fallback to single-endpoint logic
     endpoint_raw, keys = _selected_endpoint_and_keys(task)
     if not endpoint_raw:
         return None
