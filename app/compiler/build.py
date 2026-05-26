@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -399,6 +400,23 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
             )
             selector_confidence = 0.0
 
+    confidence_breakdown: dict[str, float] | None = None
+    selector_rationale = ""
+    selector_source = "heuristic"
+
+    # If heuristic produced a low-confidence or bare-tag selector, try LLM-native generation
+    _primary_is_bare_tag = bool(re.fullmatch(r"[a-zA-Z][a-zA-Z0-9]*", primary.strip()))
+    if (selector_confidence < 0.60 or _primary_is_bare_tag) and settings.llm_enabled:
+        llm_result = _try_llm_native_selector(ev, target, semantic)
+        if llm_result is not None:
+            llm_selector, llm_confidence, llm_breakdown, llm_rationale = llm_result
+            if llm_selector and llm_confidence > selector_confidence:
+                primary = llm_selector
+                selector_confidence = llm_confidence
+                confidence_breakdown = llm_breakdown
+                selector_rationale = llm_rationale
+                selector_source = "llm_native"
+
     fallback_raw = list(stable.get("fallback_selectors") or []) + ranked_extra
     fallback = [s for s in fallback_raw if selector_passes_filters(str(s)) and str(s) != primary]
     input_type = semantic.get("input_type")
@@ -407,13 +425,57 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
         target_type = "button"
     elif target_type not in {"button", "input"}:
         target_type = "input" if target_type in {"textarea", "select"} else target_type
-    return {
+    result = {
         "primary_selector": primary,
         "fallback_selectors": fallback,
         "role": str(semantic.get("role") or target.get("role") or ""),
         "type": target_type or "input",
         "selector_confidence": selector_confidence,
+        "selector_source": selector_source,
     }
+    if confidence_breakdown:
+        result["confidence_breakdown"] = confidence_breakdown
+    if selector_rationale:
+        result["selector_rationale"] = selector_rationale
+    return result
+
+
+def _try_llm_native_selector(
+    ev: dict[str, Any],
+    target: dict[str, Any],
+    semantic: dict[str, Any],
+) -> tuple[str, float, dict[str, float], str] | None:
+    """Attempt LLM-native selector generation. Returns (selector, confidence, breakdown, rationale) or None."""
+    try:
+        action = ev.get("action") or {}
+        action_type = str(action.get("action") or "")
+        ancestors = ev.get("ancestors") or []
+        surrounding = str(ev.get("surrounding_text") or "")
+        visual = ev.get("visual") or {}
+        bbox = visual.get("bbox") or {}
+
+        # Build a DOM snippet from ancestors + target
+        dom_parts = []
+        for anc in ancestors[:3]:
+            if isinstance(anc, dict):
+                outer = str(anc.get("outer_html") or "")[:2000]
+                if outer:
+                    dom_parts.append(outer)
+        dom_snippet = "\n".join(dom_parts) or json.dumps(target, ensure_ascii=False)
+
+        sel, conf, breakdown, rationale = generate_selector_with_objective_confidence(
+            dom_snippet=dom_snippet,
+            element_bbox=bbox if isinstance(bbox, dict) else {},
+            element_ancestors=ancestors if isinstance(ancestors, list) else [],
+            surrounding_text=surrounding,
+            action_type=action_type,
+            target_dom=target,
+            candidates_wanted=1,
+            num_samples=3,  # Reduced from 5 to keep compile times reasonable
+        )
+        return sel, conf, breakdown, rationale
+    except Exception:
+        return None
 
 
 def _build_signals(
@@ -624,6 +686,82 @@ def _build_step(
     )
 
 
+def _build_compile_report(steps: list[SkillStep]) -> dict[str, Any]:
+    """Aggregate per-step selector confidence + LLM router stats into a single report.
+
+    Status:
+    - "ok" if all confidence >= 0.90 and no warnings
+    - "review_needed" if any confidence 0.75–0.89
+    - "failed" if any confidence < 0.75
+    """
+    step_reports: list[dict[str, Any]] = []
+    min_confidence = 1.0
+    has_warnings = False
+
+    for i, step in enumerate(steps):
+        target = step.target or {}
+        selector = str(target.get("primary_selector") or "")
+        confidence = float(target.get("selector_confidence") or 0.0)
+        breakdown = target.get("confidence_breakdown") or {}
+        source = str(target.get("selector_source") or "heuristic")
+        rationale = str(target.get("selector_rationale") or "")
+
+        warnings: list[dict[str, str]] = []
+        if confidence < 0.50:
+            warnings.append({
+                "code": "low_selector_confidence",
+                "message": f"Selector confidence {confidence:.2f} is below 0.50 — runtime may need to fall back to vision recovery",
+            })
+            has_warnings = True
+
+        if not selector:
+            warnings.append({
+                "code": "empty_selector",
+                "message": "No selector could be generated — step may fail at runtime",
+            })
+            has_warnings = True
+
+        if confidence < min_confidence:
+            min_confidence = confidence
+
+        step_reports.append({
+            "index": i,
+            "intent": step.intent,
+            "selector": selector,
+            "confidence": round(confidence, 3),
+            "confidence_breakdown": breakdown,
+            "source": source,
+            "reasoning": rationale,
+            "input_binding": step.input_binding,
+            "warnings": warnings,
+        })
+
+    if min_confidence >= 0.90 and not has_warnings:
+        status = "ok"
+    elif min_confidence >= 0.75:
+        status = "review_needed"
+    else:
+        status = "failed"
+
+    router_stats: dict[str, Any] = {}
+    try:
+        from app.llm.router import get_router
+        router = get_router()
+        if router.pool:
+            router_stats = router.stats()
+    except Exception:
+        pass
+
+    return {
+        "status": status,
+        "steps_total": len(steps),
+        "steps_with_warnings": sum(1 for sr in step_reports if sr["warnings"]),
+        "min_confidence": round(min_confidence, 3),
+        "steps": step_reports,
+        "llm_router_stats": router_stats,
+    }
+
+
 def _deduplicate_input_bindings(steps: list[SkillStep]) -> None:
     """Ensure no two type/keyboard_shortcut steps share the same input_binding name.
 
@@ -673,6 +811,8 @@ def compile_skill_package(
 
     _deduplicate_input_bindings(steps)
 
+    compile_report = _build_compile_report(steps)
+
     now = datetime.now(timezone.utc).isoformat()
     structural_fp = _build_structural_fingerprint(steps)
     meta = SkillMeta(
@@ -700,6 +840,7 @@ def compile_skill_package(
             "timeout_ms": settings.llm_pack_timeout_ms,
         },
         intent_graph=intent_graph,
+        compile_report=compile_report,
     )
 
 

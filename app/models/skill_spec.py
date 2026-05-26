@@ -131,3 +131,6 @@ class SkillPackage(BaseModel):
 
     # Phase 3: workflow-level semantic understanding (one LLM call per workflow).
     intent_graph: WorkflowIntentGraph = Field(default_factory=WorkflowIntentGraph)
+
+    # Per-step confidence report + LLM router statistics from compile.
+    compile_report: dict[str, Any] = Field(default_factory=dict)
