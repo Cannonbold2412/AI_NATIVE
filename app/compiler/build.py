@@ -10,6 +10,7 @@ from typing import Any
 from app.compiler.action_policy import no_recovery_block, recovery_enabled_for_action
 from app.compiler.decision_layer import rank_merged_anchors
 from app.compiler.destructive_semantics import destructive_compiler_step
+from app.compiler.llm_selector_generator_v2 import generate_selector_with_objective_confidence
 from app.compiler.recovery_policy import (
     default_recovery_block,
     merge_recovery_strategies_for_wait_shape,
