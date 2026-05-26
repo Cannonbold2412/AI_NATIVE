@@ -263,6 +263,9 @@ class RecordingSession:
     data_root: Path = field(default_factory=lambda: settings.data_dir)
     storage_state_path: str = ""  # if set, browser context is restored from this Playwright storage_state file
     storage_state_autosave_path: str = ""  # if set, periodically persist context storage_state while open
+    record_video: bool = True  # if true, capture screen recording via Playwright record_video_dir for frame extraction
+    _video_session_start: float = 0.0  # monotonic time when recording started; events.timestamp_ms is relative to this
+    _video_session_start_wall_ms: int = 0  # wall-clock ms-since-epoch at video start (for ISO timestamp → relative ms conversion)
     _playwright: Any = None
     _browser: Any = None
     _context: Any = None
@@ -338,6 +341,52 @@ class RecordingSession:
             self._playwright.stop()
             self._playwright = None
         self._page = None
+        self._finalize_video_recording_sync()
+
+    def _finalize_video_recording_sync(self) -> None:
+        """Rename Playwright's auto-generated .webm to recording.webm + extract frames."""
+        if not self.record_video:
+            return
+        session_dir = self.data_root / "sessions" / self.session_id
+        if not session_dir.is_dir():
+            return
+        webm_files = sorted(
+            (p for p in session_dir.iterdir() if p.suffix == ".webm" and p.name != "recording.webm"),
+            key=lambda p: p.stat().st_mtime,
+        )
+        if not webm_files:
+            return
+        latest = webm_files[-1]
+        target = session_dir / "recording.webm"
+        try:
+            latest.rename(target)
+        except OSError:
+            return
+        try:
+            from app.recorder.frame_extractor import extract_frames_for_session
+            summary = extract_frames_for_session(session_dir)
+            if summary.get("error"):
+                self.binding_errors.append(f"frame_extraction_error: {summary['error']}")
+        except Exception as exc:  # noqa: BLE001
+            self.binding_errors.append(f"frame_extraction_failed: {exc!s}")
+
+    def _compute_event_timestamp_ms(self, action: dict[str, Any]) -> int | None:
+        """Convert ISO 8601 action.timestamp to ms offset from video start (None on parse error)."""
+        ts_iso = str((action or {}).get("timestamp") or "")
+        if not ts_iso:
+            return None
+        try:
+            from datetime import datetime, timezone
+            # Bridge.js produces e.g. "2025-02-15T14:32:10.123Z" — replace Z with +00:00 for fromisoformat
+            iso_clean = ts_iso.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(iso_clean)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            wall_ms = int(dt.timestamp() * 1000)
+            offset = wall_ms - self._video_session_start_wall_ms
+            return max(0, offset)
+        except (ValueError, TypeError):
+            return None
 
     def _autosave_storage_state_sync(self, *, force: bool = False) -> None:
         if not self.storage_state_autosave_path or self._context is None:
@@ -697,6 +746,9 @@ class RecordingSession:
         except Exception as exc:  # noqa: BLE001
             self.binding_errors.append(f"snapshot_capture_error:{action_name}: {exc!s}")
 
+        timestamp_ms: int | None = None
+        if self.record_video and self._video_session_start_wall_ms:
+            timestamp_ms = self._compute_event_timestamp_ms(action)
         body = {
             "action": action,
             "target": payload["target"],
@@ -710,6 +762,8 @@ class RecordingSession:
                 "bbox": bbox,
                 "viewport": vph.get("viewport") or "",
                 "scroll_position": vph.get("scroll_position") or "0,0",
+                "timestamp_ms": timestamp_ms,
+                "frames": {},
             },
             "page": payload["page"],
             "state_change": payload.get("state_change") or {"before": "", "after": ""},
@@ -841,7 +895,16 @@ class RecordingSession:
             ctx_kwargs: dict[str, Any] = {}
             if self.storage_state_path and Path(self.storage_state_path).is_file():
                 ctx_kwargs["storage_state"] = self.storage_state_path
+            if self.record_video and not self.auth_mode:
+                session_dir = self.data_root / "sessions" / self.session_id
+                session_dir.mkdir(parents=True, exist_ok=True)
+                ctx_kwargs["record_video_dir"] = str(session_dir)
+                ctx_kwargs["record_video_size"] = {"width": 1280, "height": 720}
             self._context = self._browser.new_context(**ctx_kwargs)
+            if self.record_video and not self.auth_mode:
+                import time as _time
+                self._video_session_start = _time.monotonic()
+                self._video_session_start_wall_ms = int(_time.time() * 1000)
             if not self.auth_mode:
                 self._bridge_script = _load_bridge_script(capture_hover=self.capture_hover)
                 self._context.expose_binding("__skillReport", self._binding_sink_sync)

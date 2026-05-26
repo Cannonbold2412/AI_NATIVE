@@ -80,6 +80,10 @@ class VisualFeatures(BaseModel):
     bbox: dict[str, int]
     viewport: str
     scroll_position: str
+    # Milliseconds since video recording started (None if no video recorded).
+    timestamp_ms: int | None = None
+    # Extracted video frames at T-500ms, T-100ms, T+100ms, T+500ms (relative paths).
+    frames: dict[str, str] = Field(default_factory=dict)
 
 
 class PageContext(BaseModel):
