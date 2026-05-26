@@ -1,0 +1,5175 @@
+{
+  "meta": {
+    "id": "skill_c3d7bd48-625b-47b5-9ae6-e976017891b2",
+    "version": 1,
+    "title": "Add a Person",
+    "created_at": "2026-05-26T20:42:38.613559+00:00",
+    "source_session_id": "c3d7bd48-625b-47b5-9ae6-e976017891b2",
+    "compiler_policy_version": "1.0.0",
+    "compiler_policy_hash": "7d35d298fe6b78b6",
+    "structural_fingerprint": {
+      "landmarks": [
+        {
+          "intent": "interact_contacts",
+          "primary_selector": "[aria-label=\"Contacts\"]",
+          "data_testid": "",
+          "aria_label": "Contacts",
+          "inner_text": "Contacts",
+          "tag": "a"
+        },
+        {
+          "intent": "activate_control_person",
+          "primary_selector": "text=\"Person\"",
+          "data_testid": "add-entity",
+          "aria_label": "",
+          "inner_text": "Person",
+          "tag": "button"
+        },
+        {
+          "intent": "focus_input",
+          "primary_selector": "label:has-text(\"Name\") + input",
+          "data_testid": "",
+          "aria_label": "",
+          "inner_text": "",
+          "tag": "input"
+        }
+      ],
+      "landmark_count": 3
+    }
+  },
+  "inputs": [],
+  "skills": [
+    {
+      "name": "recorded",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "interact_contacts",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "[aria-label=\"Contacts\"]",
+            "fallback_selectors": [
+              "label:has-text(\"Setup guide 3\") + a",
+              "label:has-text(\"Setup guide 3\") ~ a",
+              "text=\"Contacts\"",
+              "/html[1]/body[1]/div[1]/div[1]/nav[1]/ul[1]/li[3]/a[1]"
+            ],
+            "role": "link",
+            "type": "a",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "link",
+            "tag": "a",
+            "inner_text": "Contacts",
+            "aria_label": "Contacts",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Setup guide 3",
+            "data_testid": "",
+            "input_type": "",
+            "css_class_tokens": [
+              "fe-root-menu-item__link"
+            ],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Contacts 1 Activities Deals Leads Ins",
+              "li",
+              "Setup guide KN",
+              "Setup guide"
+            ],
+            "position_hint": {
+              "x_pct": 0.003,
+              "y_pct": 0.145
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "a",
+              "id": null,
+              "classes": [
+                "fe-root-menu-item__link"
+              ],
+              "inner_text": "Contacts",
+              "role": "link",
+              "aria_label": "Contacts",
+              "name": null,
+              "placeholder": null,
+              "label_text": "Setup guide 3"
+            },
+            "selectors": {
+              "aria": "[aria-label=\"Contacts\"]",
+              "text_based": "text=\"Contacts\"",
+              "css": "",
+              "xpath": "/html[1]/body[1]/div[1]/div[1]/nav[1]/ul[1]/li[3]/a[1]"
+            },
+            "semantic": {
+              "normalized_text": "contacts",
+              "role": "link",
+              "input_type": null,
+              "llm_intent": "interact_contacts",
+              "final_intent": "interact_contacts"
+            },
+            "context": {
+              "parent": "li[role=menuitem]",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/setup-guide",
+              "page_title": "Setup",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "contacts",
+                "relation": "target"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 4,
+                "y": 116,
+                "w": 64,
+                "h": 56
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0001_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0001_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/setup-guide",
+              "page_title": "Setup",
+              "visible_key_elements": [
+                "[aria-label=\"Contacts\"]",
+                "text=\"Contacts\"",
+                "html > body > div.fe-root-layout:nth-of-type(1) > div._1see0od0:nth-of-type(1) > nav.fe-root-layout__nav > ul.fe-root-side-menu.fs-unmask > li.fe-root-menu-item:nth-of-type(3) > a.fe-root-menu-item__link",
+                "a"
+              ],
+              "important_text_blocks": [
+                "Contacts",
+                "https://conxa.pipedrive.com/setup-guide|Setup|253e68cf"
+              ],
+              "dom_fingerprint": "5559c4602cb926f409e652784d060cbc3dbe259a8b1185580f809ae78e9c809e"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/setup-guide",
+              "page_title": "Setup",
+              "visible_key_elements": [
+                "[aria-label=\"Contacts\"]",
+                "text=\"Contacts\"",
+                "html > body > div.fe-root-layout:nth-of-type(1) > div._1see0od0:nth-of-type(1) > nav.fe-root-layout__nav > ul.fe-root-side-menu.fs-unmask > li.fe-root-menu-item:nth-of-type(3) > a.fe-root-menu-item__link",
+                "a"
+              ],
+              "important_text_blocks": [
+                "Contacts",
+                "https://conxa.pipedrive.com/setup-guide|Setup|253e68cf"
+              ],
+              "dom_fingerprint": "5559c4602cb926f409e652784d060cbc3dbe259a8b1185580f809ae78e9c809e"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "contacts"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "interact_contacts",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "contacts",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "interact_contacts",
+            "final_intent": "interact_contacts",
+            "anchors": [
+              {
+                "element": "contacts",
+                "relation": "target"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "5017c9bc493b4ef18d56ce6af98e59b0",
+          "snapshot_dom_hash": "6ffe0b1feae4677ef84beb8d835553720cff7b50d112466bd24345d512460f84"
+        },
+        {
+          "action": "click",
+          "intent": "activate_control_person",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "text=\"Person\"",
+            "fallback_selectors": [
+              "[data-testid=\"add-entity\"]",
+              "/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/button[1]"
+            ],
+            "role": "button",
+            "type": "button",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "button",
+            "tag": "button",
+            "inner_text": "Person",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "add-entity",
+            "input_type": "",
+            "css_class_tokens": [
+              "cui5-button",
+              "cui5-button--variant-primary",
+              "cui5-button-group-item--first-child"
+            ],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.087,
+              "y_pct": 0.152
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "button",
+              "id": null,
+              "classes": [
+                "cui5-button",
+                "cui5-button--variant-primary",
+                "cui5-button-group-item--first-child"
+              ],
+              "inner_text": "Person",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"add-entity\"]",
+              "text_based": "text=\"Person\"",
+              "css": "",
+              "xpath": "/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/button[1]"
+            },
+            "semantic": {
+              "normalized_text": "person",
+              "role": "button",
+              "input_type": null,
+              "llm_intent": "activate_control_person",
+              "final_intent": "activate_control_person"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "button:"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "person",
+                "relation": "target"
+              },
+              {
+                "element": "add condition",
+                "relation": "above"
+              },
+              {
+                "element": "contacts",
+                "relation": "inside"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 112,
+                "y": 122,
+                "w": 96,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0002_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0002_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"add-entity\"]",
+                "text=\"Person\"",
+                "div.z02neh1 > div.cui5-toolbar:nth-of-type(2) > div.cui5-spacing.cui5-spacing--top-m > div.cui5-toolbar__top:nth-of-type(1) > div.cui5-toolbar__view-actions:nth-of-type(1) > div.fyagak0:nth-of-type(1) > div.cui5-button-group.cui5-split-button > button.cui5-button.cui5-button--variant-primary:nth-of-type(1)",
+                "button",
+                "button:"
+              ],
+              "important_text_blocks": [
+                "Person",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|6ed9bc9a"
+              ],
+              "dom_fingerprint": "254497a074a0f8b7df41b20201737c4789cbeb27200d73c1fe7463bbbfb3bad2"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"add-entity\"]",
+                "text=\"Person\"",
+                "div.z02neh1 > div.cui5-toolbar:nth-of-type(2) > div.cui5-spacing.cui5-spacing--top-m > div.cui5-toolbar__top:nth-of-type(1) > div.cui5-toolbar__view-actions:nth-of-type(1) > div.fyagak0:nth-of-type(1) > div.cui5-button-group.cui5-split-button > button.cui5-button.cui5-button--variant-primary:nth-of-type(1)",
+                "button",
+                "button:"
+              ],
+              "important_text_blocks": [
+                "Person",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|6ed9bc9a"
+              ],
+              "dom_fingerprint": "254497a074a0f8b7df41b20201737c4789cbeb27200d73c1fe7463bbbfb3bad2"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "activate",
+                "control",
+                "person"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "activate_control_person",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "activate",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "control",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "person",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "activate_control_person",
+            "final_intent": "activate_control_person",
+            "anchors": [
+              {
+                "element": "person",
+                "relation": "target"
+              },
+              {
+                "element": "add condition",
+                "relation": "above"
+              },
+              {
+                "element": "contacts",
+                "relation": "inside"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "c1bafa8294f14b7db0ad9d864ac92061",
+          "snapshot_dom_hash": "2a1d95937319679551b85d5c7f2dbcf2364b174ede31f235b3dcd86f87bcdff2"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_input",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Name\") + input",
+            "fallback_selectors": [
+              "label:has-text(\"Name\") ~ input",
+              "input[type=\"text\"]",
+              "/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.93
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Name",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.111
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Name"
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_input",
+              "final_intent": "focus_input"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "person",
+                "relation": "target"
+              },
+              {
+                "element": "organization",
+                "relation": "below"
+              },
+              {
+                "element": "name",
+                "relation": "inside"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 89,
+                "w": 288,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0003_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0003_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(1) > div:nth-of-type(2) > div.Duplicates__popoverWrap--__Zlj > div > div.cui5-input.ff_editMode:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|8dec4765"
+              ],
+              "dom_fingerprint": "993ace5741c3b0832202b54e348f1f507de81b36bdbc92c84219c78b1e7978f5"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(1) > div:nth-of-type(2) > div.Duplicates__popoverWrap--__Zlj > div > div.cui5-input.ff_editMode:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|8dec4765"
+              ],
+              "dom_fingerprint": "993ace5741c3b0832202b54e348f1f507de81b36bdbc92c84219c78b1e7978f5"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_input",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_input",
+            "final_intent": "focus_input",
+            "anchors": [
+              {
+                "element": "person",
+                "relation": "target"
+              },
+              {
+                "element": "organization",
+                "relation": "below"
+              },
+              {
+                "element": "name",
+                "relation": "inside"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "cb7d6fa858914b85bd39e5249b2d10c5",
+          "snapshot_dom_hash": "13da9530b92e5c3610d7f947aad6d28189599bef99b6229200a4b23a3992d2ff"
+        },
+        {
+          "action": "type",
+          "intent": "enter_input_value",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Name\") + input",
+            "fallback_selectors": [
+              "label:has-text(\"Name\") ~ input",
+              "input[type=\"text\"]",
+              "/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.93
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Name",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.111
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Name"
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "enter_input_value",
+              "final_intent": "enter_input_value"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "person",
+                "relation": "target"
+              },
+              {
+                "element": "add phone",
+                "relation": "below"
+              },
+              {
+                "element": "organization",
+                "relation": "below"
+              },
+              {
+                "element": "name",
+                "relation": "inside"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 89,
+                "w": 288,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0003_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0003_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(1) > div:nth-of-type(2) > div.Duplicates__popoverWrap--__Zlj > div > div.cui5-input.ff_editMode:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|8dec4765"
+              ],
+              "dom_fingerprint": "993ace5741c3b0832202b54e348f1f507de81b36bdbc92c84219c78b1e7978f5"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(1) > div:nth-of-type(2) > div.Duplicates__popoverWrap--__Zlj > div > div.cui5-input.ff_editMode:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|8dec4765"
+              ],
+              "dom_fingerprint": "993ace5741c3b0832202b54e348f1f507de81b36bdbc92c84219c78b1e7978f5"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "value"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "enter_input_value",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "enter_input_value",
+            "final_intent": "enter_input_value",
+            "anchors": [
+              {
+                "element": "person",
+                "relation": "target"
+              },
+              {
+                "element": "add phone",
+                "relation": "below"
+              },
+              {
+                "element": "organization",
+                "relation": "below"
+              },
+              {
+                "element": "name",
+                "relation": "inside"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "cb7d6fa858914b85bd39e5249b2d10c5",
+          "snapshot_dom_hash": "13da9530b92e5c3610d7f947aad6d28189599bef99b6229200a4b23a3992d2ff"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_input",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.7
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.193
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": "downshift-0-input",
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_input",
+              "final_intent": "focus_input"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "organisation input",
+                "relation": "target"
+              },
+              {
+                "element": "organisation label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 154,
+                "w": 288,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0005_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0005_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "#downshift-0-input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|fb1f56f0"
+              ],
+              "dom_fingerprint": "45dcd7b4734bc709ee2bfad5be55016323f3a1059a9526773678e97979b579a9"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "#downshift-0-input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|fb1f56f0"
+              ],
+              "dom_fingerprint": "45dcd7b4734bc709ee2bfad5be55016323f3a1059a9526773678e97979b579a9"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_input",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_input",
+            "final_intent": "focus_input",
+            "anchors": [
+              {
+                "element": "organisation input",
+                "relation": "target"
+              },
+              {
+                "element": "organisation label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "5ea816c573364313a7a5fa200e61c743",
+          "snapshot_dom_hash": "3b2cbc11f7483aa275b86c1f919bc3a303a5aacbba8c7273b7b76bb62df5d6d6"
+        },
+        {
+          "action": "type",
+          "intent": "enter_input_value",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.7
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.193
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": "downshift-0-input",
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "enter_input_value",
+              "final_intent": "enter_input_value"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "organisation",
+                "relation": "target"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 154,
+                "w": 288,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0005_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0005_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "#downshift-0-input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|fb1f56f0"
+              ],
+              "dom_fingerprint": "45dcd7b4734bc709ee2bfad5be55016323f3a1059a9526773678e97979b579a9"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "#downshift-0-input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|fb1f56f0"
+              ],
+              "dom_fingerprint": "45dcd7b4734bc709ee2bfad5be55016323f3a1059a9526773678e97979b579a9"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "value"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "enter_input_value",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "enter_input_value",
+            "final_intent": "enter_input_value",
+            "anchors": [
+              {
+                "element": "organisation",
+                "relation": "target"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "5ea816c573364313a7a5fa200e61c743",
+          "snapshot_dom_hash": "3b2cbc11f7483aa275b86c1f919bc3a303a5aacbba8c7273b7b76bb62df5d6d6"
+        },
+        {
+          "action": "keyboard_shortcut",
+          "intent": "keyboard_shortcut_ui_flow",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.7
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.193
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": "downshift-0-input",
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "keyboard_shortcut_ui_flow",
+              "final_intent": "keyboard_shortcut_ui_flow"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "organisation",
+                "relation": "target"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 154,
+                "w": 288,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0006_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0006_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "#downshift-0-input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|ba0ea92a"
+              ],
+              "dom_fingerprint": "fdd015c420256b72a70124072c6b4303667efae281c3d7413c96bfd7cfce6081"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"]",
+                "#downshift-0-input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|f0a7f2ac"
+              ],
+              "dom_fingerprint": "442ac9311989a8166ccd53d07204a3755efedc656321ead61a3179e3c18774e2"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "element_appear",
+              "target": "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|f0a7f2ac",
+                "keyboard",
+                "shortcut"
+              ],
+              "page_url_hint": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "state_diff_strength": 0.05,
+              "state_diff_as_hint": true,
+              "final_intent": "keyboard_shortcut_ui_flow",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "selector_present",
+                "target": "/div[2]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]",
+                "timeout_ms": 5000,
+                "required": true
+              },
+              {
+                "type": "text_present",
+                "target": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|f0a7f2ac",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "keyboard",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "shortcut",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "keyboard_shortcut_ui_flow",
+            "final_intent": "keyboard_shortcut_ui_flow",
+            "anchors": [
+              {
+                "element": "organisation",
+                "relation": "target"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match",
+              "overlay_anchor",
+              "role_match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "fe0258635e4e46258a857b0434224285",
+          "snapshot_dom_hash": "8a8df4efdb76b76496329155c9914df1e5c5e25af94943c08683929cfb62516d"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_input",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "[data-testid=\"compound-input\"]",
+              "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "compound-input",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.274
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"compound-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_input",
+              "final_intent": "focus_input"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 219,
+                "w": 140,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0007_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0007_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_input",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_input",
+            "final_intent": "focus_input",
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "f8861199b4144377b7e154d6ad69281e",
+          "snapshot_dom_hash": "fe7653e61e905781fe83714c0772d41bc63f453f04cf69115002645222a54856"
+        },
+        {
+          "action": "keyboard_shortcut",
+          "intent": "keyboard_shortcut_ui_flow",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "[data-testid=\"compound-input\"]",
+              "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "compound-input",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.274
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"compound-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "keyboard_shortcut_ui_flow",
+              "final_intent": "keyboard_shortcut_ui_flow"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "add phone label",
+                "relation": "above"
+              },
+              {
+                "element": "add email label",
+                "relation": "below"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 219,
+                "w": 140,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0008_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0008_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "keyboard",
+                "shortcut"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "keyboard_shortcut_ui_flow",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "keyboard",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "shortcut",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "keyboard_shortcut_ui_flow",
+            "final_intent": "keyboard_shortcut_ui_flow",
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "add phone label",
+                "relation": "above"
+              },
+              {
+                "element": "add email label",
+                "relation": "below"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "f8861199b4144377b7e154d6ad69281e",
+          "snapshot_dom_hash": "fe7653e61e905781fe83714c0772d41bc63f453f04cf69115002645222a54856"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_input",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "[data-testid=\"compound-input\"]",
+              "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "compound-input",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.274
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"compound-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_input",
+              "final_intent": "focus_input"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 219,
+                "w": 140,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0012_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0012_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_input",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_input",
+            "final_intent": "focus_input",
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "db0bdcfe0fb549f5863dbc1c485dbbe2",
+          "snapshot_dom_hash": "0c93cdad45a13fe2123b98293eb08046ad446ea2f863ebdc44229c5b82631194"
+        },
+        {
+          "action": "type",
+          "intent": "enter_input_value",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "[data-testid=\"compound-input\"]",
+              "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "compound-input",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.274
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"compound-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "enter_input_value",
+              "final_intent": "enter_input_value"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 219,
+                "w": 140,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0012_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0012_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "value"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "enter_input_value",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "enter_input_value",
+            "final_intent": "enter_input_value",
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "db0bdcfe0fb549f5863dbc1c485dbbe2",
+          "snapshot_dom_hash": "0c93cdad45a13fe2123b98293eb08046ad446ea2f863ebdc44229c5b82631194"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_input",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "[data-testid=\"compound-input\"]",
+              "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "compound-input",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.274
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"compound-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_input",
+              "final_intent": "focus_input"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 219,
+                "w": 140,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0015_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0015_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "2491c25c5da05a5b6cfe5e27bef6703417b96d57f5f5a098e247c4027a628efe"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "2491c25c5da05a5b6cfe5e27bef6703417b96d57f5f5a098e247c4027a628efe"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_input",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_input",
+            "final_intent": "focus_input",
+            "anchors": [
+              {
+                "element": "phone input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "3c777aefb0874cadab91bad581737489",
+          "snapshot_dom_hash": "5cc74a0ce6732244e91ce9dd21b7070117e36be863faaff4eff9081521b91e69"
+        },
+        {
+          "action": "type",
+          "intent": "enter_input_value",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "[data-testid=\"compound-input\"]",
+              "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "compound-input",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.274
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"compound-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "enter_input_value",
+              "final_intent": "enter_input_value"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "phone number input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              },
+              {
+                "element": "add phone button",
+                "relation": "near"
+              },
+              {
+                "element": "add email button",
+                "relation": "below"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 219,
+                "w": 140,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0015_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0015_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "2491c25c5da05a5b6cfe5e27bef6703417b96d57f5f5a098e247c4027a628efe"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9:nth-of-type(1) > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "2491c25c5da05a5b6cfe5e27bef6703417b96d57f5f5a098e247c4027a628efe"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "value"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "enter_input_value",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "enter_input_value",
+            "final_intent": "enter_input_value",
+            "anchors": [
+              {
+                "element": "phone number input",
+                "relation": "target"
+              },
+              {
+                "element": "phone label",
+                "relation": "above"
+              },
+              {
+                "element": "add phone button",
+                "relation": "near"
+              },
+              {
+                "element": "add email button",
+                "relation": "below"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "3c777aefb0874cadab91bad581737489",
+          "snapshot_dom_hash": "5cc74a0ce6732244e91ce9dd21b7070117e36be863faaff4eff9081521b91e69"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_input",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[type=\"text\"]",
+            "fallback_selectors": [
+              "[data-testid=\"compound-input\"]",
+              "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "",
+            "data_testid": "compound-input",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.388
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "[data-testid=\"compound-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/div[1]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_input",
+              "final_intent": "focus_input"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "email input",
+                "relation": "target"
+              },
+              {
+                "element": "email label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 310,
+                "w": 140,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0016_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0016_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"compound-input\"]",
+                "div > div.ff_v13320__InputSelectAddMore__itemWrap__gXU > div.ff_v13320__InputSelectAddMore__item__qFn > div.ff_v13320__InputSelectCompound__compoundComponent__JpK > div.ff_v13320__InputSelectCompound__inputWrap__BiG:nth-of-type(1) > div.cui5-input.ff_v13320__InputSelectCompound__input__VK9 > div.cui5-input__box > input",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "a57799f75213cff1424dbd4a61af31d2b4a2dc61acd24da75be613eb2c2dd5b6"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_input",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_input",
+            "final_intent": "focus_input",
+            "anchors": [
+              {
+                "element": "email input",
+                "relation": "target"
+              },
+              {
+                "element": "email label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "3c777aefb0874cadab91bad581737489",
+          "snapshot_dom_hash": "5cc74a0ce6732244e91ce9dd21b7070117e36be863faaff4eff9081521b91e69"
+        },
+        {
+          "action": "click",
+          "intent": "interact_add_labels",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Labels\") + div",
+            "fallback_selectors": [
+              "label:has-text(\"Labels\") ~ div",
+              "text=\"Add labels\"",
+              "/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[5]/div[2]/div[1]/div[1]"
+            ],
+            "role": "div",
+            "type": "div",
+            "selector_confidence": 0.93
+          },
+          "element_fingerprint": {
+            "role": "div",
+            "tag": "div",
+            "inner_text": "Add labels",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Labels",
+            "data_testid": "",
+            "input_type": "",
+            "css_class_tokens": [
+              "cui5-select__box"
+            ],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.501
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "div",
+              "id": null,
+              "classes": [
+                "cui5-select__box"
+              ],
+              "inner_text": "Add labels",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Labels"
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "text=\"Add labels\"",
+              "css": "",
+              "xpath": "/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[5]/div[2]/div[1]/div[1]"
+            },
+            "semantic": {
+              "normalized_text": "add labels",
+              "role": "div",
+              "input_type": null,
+              "llm_intent": "interact_add_labels",
+              "final_intent": "interact_add_labels"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "add labels",
+                "relation": "target"
+              },
+              {
+                "element": "labels",
+                "relation": "above"
+              },
+              {
+                "element": "search for labels",
+                "relation": "inside"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 401,
+                "w": 288,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0020_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0020_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"div\"][name=\"Add labels\"]",
+                "text=\"Add labels\"",
+                "div > div.AddModal__panelsWrapper--W7m7q > div.LeftPanel__panel--gfXSV > div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(5) > div:nth-of-type(2) > div.ff_v13320__LabelsInput__wrapper__KVi.cui5-select > div.cui5-select__box",
+                "div"
+              ],
+              "important_text_blocks": [
+                "Add labels",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "ba267d6681f360ba19450df366e3cb3f6c436d6820c44745468fc99072e4d516"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"div\"][name=\"Add labels\"]",
+                "text=\"Add labels\"",
+                "div > div.AddModal__panelsWrapper--W7m7q > div.LeftPanel__panel--gfXSV > div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(5) > div:nth-of-type(2) > div.ff_v13320__LabelsInput__wrapper__KVi.cui5-select > div.cui5-select__box",
+                "div"
+              ],
+              "important_text_blocks": [
+                "Add labels",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|60dc4cb9"
+              ],
+              "dom_fingerprint": "ba267d6681f360ba19450df366e3cb3f6c436d6820c44745468fc99072e4d516"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "add",
+                "labels"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "interact_add_labels",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "add",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "labels",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "interact_add_labels",
+            "final_intent": "interact_add_labels",
+            "anchors": [
+              {
+                "element": "add labels",
+                "relation": "target"
+              },
+              {
+                "element": "labels",
+                "relation": "above"
+              },
+              {
+                "element": "search for labels",
+                "relation": "inside"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "34b7a01f03a6423cb08b2a49a3b3245b",
+          "snapshot_dom_hash": "4c6ba825ed27435585f4bd37dcd7d582098e4b04cb1a43a94d27082579bef6c0"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_search_for_labels",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "[placeholder=\"Search for labels\"]",
+            "fallback_selectors": [
+              "input[type=\"text\"]",
+              "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.7
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "Search for labels",
+            "label_text": "",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.394,
+              "y_pct": 0.556
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": "Search for labels",
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_search_for_labels",
+              "final_intent": "focus_search_for_labels"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "search for labels",
+                "relation": "target"
+              },
+              {
+                "element": "labels",
+                "relation": "above"
+              },
+              {
+                "element": "add labels",
+                "relation": "inside"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 504,
+                "y": 445,
+                "w": 272,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0024_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0024_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"][name=\"Search for labels\"]",
+                "div.cui5-popover.cui5-popover--placement-bottom-start > div.cui5-popover__inner > div.cui5-spacing.cui5-spacing--top-none > div.ff_v13320__Labels-popover__content__qRB > div.ff_v13320__LabelsSelect-search__wrapper__DPM:nth-of-type(1) > div.cui5-input.cui5-input--icon > div.cui5-input__box > input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|c7683a41"
+              ],
+              "dom_fingerprint": "9c91563f721d1b203d873c2123ac3475761b89273804f596d5c3e14a7b21c831"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"][name=\"Search for labels\"]",
+                "div.cui5-popover.cui5-popover--placement-bottom-start > div.cui5-popover__inner > div.cui5-spacing.cui5-spacing--top-none > div.ff_v13320__Labels-popover__content__qRB > div.ff_v13320__LabelsSelect-search__wrapper__DPM:nth-of-type(1) > div.cui5-input.cui5-input--icon > div.cui5-input__box > input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|c7683a41"
+              ],
+              "dom_fingerprint": "9c91563f721d1b203d873c2123ac3475761b89273804f596d5c3e14a7b21c831"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "search",
+                "labels"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_search_for_labels",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_search_for_labels",
+            "final_intent": "focus_search_for_labels",
+            "anchors": [
+              {
+                "element": "search for labels",
+                "relation": "target"
+              },
+              {
+                "element": "labels",
+                "relation": "above"
+              },
+              {
+                "element": "add labels",
+                "relation": "inside"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "107438c571454f3dbfcf973d7bb0b826",
+          "snapshot_dom_hash": "502552fe7ad80f37eb4facd5681e1cebd324b230d41fd032165f1facabe58a29"
+        },
+        {
+          "action": "type",
+          "intent": "enter_input_value",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "[placeholder=\"Search for labels\"]",
+            "fallback_selectors": [
+              "input[type=\"text\"]",
+              "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.7
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "Search for labels",
+            "label_text": "",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.394,
+              "y_pct": 0.556
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": "Search for labels",
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "enter_input_value",
+              "final_intent": "enter_input_value"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "email input",
+                "relation": "target"
+              },
+              {
+                "element": "email label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 504,
+                "y": 445,
+                "w": 272,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0024_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0024_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"][name=\"Search for labels\"]",
+                "div.cui5-popover.cui5-popover--placement-bottom-start > div.cui5-popover__inner > div.cui5-spacing.cui5-spacing--top-none > div.ff_v13320__Labels-popover__content__qRB > div.ff_v13320__LabelsSelect-search__wrapper__DPM:nth-of-type(1) > div.cui5-input.cui5-input--icon > div.cui5-input__box > input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|c7683a41"
+              ],
+              "dom_fingerprint": "9c91563f721d1b203d873c2123ac3475761b89273804f596d5c3e14a7b21c831"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"][name=\"Search for labels\"]",
+                "div.cui5-popover.cui5-popover--placement-bottom-start > div.cui5-popover__inner > div.cui5-spacing.cui5-spacing--top-none > div.ff_v13320__Labels-popover__content__qRB > div.ff_v13320__LabelsSelect-search__wrapper__DPM:nth-of-type(1) > div.cui5-input.cui5-input--icon > div.cui5-input__box > input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|c7683a41"
+              ],
+              "dom_fingerprint": "9c91563f721d1b203d873c2123ac3475761b89273804f596d5c3e14a7b21c831"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "value"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "enter_input_value",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "enter_input_value",
+            "final_intent": "enter_input_value",
+            "anchors": [
+              {
+                "element": "email input",
+                "relation": "target"
+              },
+              {
+                "element": "email label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "107438c571454f3dbfcf973d7bb0b826",
+          "snapshot_dom_hash": "502552fe7ad80f37eb4facd5681e1cebd324b230d41fd032165f1facabe58a29"
+        },
+        {
+          "action": "keyboard_shortcut",
+          "intent": "keyboard_shortcut_ui_flow",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "[placeholder=\"Search for labels\"]",
+            "fallback_selectors": [
+              "input[type=\"text\"]",
+              "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 0.7
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "Search for labels",
+            "label_text": "",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.394,
+              "y_pct": 0.556
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": null,
+              "classes": [],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": "Search for labels",
+              "label_text": null
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "",
+              "css": "",
+              "xpath": "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "keyboard_shortcut_ui_flow",
+              "final_intent": "keyboard_shortcut_ui_flow"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "add email",
+                "relation": "target"
+              },
+              {
+                "element": "email",
+                "relation": "above"
+              },
+              {
+                "element": "work",
+                "relation": "below"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 504,
+                "y": 445,
+                "w": 272,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0025_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0025_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"][name=\"Search for labels\"]",
+                "div.cui5-popover.cui5-popover--placement-bottom-start > div.cui5-popover__inner > div.cui5-spacing.cui5-spacing--top-none > div.ff_v13320__Labels-popover__content__qRB > div.ff_v13320__LabelsSelect-search__wrapper__DPM:nth-of-type(1) > div.cui5-input.cui5-input--icon > div.cui5-input__box > input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|c7683a41"
+              ],
+              "dom_fingerprint": "9c91563f721d1b203d873c2123ac3475761b89273804f596d5c3e14a7b21c831"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"input\"][name=\"Search for labels\"]",
+                "div.cui5-popover.cui5-popover--placement-bottom-start > div.cui5-popover__inner > div.cui5-spacing.cui5-spacing--top-none > div.ff_v13320__Labels-popover__content__qRB > div.ff_v13320__LabelsSelect-search__wrapper__DPM:nth-of-type(1) > div.cui5-input.cui5-input--icon > div.cui5-input__box > input",
+                "input",
+                "svg:"
+              ],
+              "important_text_blocks": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|da4f894a"
+              ],
+              "dom_fingerprint": "eb0d094aeeb56a70a0cebe292e2854bc84c876671c78e093839cce4d5150329a"
+            }
+          },
+          "value": "{{text}}",
+          "input_binding": "text",
+          "validation": {
+            "wait_for": {
+              "type": "element_appear",
+              "target": "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|da4f894a",
+                "keyboard",
+                "shortcut"
+              ],
+              "page_url_hint": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "state_diff_strength": 0.05,
+              "state_diff_as_hint": true,
+              "final_intent": "keyboard_shortcut_ui_flow",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "selector_present",
+                "target": "/body[1]/div[16]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/input[1]",
+                "timeout_ms": 5000,
+                "required": true
+              },
+              {
+                "type": "text_present",
+                "target": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|da4f894a",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "keyboard",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "shortcut",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "keyboard_shortcut_ui_flow",
+            "final_intent": "keyboard_shortcut_ui_flow",
+            "anchors": [
+              {
+                "element": "add email",
+                "relation": "target"
+              },
+              {
+                "element": "email",
+                "relation": "above"
+              },
+              {
+                "element": "work",
+                "relation": "below"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match",
+              "overlay_anchor",
+              "role_match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "107438c571454f3dbfcf973d7bb0b826",
+          "snapshot_dom_hash": "502552fe7ad80f37eb4facd5681e1cebd324b230d41fd032165f1facabe58a29"
+        },
+        {
+          "action": "click",
+          "intent": "activate_control_item_owner_s_visibility_group",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Visible to\") + button",
+            "fallback_selectors": [
+              "label:has-text(\"Visible to\") ~ button",
+              "text=\"Item owner’s visibility group\"",
+              "[role=\"button\"][name=\"Item owner’s visibility group\"]",
+              "/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[7]/button[1]"
+            ],
+            "role": "button",
+            "type": "button",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "button",
+            "tag": "button",
+            "inner_text": "Item owner’s visibility group",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Visible to",
+            "data_testid": "",
+            "input_type": "",
+            "css_class_tokens": [
+              "cui5-button",
+              "cui5-button--variant-secondary"
+            ],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.388,
+              "y_pct": 0.664
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "button",
+              "id": null,
+              "classes": [
+                "cui5-button",
+                "cui5-button--variant-secondary",
+                "ff_v13320__VisibilitySwitch__select__VS-"
+              ],
+              "inner_text": "Item owner’s visibility group",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Visible to"
+            },
+            "selectors": {
+              "aria": "[role=\"button\"][name=\"Item owner’s visibility group\"]",
+              "text_based": "text=\"Item owner’s visibility group\"",
+              "css": "",
+              "xpath": "/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[7]/button[1]"
+            },
+            "semantic": {
+              "normalized_text": "item owner’s visibility group",
+              "role": "button",
+              "input_type": null,
+              "llm_intent": "activate_control_item_owner_s_visibility_group",
+              "final_intent": "activate_control_item_owner_s_visibility_group"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "div:Visible to"
+              ],
+              "index_in_parent": 1,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "item owner's visibility group",
+                "relation": "target"
+              },
+              {
+                "element": "item owner's visibility group and sub-groups",
+                "relation": "below"
+              },
+              {
+                "element": "item owner",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 496,
+                "y": 531,
+                "w": 288,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0026_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0026_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"Item owner’s visibility group\"]",
+                "text=\"Item owner’s visibility group\"",
+                "div.cui5-compound-modal__content.AddModal__globalModalContent--d4RXj > div.cui5-spacing.cui5-spacing--top-none > div > div.AddModal__panelsWrapper--W7m7q > div.LeftPanel__panel--gfXSV > div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(7) > button.cui5-button.cui5-button--variant-secondary",
+                "button",
+                "div:Visible to"
+              ],
+              "important_text_blocks": [
+                "Item owner’s visibility group",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|a8859cd2"
+              ],
+              "dom_fingerprint": "d1d474ab3369784cb5e545773cb5cfaba1b918814ae6879178804b1794b4f15c"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"Item owner’s visibility group\"]",
+                "text=\"Item owner’s visibility group\"",
+                "div.cui5-compound-modal__content.AddModal__globalModalContent--d4RXj > div.cui5-spacing.cui5-spacing--top-none > div > div.AddModal__panelsWrapper--W7m7q > div.LeftPanel__panel--gfXSV > div.cui5-spacing.cui5-spacing--top-m > div.FormField__formField--E60Qw:nth-of-type(7) > button.cui5-button.cui5-button--variant-secondary",
+                "button",
+                "div:Visible to"
+              ],
+              "important_text_blocks": [
+                "Item owner’s visibility group",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|a8859cd2"
+              ],
+              "dom_fingerprint": "d1d474ab3369784cb5e545773cb5cfaba1b918814ae6879178804b1794b4f15c"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "activate",
+                "control",
+                "item",
+                "owner",
+                "visibility",
+                "group"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "activate_control_item_owner_s_visibility_group",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "activate",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "control",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "item",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "activate_control_item_owner_s_visibility_group",
+            "final_intent": "activate_control_item_owner_s_visibility_group",
+            "anchors": [
+              {
+                "element": "item owner's visibility group",
+                "relation": "target"
+              },
+              {
+                "element": "item owner's visibility group and sub-groups",
+                "relation": "below"
+              },
+              {
+                "element": "item owner",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "5e08f796534040f79e7be64f756eecf4",
+          "snapshot_dom_hash": "3de9564c95ec17ca7c080206db4fd0c23a8e78db9b326f348541f06b3bf3c5ac"
+        },
+        {
+          "action": "click",
+          "intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Visible to\") + div",
+            "fallback_selectors": [
+              "label:has-text(\"Visible to\") ~ div",
+              "text=\"Item owner Visible to the owner, global admins, followers, parent visibility gro\"",
+              "/div[1]/div[1]/div[7]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]"
+            ],
+            "role": "div",
+            "type": "div",
+            "selector_confidence": 0.93
+          },
+          "element_fingerprint": {
+            "role": "div",
+            "tag": "div",
+            "inner_text": "Item owner Visible to the owner, global admins, followers, parent visibility groups",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Visible to",
+            "data_testid": "",
+            "input_type": "",
+            "css_class_tokens": [
+              "cui5-option",
+              "cui5-option--highlighted"
+            ],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.368,
+              "y_pct": 0.25
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "div",
+              "id": null,
+              "classes": [
+                "cui5-option",
+                "cui5-option--highlighted",
+                "ff_v13320__VisibilityOptions__option__lXi"
+              ],
+              "inner_text": "Item owner Visible to the owner, global admins, followers, parent visibility groups",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Visible to"
+            },
+            "selectors": {
+              "aria": "",
+              "text_based": "text=\"Item owner Visible to the owner, global admins, followers, parent visibility gro\"",
+              "css": "",
+              "xpath": "/div[1]/div[1]/div[7]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]"
+            },
+            "semantic": {
+              "normalized_text": "item owner visible to the owner, global admins, followers, parent visibility groups",
+              "role": "div",
+              "input_type": null,
+              "llm_intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+              "final_intent": "interact_item_owner_visible_to_the_owner__global_admins__"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "div:Item owner’s visibility group Visible to",
+                "div:Item owner’s visibility group and sub-gr",
+                "div:All users Visible to everyone in the com"
+              ],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "phone number input",
+                "relation": "target"
+              },
+              {
+                "element": "add phone button",
+                "relation": "near"
+              },
+              {
+                "element": "work label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 471,
+                "y": 200,
+                "w": 338,
+                "h": 75
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0027_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0027_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"div\"][name=\"Item owner Visible to the owner, global admins, followers, p\"]",
+                "text=\"Item owner Visible to the owner, global admins, followers, parent visibility gro\"",
+                "div.FormField__formField--E60Qw:nth-of-type(7) > div.cui5-popover.cui5-popover--placement-bottom:nth-of-type(2) > div.cui5-popover__inner > div.cui5-spacing > div.cui5-dropmenu > div.cui5-dropmenu__content > div > div.cui5-option.cui5-option--highlighted:nth-of-type(1)",
+                "div",
+                "div:Item owner’s visibility group Visible to",
+                "div:Item owner’s visibility group and sub-gr",
+                "div:All users Visible to everyone in the com"
+              ],
+              "important_text_blocks": [
+                "Item owner Visible to the owner, global admins, followers, parent visibility groups",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|448746e2"
+              ],
+              "dom_fingerprint": "e92fbdd9622dc5547859f758d06c40b51324aa0b5802860ecc0a33acbd985e09"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[role=\"div\"][name=\"Item owner Visible to the owner, global admins, followers, p\"]",
+                "text=\"Item owner Visible to the owner, global admins, followers, parent visibility gro\"",
+                "div.FormField__formField--E60Qw:nth-of-type(7) > div.cui5-popover.cui5-popover--placement-bottom:nth-of-type(2) > div.cui5-popover__inner > div.cui5-spacing > div.cui5-dropmenu > div.cui5-dropmenu__content > div > div.cui5-option.cui5-option--highlighted:nth-of-type(1)",
+                "div",
+                "div:Item owner’s visibility group Visible to",
+                "div:Item owner’s visibility group and sub-gr",
+                "div:All users Visible to everyone in the com"
+              ],
+              "important_text_blocks": [
+                "Item owner Visible to the owner, global admins, followers, parent visibility groups",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|448746e2"
+              ],
+              "dom_fingerprint": "e92fbdd9622dc5547859f758d06c40b51324aa0b5802860ecc0a33acbd985e09"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "item",
+                "owner",
+                "visible",
+                "global",
+                "admins"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "item",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "owner",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "visible",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+            "final_intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+            "anchors": [
+              {
+                "element": "phone number input",
+                "relation": "target"
+              },
+              {
+                "element": "add phone button",
+                "relation": "near"
+              },
+              {
+                "element": "work label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "5e08f796534040f79e7be64f756eecf4",
+          "snapshot_dom_hash": "3de9564c95ec17ca7c080206db4fd0c23a8e78db9b326f348541f06b3bf3c5ac"
+        },
+        {
+          "action": "click",
+          "intent": "activate_control_save",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Add person\") + button",
+            "fallback_selectors": [
+              "label:has-text(\"Add person\") ~ button",
+              "text=\"Save\"",
+              "[data-testid=\"add-modals-save\"]",
+              "/body[1]/div[4]/div[2]/div[1]/div[1]/footer[1]/div[2]/div[1]/span[1]/button[1]"
+            ],
+            "role": "button",
+            "type": "button",
+            "selector_confidence": 1.0
+          },
+          "element_fingerprint": {
+            "role": "button",
+            "tag": "button",
+            "inner_text": "Save",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Add person",
+            "data_testid": "add-modals-save",
+            "input_type": "",
+            "css_class_tokens": [
+              "cui5-button",
+              "cui5-button--variant-primary"
+            ],
+            "anchor_phrases": [
+              "Setup guide 3 Contacts Activities Deals Leads Insights Sales",
+              "li",
+              "Contacts / People KN",
+              "Contacts"
+            ],
+            "position_hint": {
+              "x_pct": 0.562,
+              "y_pct": 0.734
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "button",
+              "id": null,
+              "classes": [
+                "cui5-button",
+                "cui5-button--variant-primary"
+              ],
+              "inner_text": "Save",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Add person"
+            },
+            "selectors": {
+              "aria": "[data-testid=\"add-modals-save\"]",
+              "text_based": "text=\"Save\"",
+              "css": "",
+              "xpath": "/body[1]/div[4]/div[2]/div[1]/div[1]/footer[1]/div[2]/div[1]/span[1]/button[1]"
+            },
+            "semantic": {
+              "normalized_text": "save",
+              "role": "button",
+              "input_type": null,
+              "llm_intent": "activate_control_save",
+              "final_intent": "activate_control_save"
+            },
+            "context": {
+              "parent": "span",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "save button",
+                "relation": "target"
+              },
+              {
+                "element": "cancel button",
+                "relation": "near"
+              },
+              {
+                "element": "import button",
+                "relation": "near"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 719,
+                "y": 587,
+                "w": 65,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0028_full.jpg",
+              "element_snapshot": "sessions/c3d7bd48-625b-47b5-9ae6-e976017891b2/images/evt_0028_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"add-modals-save\"]",
+                "text=\"Save\"",
+                "div.cui5-compound-modal__wrap:nth-of-type(2) > div.modal_modalContentLoaded__s8kjqwa > div > footer.cui5-compound-modal__footer > div.AddModal__footer--f5YoQ.AddModal__footerDistributed--c396w:nth-of-type(2) > div.AddModal__mainFooter--S3kbf > span.AddModal__confirmButtonWrapper--o8JhA > button.cui5-button.cui5-button--variant-primary",
+                "button"
+              ],
+              "important_text_blocks": [
+                "Save",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|db06ff21"
+              ],
+              "dom_fingerprint": "a6043da2f41800350e0a5facdf95a0d49dc83dc7cb7eae33493620189b1b8451"
+            },
+            "after": {
+              "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+              "page_title": "People",
+              "visible_key_elements": [
+                "[data-testid=\"add-modals-save\"]",
+                "text=\"Save\"",
+                "div.cui5-compound-modal__wrap:nth-of-type(2) > div.modal_modalContentLoaded__s8kjqwa > div > footer.cui5-compound-modal__footer > div.AddModal__footer--f5YoQ.AddModal__footerDistributed--c396w:nth-of-type(2) > div.AddModal__mainFooter--S3kbf > span.AddModal__confirmButtonWrapper--o8JhA > button.cui5-button.cui5-button--variant-primary",
+                "button"
+              ],
+              "important_text_blocks": [
+                "Save",
+                "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none|People|db06ff21"
+              ],
+              "dom_fingerprint": "a6043da2f41800350e0a5facdf95a0d49dc83dc7cb7eae33493620189b1b8451"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "activate",
+                "control",
+                "save"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "activate_control_save",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "activate",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "control",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "save",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "activate_control_save",
+            "final_intent": "activate_control_save",
+            "anchors": [
+              {
+                "element": "save button",
+                "relation": "target"
+              },
+              {
+                "element": "cancel button",
+                "relation": "near"
+              },
+              {
+                "element": "import button",
+                "relation": "near"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "46122659e64a4e0ca95dd562649740f6",
+          "snapshot_dom_hash": "8680a4c9c4d8333b5182f6d7a228eae3c65754e68653c3840b267915024f2bb2"
+        }
+      ]
+    }
+  ],
+  "policies": {
+    "failure_first": true,
+    "stop_on_low_confidence": true
+  },
+  "llm": {
+    "enabled": true,
+    "semantic_enrichment": true,
+    "vision_reasoning": true,
+    "anchor_vision": true,
+    "recovery_assist": true,
+    "max_calls_per_step": 2,
+    "timeout_ms": 600000
+  },
+  "intent_graph": {
+    "goal": "",
+    "steps": [],
+    "decision_points": [],
+    "expected_end_state": {}
+  }
+}

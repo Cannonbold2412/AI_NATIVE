@@ -1,9 +1,0 @@
-{
-  "inputs": [
-    {
-      "name": "service_name",
-      "type": "string",
-      "description": "Service Name"
-    }
-  ]
-}
