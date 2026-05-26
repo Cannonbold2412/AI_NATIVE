@@ -1,9 +1,20 @@
 """Central configuration for the skill platform service."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+@dataclass(frozen=True)
+class ProviderConfig:
+    """Single LLM provider configuration (one key per instance)."""
+    provider: str
+    endpoint: str
+    api_key: str
+    text_model: str
+    vision_model: str
 
 
 class Settings(BaseSettings):
@@ -97,6 +108,55 @@ class Settings(BaseSettings):
     # Set SKILL_TRACKING_HMAC_SECRET in production to enable company-scoped tracking.
     tracking_hmac_secret: str = ""
 
+    # Multi-provider LLM key pool (free-tier rotation)
+    groq_enabled: bool = True
+    groq_endpoint: str = "https://api.groq.com/openai/v1"
+    groq_api_keys: str = ""
+    groq_text_model: str = "llama-3.3-70b-versatile"
+    groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+    google_ai_studio_enabled: bool = True
+    google_ai_studio_endpoint: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    google_ai_studio_api_keys: str = ""
+    google_ai_studio_text_model: str = "gemini-2.5-flash"
+    google_ai_studio_vision_model: str = "gemini-2.5-flash"
+
+    nvidia_nim_enabled: bool = True
+    nvidia_nim_endpoint: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_nim_api_keys: str = ""
+    nvidia_nim_text_model: str = "meta/llama-4-maverick-17b-128e-instruct"
+    nvidia_nim_vision_model: str = "meta/llama-3.2-90b-vision-instruct"
+
+    cerebras_enabled: bool = False
+    cerebras_endpoint: str = "https://api.cerebras.ai/v1"
+    cerebras_api_keys: str = ""
+    cerebras_text_model: str = "llama-4-scout-17b-16e-instruct"
+    cerebras_vision_model: str = ""
+
+    together_enabled: bool = False
+    together_endpoint: str = "https://api.together.xyz/v1"
+    together_api_keys: str = ""
+    together_text_model: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+    together_vision_model: str = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+
+    openrouter_enabled: bool = False
+    openrouter_endpoint: str = "https://openrouter.ai/api/v1"
+    openrouter_api_keys: str = ""
+    openrouter_text_model: str = "deepseek/deepseek-v3:free"
+    openrouter_vision_model: str = "meta-llama/llama-4-scout:free"
+
+    mistral_enabled: bool = False
+    mistral_endpoint: str = "https://api.mistral.ai/v1"
+    mistral_api_keys: str = ""
+    mistral_text_model: str = "mistral-large-latest"
+    mistral_vision_model: str = "pixtral-large-latest"
+
+    # Router behavior
+    llm_router_cooldown_secs: int = 60
+    llm_router_max_retries: int = 3
+    llm_router_request_timeout_ms: int = 30000
+    llm_router_prefer_fast_for_text: bool = True
+
     # Razorpay payment gateway. These intentionally do not use the SKILL_ prefix.
     razorpay_key_id: str = Field(default="", validation_alias="RAZORPAY_KEY_ID")
     razorpay_key_secret: str = Field(default="", validation_alias="RAZORPAY_KEY_SECRET")
@@ -119,6 +179,53 @@ class Settings(BaseSettings):
     @property
     def clerk_authorized_party_values(self) -> list[str]:
         return [item.strip() for item in self.clerk_authorized_parties.split(",") if item.strip()]
+
+    def _split_api_keys(self, value: str) -> list[str]:
+        """Parse comma-separated API keys, handling quotes and bearer prefixes."""
+        keys: list[str] = []
+        for item in str(value or "").split(","):
+            key = item.strip().strip('"').strip("'").strip()
+            if key.lower().startswith("bearer "):
+                key = key[7:].strip()
+            if key:
+                keys.append(key)
+        return keys
+
+    def enabled_llm_providers(self) -> list[ProviderConfig]:
+        """Load all enabled LLM providers with their API keys, returning a flat pool."""
+        providers_config = [
+            ("groq", self.groq_enabled, self.groq_endpoint, self.groq_api_keys,
+             self.groq_text_model, self.groq_vision_model),
+            ("google_ai_studio", self.google_ai_studio_enabled, self.google_ai_studio_endpoint,
+             self.google_ai_studio_api_keys, self.google_ai_studio_text_model,
+             self.google_ai_studio_vision_model),
+            ("nvidia_nim", self.nvidia_nim_enabled, self.nvidia_nim_endpoint,
+             self.nvidia_nim_api_keys, self.nvidia_nim_text_model, self.nvidia_nim_vision_model),
+            ("cerebras", self.cerebras_enabled, self.cerebras_endpoint,
+             self.cerebras_api_keys, self.cerebras_text_model, self.cerebras_vision_model),
+            ("together", self.together_enabled, self.together_endpoint,
+             self.together_api_keys, self.together_text_model, self.together_vision_model),
+            ("openrouter", self.openrouter_enabled, self.openrouter_endpoint,
+             self.openrouter_api_keys, self.openrouter_text_model, self.openrouter_vision_model),
+            ("mistral", self.mistral_enabled, self.mistral_endpoint,
+             self.mistral_api_keys, self.mistral_text_model, self.mistral_vision_model),
+        ]
+
+        result: list[ProviderConfig] = []
+        for provider_name, enabled, endpoint, api_keys_str, text_model, vision_model in providers_config:
+            if not enabled or not endpoint:
+                continue
+            keys = self._split_api_keys(api_keys_str)
+            for key in keys:
+                result.append(ProviderConfig(
+                    provider=provider_name,
+                    endpoint=endpoint,
+                    api_key=key,
+                    text_model=text_model,
+                    vision_model=vision_model,
+                ))
+
+        return result
 
     @field_validator("llm_text_timeout_ms", mode="before")
     @classmethod
