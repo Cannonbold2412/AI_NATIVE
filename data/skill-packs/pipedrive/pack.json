@@ -1,0 +1,21 @@
+{
+  "company": "pipedrive",
+  "company_display": "PipeDrive",
+  "skill_pack_version": "0.1.0",
+  "required_runtime": ">=1.0.0",
+  "target_url": "https://app.pipedrive.com/auth/login",
+  "protected_url": "https://conxa.pipedrive.com/setup-guide",
+  "skills": [
+    "create-a-lead"
+  ],
+  "sync_endpoint": "https://api.conxa.io/skill-packs/pipedrive/delta",
+  "built_at": "2026-05-24T05:39:47.468099+00:00",
+  "tracking": {
+    "enabled": false,
+    "tracking_url": "https://api.conxa.io/tracking/pipedrive/events",
+    "tracking_token": "",
+    "company_id": "pipedrive",
+    "schema_version": 1,
+    "protocol_version": 1
+  }
+}

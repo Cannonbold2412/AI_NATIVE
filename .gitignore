@@ -34,7 +34,6 @@ credentials.json
 !.credentials.example.json
 
 # Local app data and generated artifacts
-data/
 tmp/
 graphify-out/
 AI_NATIVE/
@@ -85,3 +84,4 @@ Thumbs.db
 .claude/settings.local.json
 
 output/
+data/chromium/

@@ -1,0 +1,130 @@
+{
+  "url_states": [
+    {
+      "step": 1,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/setup\\-guide$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/setup\\-guide$"
+      }
+    },
+    {
+      "step": 2,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone$"
+      }
+    },
+    {
+      "step": 3,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 4,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 5,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 6,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 7,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 8,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 9,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 10,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 11,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 12,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 13,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    },
+    {
+      "step": 14,
+      "before": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      },
+      "after": {
+        "url_pattern": "^https://conxa\\.pipedrive\\.com/persons/list/user/everyone\\?quickFilter=none$"
+      }
+    }
+  ]
+}

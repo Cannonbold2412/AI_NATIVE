@@ -1,0 +1,124 @@
+{
+  "users": {
+    "user_local": {
+      "id": "user_local",
+      "email": "local@ai-native.dev",
+      "name": "Local Developer",
+      "auth_provider": "local",
+      "updated_at": 1779221939.3579574
+    },
+    "user_3DE3kwbEUoC4cv8x6bnHv4UBK1C": {
+      "id": "user_3DE3kwbEUoC4cv8x6bnHv4UBK1C",
+      "email": null,
+      "name": null,
+      "auth_provider": "clerk",
+      "updated_at": 1779356452.7492836
+    },
+    "user_3DsgFUothF39cGG1cl0OBCgxoHT": {
+      "id": "user_3DsgFUothF39cGG1cl0OBCgxoHT",
+      "email": null,
+      "name": null,
+      "auth_provider": "clerk",
+      "updated_at": 1779127621.6318874
+    },
+    "user_3DE80U9Aq3ZkvrBAGraGZp1o7cH": {
+      "id": "user_3DE80U9Aq3ZkvrBAGraGZp1o7cH",
+      "email": null,
+      "name": null,
+      "auth_provider": "clerk",
+      "updated_at": 1779807561.47779
+    }
+  },
+  "workspaces": {
+    "wrk_local": {
+      "id": "wrk_local",
+      "slug": "local",
+      "name": "Local workspace",
+      "updated_at": 1779221939.3579574,
+      "legacy_imported_at": 1779074253.6528547
+    },
+    "personal_user_3DE3kwbEUoC4cv8x6bnHv4UBK1C": {
+      "id": "personal_user_3DE3kwbEUoC4cv8x6bnHv4UBK1C",
+      "slug": "personal-user-3de3kwbeuoc4cv8x6bnhv4ubk1c",
+      "name": "http://localhost:3000",
+      "updated_at": 1779356452.7492836,
+      "legacy_imported_at": 1779074253.6551807
+    },
+    "personal_user_3DsgFUothF39cGG1cl0OBCgxoHT": {
+      "id": "personal_user_3DsgFUothF39cGG1cl0OBCgxoHT",
+      "slug": "personal-user-3dsgfuothf39cgg1cl0obcgxoht",
+      "name": "http://localhost:3000",
+      "updated_at": 1779127621.6318874,
+      "legacy_imported_at": 1779076095.0340443
+    },
+    "personal_user_3DE80U9Aq3ZkvrBAGraGZp1o7cH": {
+      "id": "personal_user_3DE80U9Aq3ZkvrBAGraGZp1o7cH",
+      "slug": "personal-user-3de80u9aq3zkvrbagragzp1o7ch",
+      "name": "http://localhost:3000",
+      "updated_at": 1779807561.47779,
+      "legacy_imported_at": 1779129211.353351
+    }
+  },
+  "memberships": [
+    {
+      "user_id": "user_local",
+      "workspace_id": "wrk_local",
+      "role": "owner",
+      "created_at": 1779074253.6528547
+    },
+    {
+      "user_id": "user_3DE3kwbEUoC4cv8x6bnHv4UBK1C",
+      "workspace_id": "personal_user_3DE3kwbEUoC4cv8x6bnHv4UBK1C",
+      "role": "owner",
+      "created_at": 1779074253.6551807
+    },
+    {
+      "user_id": "user_3DsgFUothF39cGG1cl0OBCgxoHT",
+      "workspace_id": "personal_user_3DsgFUothF39cGG1cl0OBCgxoHT",
+      "role": "owner",
+      "created_at": 1779076095.0340443
+    },
+    {
+      "user_id": "user_3DE80U9Aq3ZkvrBAGraGZp1o7cH",
+      "workspace_id": "personal_user_3DE80U9Aq3ZkvrBAGraGZp1o7cH",
+      "role": "owner",
+      "created_at": 1779129211.353351
+    }
+  ],
+  "billing": {
+    "wrk_local": {
+      "plan": "development",
+      "status": "inactive",
+      "customer_id": null,
+      "subscription_id": null,
+      "current_period_end": null,
+      "updated_at": 1779074253.6528547
+    },
+    "personal_user_3DE3kwbEUoC4cv8x6bnHv4UBK1C": {
+      "plan": "free",
+      "status": "inactive",
+      "customer_id": null,
+      "subscription_id": null,
+      "current_period_end": null,
+      "updated_at": 1779074253.6551807
+    },
+    "personal_user_3DsgFUothF39cGG1cl0OBCgxoHT": {
+      "plan": "free",
+      "status": "inactive",
+      "customer_id": null,
+      "subscription_id": null,
+      "current_period_end": null,
+      "updated_at": 1779076095.0340443
+    },
+    "personal_user_3DE80U9Aq3ZkvrBAGraGZp1o7cH": {
+      "plan": "free",
+      "status": "inactive",
+      "customer_id": null,
+      "subscription_id": null,
+      "current_period_end": null,
+      "updated_at": 1779129211.353351
+    }
+  },
+  "package_releases": {},
+  "audit_events": []
+}

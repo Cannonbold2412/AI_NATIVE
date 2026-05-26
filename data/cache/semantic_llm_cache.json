@@ -1,0 +1,440 @@
+{
+  "10a72a61ec8334db5d2df62a9db4fa6ae23cbb8f9b31a62e2d6765111194b207": {
+    "intent": "interact_m_my_workspace_projects_search_ctrl___k_k_new_up",
+    "normalized_text": "m my workspace projects search ctrl + k k new upgrade k projects blueprints environment groups integrations observability webhooks notifications networking private links workspace billing settings new plans, zero seat fees we're updating wo",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "32f2d39db1b464193d19995fec5a7e7f7241e21b89ff585d77301859a9a8cdbc": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "5365dc957eaf705a1b8a2985b5cc823fb4dca17c4aefb1c5188a24915cf31e40": {
+    "intent": "interact_conxa_api",
+    "normalized_text": "conxa-api",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "4c234b7ac4bf6dbea364415b706ff1c98a5b0f4a555a4f5d16551a605fcebd9c": {
+    "intent": "interact_m_my_workspace_conxa_api_search_ctrl___k_k_new_u",
+    "normalized_text": "m my workspace conxa-api search ctrl + k k new upgrade k dashboard conxa-api events settings monitor logs metrics manage environment shell scaling previews disk one-off jobs new plans, zero seat fees we're updating workspace pricing to help",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "c1f272d02dad8504007906eda45deff2fcdcb431b7ecb7d3e7ad26fc78dcfef8": {
+    "intent": "interact_settings",
+    "normalized_text": "settings",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "3b219dad5ef4fb6cf65194ca669bca5917e0b316d0a7fc855ec610cacb048e3e": {
+    "intent": "interact_m_my_workspace_conxa_api_search_ctrl___k_k_new_u",
+    "normalized_text": "m my workspace conxa-api search ctrl + k k new upgrade k dashboard conxa-api events settings monitor logs metrics manage environment shell scaling previews disk one-off jobs new plans, zero seat fees we're updating workspace pricing to help",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "30387b5c747be91dfd344b3be980a26ad7a2e62321d315a3c884fa79e9ba2834": {
+    "intent": "activate_control_delete_web_service",
+    "normalized_text": "delete web service",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "044dc0b712afabcea42841206a897d1be099eeccea28d66cf0049c4109c11584": {
+    "intent": "interact",
+    "normalized_text": "interact",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "59f626be4e9d22a69be2a36a874a4fc078727b0b0993f2e3580c2e770038f991": {
+    "intent": "interact_contacts",
+    "normalized_text": "contacts",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "547ce63ac8cf77f7571c98ab57221959a491baf0a4bb66b621fcc30493cfd916": {
+    "intent": "activate_control_add_contacts",
+    "normalized_text": "add contacts",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "f547772eb77bd1fb53921e66cb03d865f14ba3ee55c1768d3dfa001b8071629f": {
+    "intent": "activate_control_create_new",
+    "normalized_text": "create new",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "f86cc9fd50c61c46623f7a3bb6aa473c5c18340734d9a7156538bfe38951b6f0": {
+    "intent": "interact_loading",
+    "normalized_text": "loading",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "9a9acb224c4009b0bf51ecf37e69564babc82716cce64f84027bc0acacd822ea": {
+    "intent": "interact_set_up_the_basics_import_your_contacts__invite_t",
+    "normalized_text": "set up the basics import your contacts, invite teammates, and understand hubspot properties 28% complete 28% about 11 minutes left",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "6bc54cbeaa4422d9b5c198f22ad1c59b289ad414e2d34d7b3cf9284e29ddc6a4": {
+    "intent": "interact_recommended__all_you_need_to_get_started",
+    "normalized_text": "recommended: all you need to get started",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "a11c113d50df69451bc62ac4aa6536eb458f82ea56f57df0bcfb5d7d4d2f10c7": {
+    "intent": "interact_commerce_guide",
+    "normalized_text": "commerce guide",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "6d742bc502b7b30a83e7b1affe871c41000a2f707dc624d1a0658c80cc19976d": {
+    "intent": "interact_content_guide",
+    "normalized_text": "content guide",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "6ecc04b1acc5f7200167ce042eaf6b63df1b742f9a1863e169f4ff6e26ef9f5c": {
+    "intent": "interact_loading",
+    "normalized_text": "loading",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "b182d5e7999605f41135e61a2e6aef00890107b4cbcaf5edc07bf99ece703497": {
+    "intent": "interact_prev_next_25_per_page",
+    "normalized_text": "prev next 25 per page",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "6ebba3637e2445d4c6fd73df6a0635825e9fcb630e8e6d94e069a4935ec76f57": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date fn first name last name example@gmail.com +91-98909-89552 -- -- open today at 9:09 pm gmt+5:30 mc maria johnson (sample contact) emailmaria@hub",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "22c9d9d5990ef9d5f3dd8bb20a40483ed49aaf45a5d1fe0ce139ae614593f629": {
+    "intent": "activate_control_all_contacts",
+    "normalized_text": "all contacts",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "4e79af46b3567ca8eb9de6160be3ddfc2ba3f89047e9f5fddc45d7792d9e99f6": {
+    "intent": "activate_control_my_contacts",
+    "normalized_text": "my contacts",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "65b39aa103b87b207d711bdae167ed00e8bb6767e9ad07fbee3ab4866069f725": {
+    "intent": "interact_contacts_add_contacts_press_space_to_grab_and_re",
+    "normalized_text": "contacts add contacts press space to grab and reorder all contacts my contacts unassigned contacts",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "1d98bbb025fe7b960d5ff25ade97a71a588f034f1ac20247b3a0464fdc4e20d7": {
+    "intent": "interact_contact_insights_loading",
+    "normalized_text": "contact insights loading",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "a542254e4340ed2cb66862c9d4a234ef97667c3e4fc03a2c9884b304f2e5e17a": {
+    "intent": "interact_contact_insights_ai",
+    "normalized_text": "contact insights ai",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "6387f700012f8d88851eb65ff7ba422664160df12ca63540012832a35c486a6c": {
+    "intent": "interact_companies",
+    "normalized_text": "companies",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "4742245beefa6e8e4549c52446ea1a7981531f71164751450c4fd7905e95ef4c": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date fn first name example2@gmail.com -- -- -- -- yesterday at 11:18 pm gmt+5:30 fn first name last name example@gmail.com +91-98909-89552 -- -- ope",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "295b7f023d50dd30adab4d05bc38f990e39e2e7b8610b36122f0be98352894bc": {
+    "intent": "interact",
+    "normalized_text": "interact",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "6fd2c6a594278a6f5e87897dd1abb65aedab5d02c5333679bb8d92f088a4eb60": {
+    "intent": "interact_companies",
+    "normalized_text": "companies",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "8897186b8a64ee6bfcad844837d98245c75cfe2b9049005055dff43c588f181f": {
+    "intent": "interact_key_information_actions",
+    "normalized_text": "key information actions",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "a4b105a36ad1f5d432c992f7f5e046241c39a009d31598d524da0d008c19a938": {
+    "intent": "interact_contacts_actions_example123_gmail_com_example123",
+    "normalized_text": "contacts actions example123@gmail.com example123@gmail.com note email call task meeting more",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "015cfa4d126873133fe117a4990dd501fb9390102d3e327cf79904d9c11670a6": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date e example123@gmail.com example123@gmail.com -- -- -- -- today at 12:38 am gmt+5:30 fn first name example2@gmail.com -- -- -- -- yesterday at 11",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "7b8700d79085e2933c516818f56b59303aa241d3c85b905907955472a6d3b1e7": {
+    "intent": "interact_contacts_add_contacts_press_space_to_grab_and_re",
+    "normalized_text": "contacts add contacts press space to grab and reorder all contacts my contacts unassigned contacts name email phone number contact owner primary company last activity date lead status create date e example123@gmail.com example123@gmail.com",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "d25d36b79cebd9faf19c21f54d11fae7ce32387b117c5dd29db6f96f5105fe0c": {
+    "intent": "activate_control_submit",
+    "normalized_text": "submit",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "16b59721aad7f2bf81fc543f3b3eb27bfdab1bbaa9c381bed07be7710ad81acb": {
+    "intent": "interact",
+    "normalized_text": "interact",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "f8f5adaba2e1f0798e0ede0986b1986ae37e45558e25686fd2cebdc7def0c281": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date prev you are currently on page 1 next 25 per page",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "d80b33640c66909ce9818ecf3ee07987c9c14ce75fe48a2a8896c0560ade1fcd": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date e example123@gmail.com example123@gmail.com -- -- -- today at 12:38 am gmt+5:30 fn first name example2@gmail.com -- -- -- yesterday at 11:18 pm",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "0dc881f28d1698d5093b6283a18ef11348af212398bd4517640e146c3cc552ea": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date e example123@gmail.com example123@gmail.com -- karishma nagar (karishmaname204@gmail.com) -- -- -- today at 12:38 am gmt+5:30 fn first name exa",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "347d82d6398b77c27b4a1adb825d25399f1db7e67d9536d873a4bb7f19a9598b": {
+    "intent": "interact_user_guides_marketing_guide_sales_guide_customer",
+    "normalized_text": "user guides marketing guide sales guide customer service guide content guide commerce guide view your plan invite your team ready to connect: your sales tools progress 38% complete 38% recommended: all you need to get started set up the bas",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "4a743fb53bfa42a5bc288dd544820f651a0b782ce71cb93d869b23311a6d22b4": {
+    "intent": "interact_assistant_conxa_hi_there__have_any_questions__we",
+    "normalized_text": "assistant conxa hi there, have any questions? we’re here to help.",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "3aba04f53020ccb9c35cb536a3cc292f1ced51962475455bb463898bb317b27e": {
+    "intent": "interact_contact_owner_create_date_last_activity_date_lea",
+    "normalized_text": "contact owner create date last activity date lead status advanced filters name email phone number contact owner primary company last activity date lead status create date e example123@gmail.com example123@gmail.com -- kn karishma nagar (kar",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "97bf0672fcbbe664403189e7652a87f59b88df1fbce6fd876aedddfa56d5e28c": {
+    "intent": "interact_upgrade_assistant_conxa_contacts_add_contacts_pr",
+    "normalized_text": "upgrade assistant conxa contacts add contacts press space to grab and reorder all contacts my contacts unassigned contacts contact owner create date last activity date lead status advanced filters name email phone number contact owner prima",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "d9ebd04c1f065c3317bb232760d7f15bfed9372b08a1ed11343c3654455640e9": {
+    "intent": "interact_recent_interactions_ai_no_activity_on_this_recor",
+    "normalized_text": "recent interactions ai no activity on this record. create activity",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "6c995b0bc387b9426d160a3b115f38297d5df4b52cd8c280e6781dcdc308db77": {
+    "intent": "interact_deals__0__add_track_the_revenue_opportunities_as",
+    "normalized_text": "deals (0) add track the revenue opportunities associated with this record.",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "90e137cd69a9b72232756b9145aee949db3b76f87ce936106dddf6454c61b71d": {
+    "intent": "activate_control_sign_in_with_google",
+    "normalized_text": "sign in with google",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "682f66256aed79344cd1cdfe920691212d2269860f57367bac797929dff3bcfa": {
+    "intent": "interact_karishma_nagar_karishmaname204_gmail_com_signed_",
+    "normalized_text": "karishma nagar karishmaname204@gmail.com signed out",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "0159b2bd007aa1eedb1d6ff0be0f34aa2beb5ff0939f7f2f643f9cd86824bf11": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "3b20e031c28b878b1fed7548a7d6c0e26d54f8980e86d3172d2337f22d19677c": {
+    "intent": "activate_control_next",
+    "normalized_text": "next",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "494cf4d2f10c7fe6972ea7dcd52e510cc2c8a2459dcd59f1d3c52185ce01cab7": {
+    "intent": "interact_recommended__all_you_need_to_get_started_set_up_",
+    "normalized_text": "recommended: all you need to get started set up the basics import your contacts, invite teammates, and understand hubspot properties 28% complete 28% about 11 minutes left",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "9406b59eadc5caf011fd8dc3f4d7e1dfecf453a76cd669f458e52dbcde1392bb": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date e exampsfale@gmail.com exampsfale@gmail.com -- -- -- -- may 20, 2026 1:25 am gmt+5:30 e example123@gmail.com example123@gmail.com -- -- -- -- m",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "59a3ba2da7777539ed968de08d2eac080ab8e0ecf01dc70a221adff7672df698": {
+    "intent": "interact_contact_owner_create_date_last_activity_date_lea",
+    "normalized_text": "contact owner create date last activity date lead status advanced filters name email phone number contact owner primary company last activity date lead status create date e exampsfale@gmail.com exampsfale@gmail.com -- kn karishma nagar (kar",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "1d0b134d2ef42651ebc4e8c1833998eedc41b72cd8eed46a15858bf9ac9d4fd1": {
+    "intent": "interact_key_information_catch_up_activities_customize_ov",
+    "normalized_text": "key information catch-up activities customize overview contact insights recent interactions health sentiment challenges positive feedback companies deals tickets attachments",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "7d0b057719e31fcfcb97f27b04c3b83d12ef9923660f0df11d0e49c77fde05e9": {
+    "intent": "interact_companies",
+    "normalized_text": "companies",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "04f7364151cf093ad7e7832c41ece1f95ec1028caf646c895d6bb738e7f17da1": {
+    "intent": "interact",
+    "normalized_text": "interact",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "421a28ffccb04ece8776c58449304b55755e034f8364a58d721bd27d2a41ae10": {
+    "intent": "interact_marketing_guide",
+    "normalized_text": "marketing guide",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "2d717b9c5f962ce2d2763c5a632bc2057f007048a48f8163a388fcdec5033961": {
+    "intent": "interact_contacts_add_contacts_press_space_to_grab_and_re",
+    "normalized_text": "contacts add contacts press space to grab and reorder all contacts my contacts unassigned contacts name email phone number contact owner primary company last activity date lead status create date wq wwdqwd qwdqwedqw exampswqle@gmail.com 989",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "5315ca6c6d279d6aa279618e1a954ef0fa40d70dfff99f6b97691223546d5f35": {
+    "intent": "interact_recent_interactions_loading",
+    "normalized_text": "recent interactions loading",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "064577fd451a1cefa83e770b549098d2620b0d1bd1385b7f5dc77c2c794faa6f": {
+    "intent": "interact_deals__0__add_track_the_revenue_opportunities_as",
+    "normalized_text": "deals (0) add track the revenue opportunities associated with this record.",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "c7a5b65891a11eb716e208d4edab34d641a73201ec0323c51bc413ea1b4840c3": {
+    "intent": "interact_companies__0__add_see_the_businesses_or_organiza",
+    "normalized_text": "companies (0) add see the businesses or organizations associated with this record.",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "f74038b45fcea03306e42c1aa70b9a6eaa2917a954e8cbb11f85a6dad4de38f8": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "10fc54a73a9a2b3e653151d5383fd8603a235ea64d56f2c09fff6dd826ba8bd0": {
+    "intent": "activate_control_next",
+    "normalized_text": "next",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "61c4cf1ee5afbe3c81787bc368aabe82633a5fae777b1aac51aa0dd54c4cf631": {
+    "intent": "interact_conxa",
+    "normalized_text": "conxa",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "f1a3008d388cd674957337d9792e87276aeea4a5ed61f722527f071841af9078": {
+    "intent": "interact_name_email_phone_number_contact_owner_primary_co",
+    "normalized_text": "name email phone number contact owner primary company last activity date lead status create date cx cvdsvfsdfss xcxvdad examplrerrgf@gmail.com -- karishma nagar (karishmaname204@gmail.com) -- -- -- today at 2:56 am gmt+5:30 wq wwdqwd qwdqwe",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "44079e6d5165d4ecde070035644da849c8bab671c107dc555fa6b72244eb625c": {
+    "intent": "interact_companies_deals_tickets_attachments",
+    "normalized_text": "companies deals tickets attachments",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "2fce1e04f6d9253a5fdbef17c6d6962df22202d530f72cfd2d2645d97920723c": {
+    "intent": "interact_contacts",
+    "normalized_text": "contacts",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "0ce51ceacba7ec4dd753e02b13a545ee83086d4bc05312ef0fce60894bb3fa6b": {
+    "intent": "activate_control_person",
+    "normalized_text": "person",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "8fa845fab69358195443af0c670060bea2232685d656542267a1c51312956730": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "7564e0a49fd075ff210d54609c5c9fb3adf55b7e16072cf64e112787d154bd06": {
+    "intent": "interact_add_labels",
+    "normalized_text": "add labels",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "c465eb717d3fcd0c7bbb4fb5eb074569b4a16a9612f951a4566b53a5a3da5ad3": {
+    "intent": "activate_control_item_owner_s_visibility_group",
+    "normalized_text": "item owner’s visibility group",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "ba697e2b3b1dea757c9de8f4571ff1f72583adad8217baa261129871ad9a13cc": {
+    "intent": "interact_item_owner_s_visibility_group_and_sub_groups_vis",
+    "normalized_text": "item owner’s visibility group and sub-groups visible to the owner, global admins, followers, users in the same visibility group, parent group and sub-groups",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "e1a5eda1c33763c010b5f32873f68959428255ce5bc0905fbbdbd6aee230d174": {
+    "intent": "activate_control_save",
+    "normalized_text": "save",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "0354c65230c94e9d767aff672c75e4c685fbdd8ce1069a364a9bcbc685724375": {
+    "intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+    "normalized_text": "item owner visible to the owner, global admins, followers, parent visibility groups",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "0d56926afefaff4054b3ce9db08799a7702ae6b5e5e6ff9b9a1de42ba36214aa": {
+    "intent": "interact_karishma_nagar__you",
+    "normalized_text": "karishma nagar (you)",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "ca5711a89bfe5a4fc6c993a3d34e29fe47724d33c04c316182e089582007c8f0": {
+    "intent": "interact_add__comweb__as_new_organization",
+    "normalized_text": "add 'comweb' as new organization",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  }
+}
