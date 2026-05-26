@@ -10,6 +10,7 @@ from typing import Any
 from app.compiler.action_policy import no_recovery_block, recovery_enabled_for_action
 from app.compiler.decision_layer import rank_merged_anchors
 from app.compiler.destructive_semantics import destructive_compiler_step
+from app.compiler.input_binding_v2 import derive_input_binding_v2
 from app.compiler.llm_selector_generator_v2 import generate_selector_with_objective_confidence
 from app.compiler.recovery_policy import (
     default_recovery_block,
@@ -486,21 +487,8 @@ def _build_signals(
 
 
 def _derive_input_binding(ev: dict[str, Any], policy: dict[str, Any]) -> tuple[Any, str | None]:
-    action = ev.get("action") or {}
-    raw_value = action.get("value")
-    semantic = ev.get("semantic") or {}
-    if raw_value is None:
-        return None, None
-    input_type = str(semantic.get("input_type") or "").lower()
-    sig = policy.get("signals") if isinstance(policy.get("signals"), dict) else {}
-    cred = sig.get("credential_bindings") if isinstance(sig.get("credential_bindings"), dict) else {}
-    for ck, template in cred.items():
-        if str(ck).lower() == input_type:
-            return str(template), input_type
-    if input_type:
-        binding = input_type.replace("-", "_")
-        return f"{{{{{binding}}}}}", binding
-    return raw_value, None
+    """Delegate to derive_input_binding_v2 with priority signals (label_text → placeholder → aria_label → value pattern → input_type)."""
+    return derive_input_binding_v2(ev, policy)
 
 
 def _build_validation(ev: dict[str, Any], state_diff: dict[str, Any], policy: dict[str, Any]) -> ValidationBlock:
@@ -636,6 +624,27 @@ def _build_step(
     )
 
 
+def _deduplicate_input_bindings(steps: list[SkillStep]) -> None:
+    """Ensure no two type/keyboard_shortcut steps share the same input_binding name.
+
+    If two steps both resolve to {{name}}, the second becomes {{name_2}}, third {{name_3}}, etc.
+    Keyboard shortcut steps (with input_binding=None) are left alone.
+    """
+    seen_counts: dict[str, int] = {}
+    for step in steps:
+        binding = step.input_binding
+        if not binding:
+            continue
+        if binding not in seen_counts:
+            seen_counts[binding] = 1
+            continue
+        seen_counts[binding] += 1
+        new_binding = f"{binding}_{seen_counts[binding]}"
+        step.input_binding = new_binding
+        if isinstance(step.value, str) and step.value == f"{{{{{binding}}}}}":
+            step.value = f"{{{{{new_binding}}}}}"
+
+
 def compile_skill_package(
     events: list[dict[str, Any]],
     *,
@@ -661,6 +670,8 @@ def compile_skill_package(
     # LLM is enabled. Failures degrade gracefully — runtime falls back to existing
     # heuristic selectors plus a11y tier 2.
     intent_graph = _llm_compile_selectors(steps, cleaned_events, session_id=sid)
+
+    _deduplicate_input_bindings(steps)
 
     now = datetime.now(timezone.utc).isoformat()
     structural_fp = _build_structural_fingerprint(steps)
