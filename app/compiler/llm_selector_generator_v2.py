@@ -167,6 +167,7 @@ def generate_selector_with_objective_confidence(
     surrounding_text: str,
     action_type: str,
     target_dom: dict[str, Any] | None = None,
+    a11y_node: dict[str, Any] | None = None,
     candidates_wanted: int = 1,
     num_samples: int = 5,
     error_detail: list[str] | None = None,
@@ -199,6 +200,7 @@ def generate_selector_with_objective_confidence(
         surrounding_text=surrounding_text,
         action_type=action_type,
         target_dom=target_dom,
+        a11y_node=a11y_node,
         candidates_wanted=candidates_wanted,
         error_detail=error_detail,
     )
@@ -234,6 +236,7 @@ def generate_selector_with_objective_confidence(
             surrounding_text=surrounding_text,
             action_type=action_type,
             target_dom=target_dom,
+            a11y_node=a11y_node,
             candidates_wanted=1,
             error_detail=error_detail,
         )

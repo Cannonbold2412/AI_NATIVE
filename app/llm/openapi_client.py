@@ -49,6 +49,7 @@ def generate_selector_candidates(
     surrounding_text: str,
     action_type: str,
     target_dom: dict[str, Any] | None = None,
+    a11y_node: dict[str, Any] | None = None,
     candidates_wanted: int | None = None,
     model: str | None = None,
     error_detail: list[str] | None = None,
@@ -64,18 +65,21 @@ def generate_selector_candidates(
         return []
 
     n = candidates_wanted or settings.llm_selector_candidates
+    input_dict: dict[str, Any] = {
+        "dom_snippet": dom_snippet,
+        "element_bbox": element_bbox,
+        "ancestors": element_ancestors,
+        "surrounding_text": surrounding_text,
+        "action_type": action_type,
+        "target_dom": target_dom or {},
+        "candidates_wanted": n,
+    }
+    if a11y_node is not None:
+        input_dict["a11y_node"] = a11y_node
     payload = {
         "task": "selector_generation",
         "model": model or settings.llm_text_model or None,
-        "input": {
-            "dom_snippet": dom_snippet,
-            "element_bbox": element_bbox,
-            "ancestors": element_ancestors,
-            "surrounding_text": surrounding_text,
-            "action_type": action_type,
-            "target_dom": target_dom or {},
-            "candidates_wanted": n,
-        },
+        "input": input_dict,
     }
     data = call_llm(
         "selector_generation",

@@ -164,7 +164,10 @@ def _openai_messages_for_task(task: str, payload: dict[str, Any]) -> list[dict[s
                     "You generate Playwright CSS selectors. Return strict JSON with key "
                     "'candidates' (array of objects with keys: selector (CSS string), rank (1=best), "
                     "rationale (short string), intent (snake_case action description)). "
-                    "Prioritize: data-testid > aria-label > name > placeholder > text content > position. "
+                    "Prioritize: data-testid > [role][aria-label] > aria-label > name > placeholder > text content > position. "
+                    "When 'a11y_node' is provided in the input, use its 'role' and 'name' fields to generate "
+                    "an attribute selector like [role=\"button\"][aria-label=\"Submit\"] as your rank-1 candidate — "
+                    "this is layout-change tolerant and preferred over CSS structure selectors. "
                     "Avoid: hashed classes, auto-IDs, fragile nth-of-type chains, XPath. "
                     "Each selector MUST be valid Playwright CSS. No markdown, no extra keys."
                 ),

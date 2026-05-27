@@ -42,6 +42,7 @@ class SelectorCompileTask:
     surrounding_text: str
     action_type: str
     target_dom: dict[str, Any]  # tag, id, classes, inner_text, role, aria_label, name, placeholder
+    a11y_path: str | None = None
 
 
 def is_obviously_invalid(selector: str) -> bool:
@@ -99,23 +100,25 @@ def validate_selector(selector: str, dom_snapshot: str | None) -> tuple[bool, in
 
 
 def rank_candidates(candidates: list[SelectorCandidate]) -> list[SelectorCandidate]:
-    """Stability ordering: testid > aria > name > placeholder > text > tag+class."""
+    """Stability ordering: testid > role+aria-label > aria-label > name > placeholder > text > tag+class."""
 
     def score(c: SelectorCandidate) -> tuple[int, int]:
         s = c.selector.lower()
         prio = 9
         if "data-testid" in s or "data-test-id" in s:
             prio = 0
+        elif "[role=" in s and "aria-label" in s:
+            prio = 1  # a11y-derived compound: most layout-tolerant
         elif "aria-label" in s:
-            prio = 1
-        elif "[name=" in s:
             prio = 2
-        elif "[placeholder=" in s:
+        elif "[name=" in s:
             prio = 3
-        elif "#" in s:
+        elif "[placeholder=" in s:
             prio = 4
-        elif ":has-text" in s or ":text" in s:
+        elif "#" in s:
             prio = 5
+        elif ":has-text" in s or ":text" in s:
+            prio = 6
         elif "nth-of-type" in s or "nth-child" in s:
             prio = 8
         return (prio, c.rank or 99)
@@ -136,6 +139,38 @@ def _dom_snippet_for_llm(dom_snapshot: str, max_chars: int = 60000) -> str:
     return dom_snapshot[:max_chars] + "\n<!-- truncated -->\n"
 
 
+def _extract_a11y_node(
+    tree: dict[str, Any] | None,
+    target: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Depth-first search for the a11y node matching target role + accessible name.
+
+    Returns the first node whose role matches and whose accessible name contains
+    the target's aria_label or inner_text (first 50 chars). Returns None if the
+    tree is absent or no match is found — caller falls back to CSS-only path.
+    """
+    if not tree or not target:
+        return None
+    t_role = (target.get("role") or "").lower().strip()
+    t_name = (target.get("aria_label") or target.get("inner_text") or "").strip().lower()[:50]
+
+    def _walk(node: dict[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(node, dict):
+            return None
+        n_role = (node.get("role") or "").lower().strip()
+        n_name = (node.get("name") or "").strip().lower()
+        if t_role and n_role == t_role:
+            if not t_name or t_name in n_name:
+                return node
+        for child in node.get("children") or []:
+            found = _walk(child)
+            if found is not None:
+                return found
+        return None
+
+    return _walk(tree)
+
+
 def compile_selectors_for_task(
     task: SelectorCompileTask,
     *,
@@ -152,6 +187,13 @@ def compile_selectors_for_task(
     # Load DOM snapshot for validation.
     dom_snapshot = snapshots.read_dom_snapshot(session_id, task.snapshot_hash) if task.snapshot_hash else None
 
+    # Load a11y tree and extract the node matching this element (if available).
+    a11y_node: dict[str, Any] | None = None
+    if task.snapshot_hash:
+        a11y_tree = snapshots.read_a11y_snapshot(session_id, task.snapshot_hash)
+        if a11y_tree:
+            a11y_node = _extract_a11y_node(a11y_tree, task.target_dom)
+
     raw_candidates = generate_selector_candidates(
         dom_snippet=_dom_snippet_for_llm(dom_snapshot or ""),
         element_bbox=task.element_bbox,
@@ -159,6 +201,7 @@ def compile_selectors_for_task(
         surrounding_text=task.surrounding_text,
         action_type=task.action_type,
         target_dom=task.target_dom,
+        a11y_node=a11y_node,
         candidates_wanted=settings.llm_selector_candidates,
         model=model,
     )
@@ -261,6 +304,7 @@ def task_from_recorded_event(ev: dict[str, Any], step_index: int) -> SelectorCom
         snapshot_ref=str(snapshot.get("ref") or ""),
         snapshot_hash=str(snapshot.get("dom_hash") or ""),
         dom_path=snapshot.get("dom_path"),
+        a11y_path=snapshot.get("a11y_path") or None,
         element_bbox={
             "x": int(bbox.get("x") or 0),
             "y": int(bbox.get("y") or 0),

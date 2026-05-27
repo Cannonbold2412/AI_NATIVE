@@ -2,355 +2,221 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
----
+## What This Repo Is
+
+Conxa: a marketplace for AI-native automation plugins. Real browser workflows are recorded, compiled into structured skills with durable element identity and outcome assertions, then replayed by an MCP runtime on the user's machine with a 5-tier self-healing recovery cascade.
+
+`docs/architecture.md` is the authoritative deep-dive. Read it before non-trivial changes to the recorder, compiler, or runtime.
 
 ## Working Principles
 
-### 1. Think Before Coding
-- State assumptions explicitly. If unsure, ask.
-- If multiple interpretations exist, present them — don't silently pick one.
-- If a simpler approach exists, call it out.
+1. **Think before coding.** State assumptions. If multiple interpretations exist, surface them — don't silently pick one. If a simpler approach exists, call it out. If something is unclear, stop and ask.
+2. **Simplicity first.** Write the minimum code needed. No speculative abstractions, no configurability for single-use code, no handling for impossible scenarios. If 200 lines could be 50, rewrite it.
+3. **Surgical changes.** Touch only what the task requires. Don't refactor unrelated code; mention issues rather than fixing them. Match existing style. Every changed line must trace to the task. If your changes leave unused code, remove only what *you* introduced.
+4. **Goal-driven.** Define success → implement → verify. Bug → reproduce → fix → verify. Refactor → ensure no behavior change.
 
-### 2. Simplicity First
-Write the minimum code needed. No extra features, no speculative abstractions, no configurability for single-use code, no handling for impossible scenarios. If you wrote 200 lines and 50 would do, rewrite it.
+### Token & file constraints
+- Don't read files larger than ~25KB completely. Use `offset`/`limit`, or `grep`/`tail` to locate the relevant chunk first.
+- Recorded session artifacts (`data/sessions/<id>/events.jsonl`, screenshots, compile reports) can be very large — always scope reads.
 
-### 3. Surgical Changes
-Touch only what the task requires. Don't refactor unrelated code, don't fix unrelated issues (mention them instead), match existing style. Every changed line must trace to the task.
-
-### 4. Goal-Driven Execution
-Define success → implement → verify. For bugs: reproduce → fix → verify. For refactors: ensure no behavior change.
-
-### Token & File Constraints
-- DO NOT read files larger than 25KB completely into context.
-- For large files/logs use `offset` and `limit`. Prefer `grep`/`tail` to locate the relevant chunk first.
-
----
-
-## Repo Layout
+## Repository Layout
 
 ```
-app/              FastAPI backend (Python)
-  api/            HTTP routes — all mounted under /api/v1 (see app/main.py)
-  recorder/       Phase 1: Playwright capture + in-page bridge.js
-  pipeline/       Phase 2: normalize / dedupe / enrich recorded events
-  compiler/       Phase 3: events → SkillPackage (selectors, assertions, recovery)
-  execution/      Lifecycle state machine, checkpoint, drift, trace
-  llm/            LLM clients + multi-provider router (see ROUTER_SETUP.md)
-  services/       plugin_builder.py (compile → data-only plugin folder), jobs, executor
-  storage/        Plugin templates incl. runtime/ shipped to ~/.conxa/runtime/
-  models/         Pydantic schemas: SkillPackage, RecordedEvent, etc.
-  auth/           Plugin auth session manager
-  main.py         FastAPI entrypoint — routers registered here
+app/                  FastAPI backend (Python 3.11+)
+  main.py             Entrypoint; mounts every router under /api/v1
+  config.py           Pydantic settings (env_prefix=SKILL_)
+  db.py               SQLAlchemy session + init_db()
+  worker.py           Render worker entrypoint (queue scaffold)
 
-runtime/          Node.js MCP runtime (ships to ~/.conxa/runtime/)
-  server.js       MCP server (Claude Code integration)
-  run.js          Step executor + fingerprint-scored recovery
+  api/                HTTP routes (all included under /api/v1 by main.py)
+  recorder/           Phase 1: Playwright capture + injected bridge.js
+  pipeline/           Phase 2: normalize / dedupe / enrich recorded events
+  compiler/           Phase 3: events → SkillPackage (selectors, assertions,
+                      recovery blocks, structural fingerprint)
+  execution/          Lifecycle state machine, checkpoint, drift, trace
+  llm/                LLM clients + multi-provider router (see ROUTER_SETUP.md)
+  services/           plugin_builder (data-only plugin folders), jobs, executor,
+                      saas, skill_pack/, mcp_stdio_client, rbac
+  storage/            JSON/SQLite stores, snapshots, plugin/installer templates
+                      (templates/runtime/ ships to ~/.conxa/runtime/)
+  models/             Pydantic schemas: SkillPackage, RecordedEvent, Plugin
+  auth/               Plugin auth session manager (Playwright storageState)
+  editor/             Workflow editor service + DTOs + patch gate
+  anchors/, confidence/, metrics/, policy/   Supporting modules
+
+runtime/              Node.js MCP runtime (ships to ~/.conxa/runtime/)
+  server.js           MCP stdio server (Claude Code integration)
+  run.js              Step executor + fingerprint-scored recovery
   skill_loader.js, browser.js, auth_manager.js, sync.js, tracker.js
+  package.json        @yao-pkg/pkg bundles for win/mac
 
-frontend/         Next.js App Router UI (Clerk auth, TanStack Query)
-  src/            Pages: Dashboard, Plugins, SkillPackBuilder, TestPlugin, etc.
-  proxy.ts        Clerk middleware
+frontend/             Next.js 16 App Router UI
+  src/                Pages: Dashboard, Plugins, SkillPackBuilder, TestPlugin, …
+  proxy.ts            Clerk middleware
+  package.json        Clerk, TanStack Query, Tailwind 4, shadcn, Framer Motion
 
-scripts/          Operational scripts
-  test_plugin.py        End-to-end plugin validator (5 phases — see PLUGIN_TEST_README.md)
-  recompile_session.py  Recompile a recorded session, dump compile report
-  plugin_test/          Phase implementations used by test_plugin.py
+scripts/
+  test_plugin.py            End-to-end plugin validator (5 phases)
+  PLUGIN_TEST_README.md     Phase definitions + invocation modes
+  recompile_session.py      Recompile a session, dump compile report
+  plugin_test/              Phase implementations imported by test_plugin.py
 
-tests/            pytest suite (unit + integration + e2e)
-data/             Runtime state: sessions/, plugins/, skills/, saas/, cache/
-docs/architecture.md  Authoritative deep-dive on phases, iframe pipeline, recovery cascade
+tests/                pytest suite (unit + tests/integration + tests/e2e)
+data/                 Runtime state: sessions/, plugins/, skills/, saas/, cache/, chromium/
+docs/architecture.md  Authoritative deep-dive: phases, iframe pipeline, recovery cascade,
+                      data contracts, observability, migration phases
+ROUTER_SETUP.md       Multi-provider LLM router config (Groq, Google AI Studio, NVIDIA NIM, …)
+build.sh, start.sh    Render build/start scripts
+rebuild_plugin.py     One-off plugin rebuild helper (edit session id inline)
 ```
-
----
 
 ## Common Commands
 
-### Backend (Python / FastAPI)
+### Backend
+
 ```bash
 # Install deps + Playwright Chromium
-./build.sh                                       # or: pip install -r requirements.txt && python -m playwright install chromium
+pip install -r requirements.txt
+python -m playwright install chromium
+# (or run ./build.sh — used by Render)
 
-# Run the API locally
+# Run the API
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+# (start.sh runs the same without --reload, on $PORT)
 
-# All tests
-pytest -q tests
+# Tests
+pytest -q tests                              # full suite
+pytest -q tests/test_pipeline_gates.py       # single file
+pytest -q tests/test_phases.py::test_x -x    # single test, stop on first failure
 
-# Single test file / single test
-pytest -q tests/test_pipeline_gates.py
-pytest -q tests/test_pipeline_gates.py::test_specific_case -x
-
-# Recompile a recorded session (dumps compile report to stdout)
+# Recompile a previously recorded session and dump the compile report
 python scripts/recompile_session.py <session_id>
 
-# Build a plugin from a session
-python rebuild_plugin.py        # edits the session id inline; see app/services/plugin_builder.py
-
-# End-to-end plugin validation (phases 1/3/4 are fast & deterministic)
+# End-to-end plugin validation
+# Phases 1 (structure) + 3 (steps) + 4 (recovery) — fast, deterministic
 python scripts/test_plugin.py <plugin-slug> --skip-phase2 --skip-phase5
+# Add Phase 5 (Playwright execution) when real selectors/URLs are wanted
+python scripts/test_plugin.py <plugin-slug> --skip-phase2 --execute --inputs path/to/inputs.json
 ```
 
-### Frontend (Next.js)
+### Frontend
+
 ```bash
 cd frontend
 npm install
-npm run dev                # local dev (Next.js App Router)
-npm run build              # production build (Vercel)
-npm run lint               # eslint
+npm run dev       # local dev server
+npm run lint      # eslint
+npm run build     # production build (Vercel)
 ```
 
-### Runtime (Node.js MCP server)
+### Runtime (Node.js MCP)
+
 ```bash
 cd runtime
 npm install
-npm start                  # node server.js — MCP stdio server
-npm run build:win          # bundle for Windows via @yao-pkg/pkg
-npm run build:mac
+npm start                     # node server.js (MCP stdio)
+npm run build:win             # @yao-pkg/pkg → dist/runtime-win.exe
+npm run build:mac             # @yao-pkg/pkg → dist/runtime-mac
 ```
 
-Configuration: copy `.env.example` → `.env`. Required for LLM features: provider keys (see `ROUTER_SETUP.md` for the multi-provider router config — Groq / Google AI Studio / NVIDIA NIM enabled by default).
+### Configuration
 
----
+Copy `.env.example` → `.env`. All backend settings use the `SKILL_` env prefix (see `app/config.py`). LLM provider keys feed the multi-provider router — see `ROUTER_SETUP.md` (Groq, Google AI Studio, and NVIDIA NIM are enabled by default).
 
 ## Architecture: The Big Picture
 
-Conxa records real browser workflows, compiles them into structured skills, and replays them via an MCP runtime with self-healing recovery.
+### Offline pipeline (record → compile → package)
 
-### Pipeline (offline, deterministic)
 ```
-Browser → recorder/bridge.js → events.jsonl
-  → pipeline/run.py (normalize/dedupe/enrich)
-  → compiler/build.py (compile_skill_package)
-      ├─ ElementFingerprint per step (durable element identity)
-      ├─ Assertion[] per step (outcome verification)
-      ├─ RecoveryBlock (anchors, fallback selectors)
-      └─ SkillMeta.structural_fingerprint (drift baseline)
-  → services/plugin_builder.py (data-only plugin folder under output/skill_package/)
+Browser
+  └─ app/recorder/bridge.js      injected into every frame; captures
+                                  click / type / select / hover / drag / etc.
+  ↓
+app/recorder/session.py          Playwright binding sink; walks iframe parent
+                                  chain, accumulates page-level offsets
+  ↓ events.jsonl  +  screenshots
+app/pipeline/run.py              normalize / dedupe / enrich
+  ↓
+app/compiler/build.py            compile_skill_package() — produces:
+    • ElementFingerprint per step      (role / tag / text / aria / testid / anchors)
+    • Assertion[] per step              (url_pattern, selector_present, …)
+    • RecoveryBlock (anchors, fallback selectors)
+    • SkillMeta.structural_fingerprint  (drift baseline)
+  ↓
+app/services/plugin_builder.py   data-only plugin folder under
+                                  output/skill_package/{slug}-plugin/
+                                  (auth files are NEVER placed in build output)
 ```
 
 ### Runtime (production, on user machine)
-- Plugin folder: `~/.conxa/plugins/{slug}/` (data only — no JS shipped)
-- Shared runtime: `~/.conxa/runtime/` (Node.js MCP server, installed once)
-- Auth state: `~/.conxa/plugins/{slug}/auth/auth.json` (Playwright storageState; never in git)
-- Execution state: `~/.conxa/data/executions/{id}/` (state.json, checkpoint.json, trace.jsonl)
-- Recovery log: `~/.conxa/recovery.log` (JSONL, rotated at 10MB)
 
-### Self-Healing Recovery Cascade (run.js)
-For every action, runtime tries tiers in order; LLM only fires on Tier 3+:
-1. **compiled selectors** — generated at compile time from recorded DOM (fast, free)
-2. **a11y tree** — role + name lookup (DOM-shift tolerant, free)
-3. **LLM recovery** — Claude locates element semantically on current DOM
-4. **vision** — Claude vision model locates by screenshot
-5. **escalation** — human review queue (no silent guessing)
+```
+~/.conxa/
+├── runtime/                     shared Node MCP server (installed once)
+├── plugins/<slug>/              data-only plugin
+│   ├── plugin.json              manifest
+│   ├── CLAUDE.md                Claude reads this for skill discovery
+│   ├── skills/<slug>/           one folder per workflow
+│   └── auth/auth.json           Playwright storageState (local only)
+├── data/executions/<id>/        state.json, checkpoint.json, trace.jsonl
+├── data/runs/<plugin>.jsonl     plugin run log
+└── recovery.log                 JSONL, rotated at 10 MB
+```
 
-Iframe context flows through every stage — see `docs/architecture.md` § "Iframe Pipeline" for the full chain (`bridge.js` → `session.py` → `compiler/build.py` → `run.js`'s `rootCandidates`).
+`runtime/run.js` executes each step:
 
-### API Surface
-- Backend exposes everything under `/api/v1/*` (see `app/main.py` for router list).
-- Frontend talks to it via the Next.js proxy route handler (`API_ORIGIN` env var in production).
-- Execution lifecycle endpoints: `GET/POST /api/v1/executions/{id}{,/pause,/resume,/cancel,/trace}`.
-- MCP tools (runtime/server.js): `execute_plan`, `get_execution_status`, `pause_execution`, `resume_execution`, `cancel_execution`, `list_skills`, `read_skill_files`, `install_plugin`, `search_registry`.
+1. Poll pause signal (supports pause/resume via API control file).
+2. `waitForStable()` — adaptive timing, no fixed sleeps.
+3. `waitForUrlState()` — pre-step URL gate.
+4. `executeStep()` — primary action.
+5. On failure → `resolveElement()` scores candidates against ElementFingerprint; dialog-scoped and fuzzy fallbacks if needed.
+6. `verifyAssertions()` — required assertions halt execution; advisory ones log warnings.
+7. `writeCheckpoint()` — step-level recovery point.
 
----
+### Self-healing recovery cascade
+
+For every action, tiers run in order; LLM only fires from Tier 3:
+
+1. **Compiled selectors** — generated from recorded DOM at compile time.
+2. **a11y tree** — role + name lookup (DOM-shift tolerant).
+3. **LLM recovery** — Claude locates the element semantically on current DOM.
+4. **Vision** — Claude vision model locates by screenshot.
+5. **Escalation** — human review queue. No silent fallback or guessing.
+
+Selectors are cached by `(dom_hash, bbox, model)`. Iframe context flows through every stage — see `docs/architecture.md` § "Iframe Pipeline".
+
+### API surface
+
+- Everything mounts under `/api/v1/*` (`app/main.py`).
+- Execution lifecycle: `GET /api/v1/executions`, `GET /api/v1/executions/{id}`, `POST /api/v1/executions/{id}/{pause,resume,cancel}`, `GET /api/v1/executions/{id}/trace`.
+- MCP tools exposed by `runtime/server.js`: `execute_plan` (sync or `async: true`), `get_execution_status`, `pause_execution`, `resume_execution`, `cancel_execution`, `list_skills`, `read_skill_files`, `install_plugin`, `search_registry`.
+- Frontend reaches the backend via the Next.js `/api/v1/*` route handler; set `API_ORIGIN` in production.
 
 ## Where to Look First
 
-- **Adding/changing a recorder event type**: `app/recorder/bridge.js` (capture) → `app/pipeline/` (normalize) → `app/compiler/build.py` (compile) → `runtime/run.js` (execute).
-- **Selector/recovery logic**: compile side in `app/compiler/llm_selector_generator_v2.py` + `selector_score.py`; runtime side in `runtime/run.js` (`resolveElement`, `withLocator`).
-- **Execution lifecycle / pause-resume**: `app/execution/lifecycle.py`, `checkpoint.py`, `runtime/run.js` pause-signal polling.
-- **Plugin packaging**: `app/services/plugin_builder.py` writes the data-only plugin folder. Auth files (`auth/auth.json`, credentials) are NEVER placed in build output.
-- **LLM calls**: `app/llm/client.py` — transparently routes through `app/llm/router.py` multi-provider pool when configured.
-- **Deep architecture reference**: `docs/architecture.md` (data contracts, iframe pipeline, observability, migration phases).
-
----
-
-## Production Deployment
-
-- Backend + worker on Render via `render.yaml` (services: `ai-native-api`, `ai-native-worker`). Build with `build.sh`, start with `start.sh`.
-- Frontend on Vercel with project root `frontend`, build `npm run build`. The Next route handler `/api/v1/*` proxies to `API_ORIGIN`.
-- Required env vars in prod: `SKILL_AUTH_REQUIRED=true`, Clerk issuer/JWKS, allowed CORS origins, DB, Redis, Blob, Razorpay, app URL, LLM provider keys.
-
-
----
-
-## 1. Think Before Coding
-
-**Don’t assume. Don’t hide confusion. Surface tradeoffs.**
-
-Before implementing:
-
-- Explicitly state assumptions. If unsure, ask.
-- If multiple interpretations exist, present them — don’t silently choose one.
-- If a simpler approach exists, call it out.
-- If something is unclear, stop and ask.
-
----
-
-## 2. Simplicity First
-
-**Write the minimum code needed. Nothing speculative.**
-
-- No extra features beyond the requirement  
-- No abstractions for single-use code  
-- No unnecessary configurability  
-- No handling for impossible scenarios  
-
-> If you wrote 200 lines but it could be 50 → rewrite it.
-
-Ask yourself:  
-**“Would a senior engineer say this is overcomplicated?”**
-
----
-
-## 3. Surgical Changes
-
-**Touch only what’s necessary.**
-
-When editing:
-
-- Don’t modify unrelated code
-- Don’t refactor unless asked
-- Match existing style
-- Mention issues, don’t fix them unless required
-
-If your changes create unused code:
-- Remove only what *you* introduced
-
-> Every changed line must trace directly to the task.
-
----
-
-## 4. Goal-Driven Execution
-
-**Define success → implement → verify**
-
-Example:
-
-```
-1. Add feature → verify via test
-2. Fix bug → reproduce → fix → verify
-3. Refactor → ensure no behavior change
-```
-
----
-
-## Token & File Constraints
-- DO NOT read files larger than 25KB completely into context.
-- When inspecting large files, logs, or databases, ALWAYS use `offset` and `limit` parameters to look at relevant chunks.
-- Prioritize using terminal utilities (like `grep`, `awk`, or `tail`) to locate lines before attempting to read a file chunk.
-
----
-
-
-# Conxa: AI-Driven Workflow Automation Platform
-
-## Overview
-
-Conxa is a **marketplace for AI-native automation plugins**, built from real workflow recordings and executed by AI agents.
-
----
-
-## What We’re Building
-
-A system where:
-
-1. Users record real workflows  
-2. Convert them into structured skills  
-3. Package them into reusable plugins  
-4. Let AI dynamically execute them  
-
----
-
-## Core Architecture
-
-### 1. Workflow Recorder → Structured Editor
-
-- Record real workflows  
-- Convert each into **one skill (`SKILL.md`)**  
-- Human refines into production-ready logic  
-
----
-
-### 2. Multi-Skill Aggregation
-
-Multiple recordings → multiple skills
-
-**Example (Render plugin):**
-- Login  
-- Create service  
-- Deploy from GitHub  
-- Monitor deployment  
-
----
-
-### 3. Plugin Packager
-
-- Combine skills + execution engine  
-- Output: **One plugin capable of multiple tasks**
-
----
-
-### 4. Execution Flow
-
-1. Agent reads `CLAUDE.md`  
-2. Plans required skills  
-3. Requests inputs  
-4. Executes using automation engine  
-
----
-
-### 5. Deterministic Execution with Self-Healing Fallbacks
-
-Runtime tries selectors in order; only Claude LLM fires on Tier 3+ fallback:
-
-- **Tier 1 (compiled)**: Use `step.compiled_selectors` generated at compile time from recorded DOM. Fast, reliable, no LLM cost.
-- **Tier 2 (a11y)**: Query a11y tree by role + name. Works when DOM shifts slightly. No LLM.
-- **Tier 3 (LLM recovery)**: Claude LLM locates element on current DOM given semantic description. Expensive, used only when Tiers 1-2 fail.
-- **Tier 4 (vision)**: Claude vision model locates by screenshot. Last resort; used when text-based recovery fails.
-- **Escalation**: All 4 tiers fail → human review queue. No silent fallback or guessing.
-
-Each recording session produces a DOM snapshot (SHA256 hash). Selectors are cached by (dom_hash, bbox, model). When the page layout changes, the next tier activates automatically.
-
----
-
-## Output: Plugin Marketplace
-
-### For Companies
-
-- Record workflows  
-- Convert into skills  
-- Package into plugins  
-- Publish on GitHub  
-
-### We Provide
-
-- Plugin generation  
-- Execution engine  
-- Version control
-
-### For Users
-
-- Download plugins  
-- AI reads capabilities  
-- Plans workflows  
-- Executes autonomously relaibely  
-
----
-
-## Why This Is Different
-
-- ❌ Not RPA → no rigid scripts  
-- ❌ Not templates → real workflows  
-- ❌ Not brittle → self-healing system  
-
-- ✅ AI-native planning  
-- ✅ Dynamic execution  
-- ✅ Scalable architecture  
-
----
-
-## Vision
-
-> Turn every real workflow into an executable AI capability.
-
----
+| Concern                            | Code paths                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| Recorder event types               | `app/recorder/bridge.js` → `app/pipeline/` → `app/compiler/build.py` → `runtime/run.js` |
+| Selector compilation / scoring     | `app/compiler/llm_selector_generator_v2.py`, `selector_score.py`, `selector_filters.py` |
+| Runtime element resolution         | `runtime/run.js` — `resolveElement`, `withLocator`, `rootCandidates`        |
+| Execution lifecycle / pause-resume | `app/execution/lifecycle.py`, `checkpoint.py`; runtime pause-signal polling |
+| Assertions / outcome validation    | `app/compiler/validation_planner.py`; runtime `verifyAssertions()`          |
+| Plugin packaging                   | `app/services/plugin_builder.py` (data-only output, auth excluded)          |
+| LLM calls                          | `app/llm/client.py` → `app/llm/router.py` (multi-provider pool)             |
+| Frame / iframe handling            | `docs/architecture.md` § "Iframe Pipeline"; `bridge.js`, `session.py`, `build.py`, `run.js` |
+| Auth / session validation          | `app/auth/session_manager.py`                                               |
+| Frontend product shell             | `frontend/src/` (DashboardPage, PluginsPage, SkillPackBuilderPage, TestPluginPage, …) |
+
+## Deployment
+
+- **Backend + worker** on Render: build with `build.sh`, API starts via `start.sh` (`uvicorn app.main:app`). Worker entrypoint is `app/worker.py`. Required env: `SKILL_AUTH_REQUIRED=true`, Clerk issuer/JWKS, DB, Redis, Blob, Razorpay, allowed CORS origins, LLM provider keys, app URL.
+- **Frontend** on Vercel: project root `frontend`, build `npm run build`. The Next route handler `/api/v1/*` proxies to `API_ORIGIN`. Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` for Clerk.
+- System packages required for Playwright/Chromium on the API host are listed in `Aptfile`.
+
+## Key Invariants
+
+- Auth files (`auth/auth.json`, credentials) are **local runtime state**. They are never placed in build output and never committed.
+- Tier 1/2 recovery costs zero LLM tokens. LLM only fires at Tier 3+. Don't introduce silent LLM fallbacks.
+- Iframe chain is preserved verbatim from recording through compile and execution; bounding boxes are page-level (offsets accumulated up the chain).
+- `frame_enter` / `frame_exit` actions get `no_recovery_block` — no retry on these markers.
+- All API routes live under `/api/v1`; the frontend depends on this.
