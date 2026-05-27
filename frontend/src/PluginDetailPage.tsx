@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   deleteWorkflow,
@@ -26,7 +27,6 @@ import { CompiledSkillsTab } from '@/components/CompiledSkillsTab'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Copy, FileJson, KeyRound, Loader2, MousePointer2, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { usePluginWorkflowCompileTracker } from '@/hooks/usePluginWorkflowCompileTracker'
-import { enqueueRecompileSkillJob, fetchJob, type JobStatus } from '@/api/workflowApi'
 
 // ─────────────────────────────────────────────────
 // Auth panel
@@ -200,12 +200,6 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
 // Workflow row
 // ─────────────────────────────────────────────────
 
-type RecompileStatus = JobStatus | 'idle' | 'enqueuing'
-
-function isRecompileActive(status: RecompileStatus) {
-  return status === 'enqueuing' || status === 'queued' || status === 'running'
-}
-
 function WorkflowRow({
   workflow,
   pluginId,
@@ -217,20 +211,15 @@ function WorkflowRow({
   onDelete: () => void
   onCompiled: () => void
 }) {
-  const queryClient = useQueryClient()
+  const router = useRouter()
   const [showJson, setShowJson] = useState(false)
   const [jsonData, setJsonData] = useState<unknown>(null)
   const [loadingJson, setLoadingJson] = useState(false)
-  const [recompileJobId, setRecompileJobId] = useState<string | null>(null)
-  const [recompileStatus, setRecompileStatus] = useState<RecompileStatus>('idle')
-  const [recompileError, setRecompileError] = useState('')
-  const [recompileSuccess, setRecompileSuccess] = useState('')
   const compileCompletedRef = useRef(false)
-  const { clearCompile, getCompile, isCompileActive, startCompile } = usePluginWorkflowCompileTracker()
+  const { clearCompile, getCompile, isCompileActive } = usePluginWorkflowCompileTracker()
   const compileEntry = getCompile(pluginId, workflow.id)
   const isCompiling = isCompileActive(pluginId, workflow.id)
   const compileError = compileEntry?.error ?? ''
-  const isRecompiling = isRecompileActive(recompileStatus)
 
   const deleteMut = useMutation({
     mutationFn: () => deleteWorkflow(pluginId, workflow.id),
@@ -254,48 +243,6 @@ function WorkflowRow({
     }
   }, [clearCompile, compileEntry, pluginId, workflow.id, workflow.skill_id])
 
-  useEffect(() => {
-    if (!recompileJobId || !isRecompiling || recompileStatus === 'enqueuing') return
-
-    let canceled = false
-    const poll = async () => {
-      try {
-        const job = await fetchJob(recompileJobId)
-        if (canceled) return
-        setRecompileStatus(job.status)
-        if (job.status === 'failed' || job.status === 'canceled') {
-          setRecompileError(job.user_error || `Recompile job ${job.status}.`)
-          return
-        }
-        if (job.status === 'succeeded') {
-          const version = job.result?.version
-          setRecompileSuccess(typeof version === 'number' ? `Recompiled v${version}` : 'Recompiled')
-          setRecompileError('')
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['plugin', pluginId] }),
-            queryClient.invalidateQueries({ queryKey: ['plugins'] }),
-            queryClient.invalidateQueries({ queryKey: ['skillList'] }),
-            workflow.skill_id
-              ? queryClient.invalidateQueries({ queryKey: ['workflow', workflow.skill_id] })
-              : Promise.resolve(),
-            queryClient.invalidateQueries({ queryKey: ['compiled-skill', pluginId, workflow.slug] }),
-          ])
-        }
-      } catch (err) {
-        if (canceled) return
-        setRecompileStatus('failed')
-        setRecompileError(err instanceof Error && err.message ? err.message : 'Could not check recompile status.')
-      }
-    }
-
-    void poll()
-    const timer = window.setInterval(() => void poll(), 1500)
-    return () => {
-      canceled = true
-      window.clearInterval(timer)
-    }
-  }, [isRecompiling, pluginId, queryClient, recompileJobId, recompileStatus, workflow.skill_id, workflow.slug])
-
   const handleViewJson = async () => {
     setLoadingJson(true)
     try {
@@ -312,28 +259,14 @@ function WorkflowRow({
   }
 
   const handleCompile = () => {
-    void startCompile({
-      pluginId,
-      workflowId: workflow.id,
-      sessionId: workflow.session_id,
-      workflowName: workflow.name,
-    })
+    router.push(`/plugins/${encodeURIComponent(pluginId)}/workflows/${encodeURIComponent(workflow.id)}/compile?start=1`)
   }
 
-  const handleRecompile = async () => {
+  const handleRecompile = () => {
     if (!workflow.skill_id) return
-    setRecompileStatus('enqueuing')
-    setRecompileError('')
-    setRecompileSuccess('')
-    try {
-      const job = await enqueueRecompileSkillJob(workflow.skill_id)
-      setRecompileJobId(job.job_id)
-      setRecompileStatus(job.status)
-    } catch (err) {
-      setRecompileJobId(null)
-      setRecompileStatus('failed')
-      setRecompileError(err instanceof Error && err.message ? err.message : 'Could not start recompile.')
-    }
+    router.push(
+      `/plugins/${encodeURIComponent(pluginId)}/workflows/${encodeURIComponent(workflow.id)}/compile?start=1&mode=recompile`,
+    )
   }
 
   return (
@@ -390,14 +323,9 @@ function WorkflowRow({
                     size="sm"
                     variant="outline"
                     className="border-amber-500/30 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10"
-                    disabled={isRecompiling}
                     title="Recompile"
                   >
-                    {isRecompiling ? (
-                      <><Loader2 className="size-3.5 animate-spin" /> Recompiling</>
-                    ) : (
-                      <><RefreshCw className="size-3.5" /> Recompile</>
-                    )}
+                    <><RefreshCw className="size-3.5" /> Recompile</>
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-white/10 bg-[#0d0f12] text-zinc-100">
@@ -412,7 +340,7 @@ function WorkflowRow({
                     <AlertDialogCancel className="border-white/10 bg-white/5 text-zinc-200">Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       className="bg-amber-600 text-white hover:bg-amber-700"
-                      onClick={() => void handleRecompile()}
+                      onClick={handleRecompile}
                     >
                       Recompile
                     </AlertDialogAction>
@@ -446,11 +374,8 @@ function WorkflowRow({
           </AlertDialog>
           </div>
         </div>
-        {compileError || recompileError ? (
-          <p className="text-xs text-red-400 px-0.5">{compileError || recompileError}</p>
-        ) : null}
-        {recompileSuccess && !isRecompiling ? (
-          <p className="text-xs text-emerald-400 px-0.5">{recompileSuccess}</p>
+        {compileError ? (
+          <p className="text-xs text-red-400 px-0.5">{compileError}</p>
         ) : null}
       </div>
 

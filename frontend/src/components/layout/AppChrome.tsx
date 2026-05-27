@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import {
   ChevronLeft,
   ChevronRight,
+  Code2,
   CreditCard,
   FolderKanban,
   Hammer,
@@ -38,6 +39,7 @@ const navGroups = [
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: Home },
       { to: '/plugins', label: 'Plugins', icon: Puzzle },
+      { to: '/compile', label: 'Compile', icon: Code2 },
       { to: '/build', label: 'Build Plugin', icon: Hammer },
       { to: '/packages', label: 'Packages', icon: FolderKanban },
       { to: '/test', label: 'Test Plugin', icon: PlayCircle },
