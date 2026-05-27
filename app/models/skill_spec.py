@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SkillMeta(BaseModel):
@@ -133,4 +133,15 @@ class SkillPackage(BaseModel):
     intent_graph: WorkflowIntentGraph = Field(default_factory=WorkflowIntentGraph)
 
     # Per-step confidence report + LLM router statistics from compile.
-    compile_report: dict[str, Any] = Field(default_factory=dict)
+    # Required: must contain status, steps_total, min_confidence, llm_router_stats, steps.
+    compile_report: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _validate_compile_report(self) -> "SkillPackage":
+        required = {"status", "steps_total", "min_confidence", "llm_router_stats", "steps"}
+        missing = required - set(self.compile_report.keys())
+        if missing:
+            raise ValueError(
+                f"SkillPackage.compile_report missing required keys: {sorted(missing)}"
+            )
+        return self

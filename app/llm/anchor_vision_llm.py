@@ -157,14 +157,6 @@ def generate_anchors_for_step_or_raise(
     """Return vision-only anchors or raise VisionAnchorGenerationError."""
     if not bool(_vision_cfg(policy).get("enabled", True)):
         raise VisionAnchorGenerationError("vision_anchors_disabled_in_policy", step_index=step_index)
-    if not settings.llm_enabled:
-        raise VisionAnchorGenerationError("llm_disabled", step_index=step_index)
-    if not settings.llm_anchor_vision:
-        raise VisionAnchorGenerationError("llm_anchor_vision_disabled", step_index=step_index)
-    if not str(settings.llm_vision_endpoint or "").strip():
-        raise VisionAnchorGenerationError("llm_endpoint_unset", step_index=step_index)
-    if not supports_multimodal_chat(task="anchor_vision"):
-        raise VisionAnchorGenerationError("llm_endpoint_not_multimodal_capable", step_index=step_index)
 
     visual = ev.get("visual") if isinstance(ev.get("visual"), dict) else {}
     rel_path = str(visual.get("full_screenshot") or "").strip()
@@ -232,7 +224,6 @@ def generate_anchors_for_step_or_raise(
     )
 
     payload = {
-        "model": settings.llm_vision_model or None,
         "user_text": user_text,
         "image_base64": image_b64,
         "image_mime": "image/jpeg",
@@ -281,13 +272,6 @@ def generate_anchors_from_image_bytes(
 
     Returns [] on any failure so callers can fall back to keyword anchors.
     """
-    if not settings.llm_enabled or not settings.llm_anchor_vision:
-        return []
-    if not str(settings.llm_vision_endpoint or "").strip():
-        return []
-    if not supports_multimodal_chat():
-        return []
-
     pol: dict[str, Any] = policy if isinstance(policy, dict) else get_policy_bundle().data
     vcfg = _vision_cfg(pol)
     if not bool(vcfg.get("enabled", True)):
@@ -335,7 +319,6 @@ def generate_anchors_from_image_bytes(
     )
 
     payload = {
-        "model": settings.llm_vision_model or None,
         "user_text": user_text,
         "image_base64": image_b64,
         "image_mime": "image/jpeg",

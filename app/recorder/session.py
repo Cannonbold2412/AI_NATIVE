@@ -263,7 +263,8 @@ class RecordingSession:
     data_root: Path = field(default_factory=lambda: settings.data_dir)
     storage_state_path: str = ""  # if set, browser context is restored from this Playwright storage_state file
     storage_state_autosave_path: str = ""  # if set, periodically persist context storage_state while open
-    record_video: bool = True  # if true, capture screen recording via Playwright record_video_dir for frame extraction
+    # Video recording is MANDATORY for non-auth sessions; no flag to disable.
+    # auth_mode sessions are exempt (no video, no bridge, no events — see auth_mode field).
     _video_session_start: float = 0.0  # monotonic time when recording started; events.timestamp_ms is relative to this
     _video_session_start_wall_ms: int = 0  # wall-clock ms-since-epoch at video start (for ISO timestamp → relative ms conversion)
     _playwright: Any = None
@@ -344,31 +345,36 @@ class RecordingSession:
         self._finalize_video_recording_sync()
 
     def _finalize_video_recording_sync(self) -> None:
-        """Rename Playwright's auto-generated .webm to recording.webm + extract frames."""
-        if not self.record_video:
+        """Rename Playwright's auto-generated .webm to recording.webm + extract frames.
+
+        Auth-mode sessions are exempt (they don't record video). For non-auth
+        sessions, missing video or frame-extraction failure raises — silent
+        degradation is no longer allowed.
+        """
+        if self.auth_mode:
             return
         session_dir = self.data_root / "sessions" / self.session_id
         if not session_dir.is_dir():
-            return
+            raise RuntimeError(f"session_dir missing at finalize: {session_dir}")
+
         webm_files = sorted(
             (p for p in session_dir.iterdir() if p.suffix == ".webm" and p.name != "recording.webm"),
             key=lambda p: p.stat().st_mtime,
         )
         if not webm_files:
-            return
+            raise RuntimeError(
+                f"recording.webm not produced by Playwright in {session_dir}. "
+                "Check that the browser context was launched with record_video_dir and the "
+                "session closed cleanly via context.close()."
+            )
+
         latest = webm_files[-1]
         target = session_dir / "recording.webm"
-        try:
-            latest.rename(target)
-        except OSError:
-            return
-        try:
-            from app.recorder.frame_extractor import extract_frames_for_session
-            summary = extract_frames_for_session(session_dir)
-            if summary.get("error"):
-                self.binding_errors.append(f"frame_extraction_error: {summary['error']}")
-        except Exception as exc:  # noqa: BLE001
-            self.binding_errors.append(f"frame_extraction_failed: {exc!s}")
+        latest.rename(target)
+
+        from app.recorder.frame_extractor import extract_frames_for_session
+        # Raises on missing ffmpeg, missing video, missing events, or per-frame failure.
+        extract_frames_for_session(session_dir)
 
     def _compute_event_timestamp_ms(self, action: dict[str, Any]) -> int | None:
         """Convert ISO 8601 action.timestamp to ms offset from video start (None on parse error)."""
@@ -747,7 +753,11 @@ class RecordingSession:
             self.binding_errors.append(f"snapshot_capture_error:{action_name}: {exc!s}")
 
         timestamp_ms: int | None = None
-        if self.record_video and self._video_session_start_wall_ms:
+        if not self.auth_mode:
+            if not self._video_session_start_wall_ms:
+                raise RuntimeError(
+                    "video session start time not initialized; non-auth sessions must record video"
+                )
             timestamp_ms = self._compute_event_timestamp_ms(action)
         body = {
             "action": action,
@@ -895,13 +905,14 @@ class RecordingSession:
             ctx_kwargs: dict[str, Any] = {}
             if self.storage_state_path and Path(self.storage_state_path).is_file():
                 ctx_kwargs["storage_state"] = self.storage_state_path
-            if self.record_video and not self.auth_mode:
+            if not self.auth_mode:
+                # Video recording is mandatory for non-auth sessions.
                 session_dir = self.data_root / "sessions" / self.session_id
                 session_dir.mkdir(parents=True, exist_ok=True)
                 ctx_kwargs["record_video_dir"] = str(session_dir)
                 ctx_kwargs["record_video_size"] = {"width": 1280, "height": 720}
             self._context = self._browser.new_context(**ctx_kwargs)
-            if self.record_video and not self.auth_mode:
+            if not self.auth_mode:
                 import time as _time
                 self._video_session_start = _time.monotonic()
                 self._video_session_start_wall_ms = int(_time.time() * 1000)
