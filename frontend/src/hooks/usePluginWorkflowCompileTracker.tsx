@@ -32,12 +32,13 @@ type StartCompileInput = {
   workflowId: string
   sessionId: string
   workflowName: string
+  force?: boolean
 }
 
 type CompileTrackerContextValue = {
   getCompile: (pluginId: string, workflowId: string) => PluginWorkflowCompileEntry | undefined
   isCompileActive: (pluginId: string, workflowId: string) => boolean
-  startCompile: (input: StartCompileInput) => Promise<void>
+  startCompile: (input: StartCompileInput) => Promise<PluginWorkflowCompileEntry>
   clearCompile: (pluginId: string, workflowId: string) => void
 }
 
@@ -215,53 +216,62 @@ export function PluginWorkflowCompileProvider({ children }: { children: ReactNod
 
   const startCompile = useCallback(async (input: StartCompileInput) => {
     const key = compileKey(input.pluginId, input.workflowId)
-    let shouldStart = true
+    const existing = entries[key]
+    if (!input.force && existing && isActiveStatus(existing.status)) {
+      return existing
+    }
+
+    const enqueuingEntry: PluginWorkflowCompileEntry = {
+      pluginId: input.pluginId,
+      workflowId: input.workflowId,
+      sessionId: input.sessionId,
+      workflowName: input.workflowName,
+      jobId: null,
+      status: 'enqueuing',
+      error: null,
+      updatedAt: Date.now(),
+    }
 
     setEntries((prev) => {
-      const existing = prev[key]
-      if (existing && isActiveStatus(existing.status)) {
-        shouldStart = false
+      const active = prev[key]
+      if (!input.force && active && isActiveStatus(active.status)) {
         return prev
       }
       return {
         ...prev,
-        [key]: {
-          ...input,
-          jobId: null,
-          status: 'enqueuing',
-          error: null,
-          updatedAt: Date.now(),
-        },
+        [key]: enqueuingEntry,
       }
     })
 
-    if (!shouldStart) return
-
     try {
       const job = await enqueueCompileJob(input.sessionId, input.workflowName)
+      const next: PluginWorkflowCompileEntry = {
+        ...enqueuingEntry,
+        jobId: job.job_id,
+        status: job.status,
+        error: null,
+        updatedAt: Date.now(),
+      }
       setEntries((prev) => ({
         ...prev,
-        [key]: {
-          ...(prev[key] ?? input),
-          jobId: job.job_id,
-          status: job.status,
-          error: null,
-          updatedAt: Date.now(),
-        },
+        [key]: next,
       }))
+      return next
     } catch (err) {
+      const next: PluginWorkflowCompileEntry = {
+        ...enqueuingEntry,
+        jobId: null,
+        status: 'failed',
+        error: messageFromError(err, 'Could not start compile job.'),
+        updatedAt: Date.now(),
+      }
       setEntries((prev) => ({
         ...prev,
-        [key]: {
-          ...(prev[key] ?? input),
-          jobId: null,
-          status: 'failed',
-          error: messageFromError(err, 'Could not start compile job.'),
-          updatedAt: Date.now(),
-        },
+        [key]: next,
       }))
+      return next
     }
-  }, [])
+  }, [entries])
 
   const getCompile = useCallback(
     (pluginId: string, workflowId: string) => entries[compileKey(pluginId, workflowId)],

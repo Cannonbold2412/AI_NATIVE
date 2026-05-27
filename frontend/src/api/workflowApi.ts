@@ -1,5 +1,5 @@
 import type { WorkflowResponse } from '../types/workflow'
-import { apiUrl } from '@/lib/apiBase'
+import { apiFetch, apiUrl } from '@/lib/apiBase'
 import { z } from 'zod'
 
 export type SkillPackBuildLogEntry = Record<string, unknown>
@@ -86,6 +86,39 @@ export const errorMessage = (err: unknown, fallback: string) => {
 
 const recordUnknown = z.record(z.string(), z.unknown())
 const recordNumber = z.record(z.string(), z.number())
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function jobApiFetch(endpoint: string, init?: RequestInit): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const timeout = init?.signal ? null : new AbortController()
+    const timer = timeout
+      ? setTimeout(() => timeout.abort(new DOMException('job_request_timeout', 'TimeoutError')), 15000)
+      : null
+    let response: Response
+    try {
+      response = await apiFetch(endpoint, {
+        ...init,
+        signal: init?.signal ?? timeout?.signal,
+      })
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'TimeoutError') {
+        throw new Error(`Timed out calling ${endpoint}. Check the frontend API proxy and backend server.`, {
+          cause: err,
+        })
+      }
+      throw err
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+    if (response.status !== 401 || attempt === 2) return response
+    await response.text().catch(() => '')
+    await delay(350 + attempt * 650)
+  }
+  throw new Error('Request was not sent.')
+}
 
 const stepFlagsSchema = z.object({
   is_destructive: z.boolean(),
@@ -683,6 +716,13 @@ export type JobRecord = {
 
 export type EnqueuedJob = Pick<JobRecord, 'job_id' | 'status' | 'resource_id'>
 
+export type JobEvent = {
+  ts: number
+  event: string
+  message: string
+  data: Record<string, unknown>
+}
+
 const jobRecordSchema = z.object({
   job_id: z.string(),
   kind: z.string(),
@@ -704,14 +744,65 @@ const enqueuedJobSchema = z.object({
 
 export function fetchJob(jobId: string): Promise<JobRecord> {
   const endpoint = `/jobs/${encodeURIComponent(jobId)}`
-  return fetch(apiUrl(endpoint))
+  return jobApiFetch(endpoint)
     .then(json)
     .then((payload) => parseOrThrow(jobRecordSchema, payload, endpoint) as JobRecord)
 }
 
+export async function streamJobEvents(
+  jobId: string,
+  onEvent: (event: JobEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const endpoint = `/jobs/${encodeURIComponent(jobId)}/events`
+  const response = await jobApiFetch(endpoint, { signal })
+  if (!response.ok) {
+    const payload = await json(response).catch(() => null)
+    const detail = payload && typeof payload === 'object' ? (payload as { detail?: unknown }).detail : null
+    throw new Error(typeof detail === 'string' && detail.trim() ? detail.trim() : response.statusText)
+  }
+  if (!response.body) throw new Error('No job event stream body')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+
+    for (;;) {
+      const sep = buffer.indexOf('\n\n')
+      if (sep === -1) break
+      const block = buffer.slice(0, sep)
+      buffer = buffer.slice(sep + 2)
+      const dataLines = block
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+      if (dataLines.length === 0) continue
+      try {
+        const parsed = JSON.parse(dataLines.join('\n')) as Partial<JobEvent>
+        if (typeof parsed.event === 'string' && typeof parsed.message === 'string') {
+          onEvent({
+            ts: typeof parsed.ts === 'number' ? parsed.ts : Date.now() / 1000,
+            event: parsed.event,
+            message: parsed.message,
+            data: parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data as Record<string, unknown> : {},
+          })
+        }
+      } catch {
+        // Ignore malformed SSE rows and keep the stream alive.
+      }
+    }
+
+    if (done) break
+  }
+}
+
 export function enqueueCompileJob(sessionId: string, skillTitle?: string): Promise<EnqueuedJob> {
   const endpoint = '/jobs/compile'
-  return fetch(apiUrl(endpoint), {
+  return jobApiFetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId, skill_title: skillTitle ?? '' }),
@@ -722,7 +813,7 @@ export function enqueueCompileJob(sessionId: string, skillTitle?: string): Promi
 
 export function enqueueRecompileSkillJob(skillId: string, skillTitle?: string): Promise<EnqueuedJob> {
   const endpoint = `/jobs/skills/${encodeURIComponent(skillId)}/compile-updated`
-  return fetch(apiUrl(endpoint), {
+  return jobApiFetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ skill_title: skillTitle ?? null }),
@@ -733,7 +824,7 @@ export function enqueueRecompileSkillJob(skillId: string, skillTitle?: string): 
 
 export function enqueuePackageBuildJob(body: SkillPackBuildPayload): Promise<EnqueuedJob> {
   const endpoint = '/jobs/packages/build'
-  return fetch(apiUrl(endpoint), {
+  return jobApiFetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
