@@ -406,7 +406,9 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
 
     # If heuristic produced a low-confidence or bare-tag selector, try LLM-native generation
     _primary_is_bare_tag = bool(re.fullmatch(r"[a-zA-Z][a-zA-Z0-9]*", primary.strip()))
-    if (selector_confidence < 0.60 or _primary_is_bare_tag) and settings.llm_enabled:
+    # Also detect type-only selectors like input[type="text"] as problematic
+    _is_type_only_input = bool(re.match(r'^input\[type="[^"]*"\]$', primary.strip()))
+    if (selector_confidence < 0.75 or _primary_is_bare_tag or _is_type_only_input) and settings.llm_enabled:
         llm_result = _try_llm_native_selector(ev, target, semantic)
         if llm_result is not None:
             llm_selector, llm_confidence, llm_breakdown, llm_rationale = llm_result

@@ -350,12 +350,25 @@ class RecordingSession:
         session_dir = self.data_root / "sessions" / self.session_id
         if not session_dir.is_dir():
             return
+
+        # List all files in session dir for debugging
+        all_files = list(session_dir.iterdir())
         webm_files = sorted(
-            (p for p in session_dir.iterdir() if p.suffix == ".webm" and p.name != "recording.webm"),
+            (p for p in all_files if p.suffix == ".webm" and p.name != "recording.webm"),
             key=lambda p: p.stat().st_mtime,
         )
+
         if not webm_files:
+            # No video file found — log what files exist for debugging
+            file_types = {}
+            for f in all_files:
+                ext = f.suffix or "(no ext)"
+                file_types[ext] = file_types.get(ext, 0) + 1
+            self.binding_errors.append(
+                f"no_video_file: expected .webm in {session_dir.name}; found: {dict(file_types)}"
+            )
             return
+
         latest = webm_files[-1]
         target = session_dir / "recording.webm"
         try:
