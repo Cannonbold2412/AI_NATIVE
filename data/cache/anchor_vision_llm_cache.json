@@ -1,5 +1,5 @@
 {
-  "a044cd4c64cfe36ce79f78507776070a623a9c0fbad959b83d53c70a9fcb7f61": {
+  "06d337760c98e521eb9b2916cf8b97ca745917759497a73ac679bf4bb1be9555": {
     "anchors": [
       {
         "element": "contacts",
@@ -7,59 +7,99 @@
       }
     ]
   },
-  "f8b09026a02688004536d1c74b2f8a553cfb741c989dfaa4f0c6e04083dd6617": {
+  "ef0aefd9b3c5faca97968085f3a0b1959490f81c4c554e3e3d23c44e33fe9a86": {
     "anchors": [
       {
         "element": "person",
         "relation": "target"
-      },
-      {
-        "element": "contacts",
-        "relation": "inside"
       },
       {
         "element": "add condition",
+        "relation": "near"
+      }
+    ]
+  },
+  "bef535b6abcabb78b6089b354c00c6952fb5b7d9a3e8eab3384c5a1e11626ca7": {
+    "anchors": [
+      {
+        "element": "name input",
+        "relation": "target"
+      },
+      {
+        "element": "name label",
         "relation": "above"
+      },
+      {
+        "element": "organization input",
+        "relation": "below"
+      },
+      {
+        "element": "add phone button",
+        "relation": "below"
       }
     ]
   },
-  "87eeb106376fa64665e34b98df5dd594b019b0dd2def59eb6600756dae4864c9": {
+  "5f5aeb78e641d75c90185174d76bf7d22f5092ed1f63c17da4a1ec0491e8aa81": {
     "anchors": [
       {
-        "element": "person",
+        "element": "name input field",
+        "relation": "target"
+      },
+      {
+        "element": "name label",
+        "relation": "above"
+      },
+      {
+        "element": "email input field",
+        "relation": "below"
+      },
+      {
+        "element": "add phone button",
+        "relation": "below"
+      }
+    ]
+  },
+  "45791e0dc9c6630a844bfcea01cc33983312c2f86f5b145b61ed946153d21682": {
+    "anchors": [
+      {
+        "element": "example input field",
+        "relation": "target"
+      },
+      {
+        "element": "name input field",
+        "relation": "above"
+      },
+      {
+        "element": "email input field",
+        "relation": "below"
+      },
+      {
+        "element": "add email button",
+        "relation": "below"
+      }
+    ]
+  },
+  "5f82b888c53ac80e74a7189f87c26f09d93efc3749b7e1237bdaa701846b07d9": {
+    "anchors": [
+      {
+        "element": "example text input",
         "relation": "target"
       },
       {
         "element": "name",
-        "relation": "inside"
+        "relation": "above"
       },
       {
-        "element": "organization",
+        "element": "add person",
+        "relation": "above"
+      },
+      {
+        "element": "email",
         "relation": "below"
       }
     ]
   },
-  "1006d11c109e316aadf454e3e66db4d0f6b3c87e363d148e45fca16bd090676e": {
-    "anchors": [
-      {
-        "element": "person",
-        "relation": "target"
-      },
-      {
-        "element": "name",
-        "relation": "inside"
-      },
-      {
-        "element": "organization",
-        "relation": "below"
-      },
-      {
-        "element": "add phone",
-        "relation": "below"
-      }
-    ]
-  },
-  "15c6979b2d700d6cae45db2e77312bebdefa0a5f0605c2f15e1e06f912c4be2e": {
+  "1c26c95ecc442a71675af7a7df0bad8434fc4a3453e2c00d41ca98c6091a3bb2": {
     "anchors": [
       {
         "element": "organisation input",
@@ -71,7 +111,19 @@
       }
     ]
   },
-  "99a19bf119213a28ee70b411fa7d7b70614618672ac912d9e2e610f54f7d3bde": {
+  "7015abec622ea6a685713c11b6f0779c795c56aa8e18993557477cdd85d1fd22": {
+    "anchors": [
+      {
+        "element": "organisation input",
+        "relation": "target"
+      },
+      {
+        "element": "organisation label",
+        "relation": "above"
+      }
+    ]
+  },
+  "73aebee3d835e3aabba228f0d6801fff02528c3fa73dbfa6dab07f4033798755": {
     "anchors": [
       {
         "element": "organisation",
@@ -79,15 +131,7 @@
       }
     ]
   },
-  "810f74dfb0ef9ed033518a1680b0920337412e0c3ffdeabc00381e262fcc122e": {
-    "anchors": [
-      {
-        "element": "organisation",
-        "relation": "target"
-      }
-    ]
-  },
-  "9e0d9e56fa1e6680901935e1a5fd6fabc5f4ca0cdd0d2cebde497ef21963c7da": {
+  "a8c3df8caa0755d91035817f6281a2261f935c83cf05bcf6ef8b185106d4c6a1": {
     "anchors": [
       {
         "element": "phone input",
@@ -99,138 +143,10 @@
       }
     ]
   },
-  "b540aacdc94d20cd3e1b1e976d0d0c607a1ad5982e0fec817f1fe3c5825ece02": {
+  "0d05aa53b92d8c5232c350889f05361f73803f34592386c8d88e4dcdf0d4e526": {
     "anchors": [
       {
-        "element": "phone input",
-        "relation": "target"
-      },
-      {
-        "element": "add phone label",
-        "relation": "above"
-      },
-      {
-        "element": "add email label",
-        "relation": "below"
-      }
-    ]
-  },
-  "cd76f4e6960adfafe07d62a341434386d675dac37c08db878efd96d4e833d97f": {
-    "anchors": [
-      {
-        "element": "phone input",
-        "relation": "target"
-      },
-      {
-        "element": "phone label",
-        "relation": "above"
-      }
-    ]
-  },
-  "ca2339a78f7d5c7307f5948f5a84cb748bf62ff5543a8e4d8ffd28d0acd95f50": {
-    "anchors": [
-      {
-        "element": "phone input",
-        "relation": "target"
-      },
-      {
-        "element": "phone label",
-        "relation": "above"
-      }
-    ]
-  },
-  "8a164058257523c95ef03016c6f0d6e71591ad476a28e4b270a1d49615489fbd": {
-    "anchors": [
-      {
-        "element": "phone input",
-        "relation": "target"
-      },
-      {
-        "element": "phone label",
-        "relation": "above"
-      }
-    ]
-  },
-  "4e0f274a3aeb5071174d3e1e35586cd7172992e25502a261677125e0d77388f8": {
-    "anchors": [
-      {
-        "element": "phone number input",
-        "relation": "target"
-      },
-      {
-        "element": "phone label",
-        "relation": "above"
-      },
-      {
-        "element": "add phone button",
-        "relation": "near"
-      },
-      {
-        "element": "add email button",
-        "relation": "below"
-      }
-    ]
-  },
-  "314b43b7b2c64f7c0394c5d19a35ba7a5934f5cc1836dace5f53c52966e17a00": {
-    "anchors": [
-      {
-        "element": "email input",
-        "relation": "target"
-      },
-      {
-        "element": "email label",
-        "relation": "above"
-      }
-    ]
-  },
-  "107f464c6e4d54fd0f06de37d95efca9d6657270089228202098af4162297749": {
-    "anchors": [
-      {
-        "element": "add labels",
-        "relation": "target"
-      },
-      {
-        "element": "search for labels",
-        "relation": "inside"
-      },
-      {
-        "element": "labels",
-        "relation": "above"
-      }
-    ]
-  },
-  "f56588b19299cd5fb2618f3f88d4801e03964cc4d8bcce00027ee879bae90edd": {
-    "anchors": [
-      {
-        "element": "search for labels",
-        "relation": "target"
-      },
-      {
-        "element": "add labels",
-        "relation": "inside"
-      },
-      {
-        "element": "labels",
-        "relation": "above"
-      }
-    ]
-  },
-  "951ac9c7f0eade0c17122e70eae2e94c6632307205bb5990aaff3788aacc289d": {
-    "anchors": [
-      {
-        "element": "email input",
-        "relation": "target"
-      },
-      {
-        "element": "email label",
-        "relation": "above"
-      }
-    ]
-  },
-  "4072ba9874cfaa1cee457536fcabb7a7a3efc13b94676bddc951f53949a71917": {
-    "anchors": [
-      {
-        "element": "add email",
+        "element": "add phone",
         "relation": "target"
       },
       {
@@ -243,7 +159,107 @@
       }
     ]
   },
-  "b6599f5dde7df07d3cd326229154a50b958656db305f3504d15b1699462c464b": {
+  "a57aeed2e7f403d17d67fe5a9bf4b270bb5241c0342dfe16328bd04d5b8fa853": {
+    "anchors": [
+      {
+        "element": "phone input",
+        "relation": "target"
+      },
+      {
+        "element": "phone label",
+        "relation": "above"
+      }
+    ]
+  },
+  "0b218b24ffcf91fa0a424ccfa5edb6b257258540fb7d43031382639adac84955": {
+    "anchors": [
+      {
+        "element": "phone input",
+        "relation": "target"
+      },
+      {
+        "element": "phone label",
+        "relation": "above"
+      }
+    ]
+  },
+  "b21dc14efa93377c620ddb60ee83d0f109d490364b67efde41a54264d1ba3ebd": {
+    "anchors": [
+      {
+        "element": "email input",
+        "relation": "target"
+      },
+      {
+        "element": "email label",
+        "relation": "above"
+      }
+    ]
+  },
+  "64c98fd3e12982349d0f545fb70c6fcac8522dc106769c63a580955a55329d55": {
+    "anchors": [
+      {
+        "element": "add labels",
+        "relation": "target"
+      },
+      {
+        "element": "search for labels",
+        "relation": "below"
+      },
+      {
+        "element": "add email",
+        "relation": "above"
+      }
+    ]
+  },
+  "2f8aa35fcd8fb5c574bae8bb622ae4f03f9ac8be1d852a0c2def6787cd6ef693": {
+    "anchors": [
+      {
+        "element": "search for labels",
+        "relation": "target"
+      },
+      {
+        "element": "add labels",
+        "relation": "inside"
+      },
+      {
+        "element": "labels",
+        "relation": "above"
+      }
+    ]
+  },
+  "583b4ebfcdf477d90f98e9d9d02348c804980b48d12d99497cf2263a8ba81c4e": {
+    "anchors": [
+      {
+        "element": "add email",
+        "relation": "target"
+      },
+      {
+        "element": "email",
+        "relation": "above"
+      },
+      {
+        "element": "add phone",
+        "relation": "above"
+      }
+    ]
+  },
+  "77b6ad0ddda5801d81d337f73825c42c15236eb5dab47f1b95ee75db83c46929": {
+    "anchors": [
+      {
+        "element": "add email",
+        "relation": "target"
+      },
+      {
+        "element": "customer",
+        "relation": "inside"
+      },
+      {
+        "element": "labels",
+        "relation": "above"
+      }
+    ]
+  },
+  "1c9b32cda2bb44c26de244957cc03d3f2b68deb5df5d6b5686f09ddc94d2d541": {
     "anchors": [
       {
         "element": "item owner's visibility group",
@@ -259,7 +275,7 @@
       }
     ]
   },
-  "856a0aa58d948a9a0bfe2d6cbf9b120e8e568f5daa04113ce4faa299e951441e": {
+  "445404f9721290b8957e4bcc7235c7519086a651062cefdee0f56e3e4a8af714": {
     "anchors": [
       {
         "element": "phone number input",
@@ -267,7 +283,7 @@
       },
       {
         "element": "add phone button",
-        "relation": "near"
+        "relation": "below"
       },
       {
         "element": "work label",
@@ -275,7 +291,7 @@
       }
     ]
   },
-  "660b604b2bee3ea40482ab605548c7842b932ae20e67a54b9cb4ab19e6898da7": {
+  "18f0814a6418be6547561a4bbaf12d0d0046b3bee56db4d196162230ca8cd1de": {
     "anchors": [
       {
         "element": "save button",
