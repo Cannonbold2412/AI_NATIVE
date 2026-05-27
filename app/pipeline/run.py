@@ -7,7 +7,7 @@ from typing import Any
 
 from app.llm.semantic_llm import SemanticLLMInput, enrich_semantic
 from app.models.events import RecordedEvent
-from app.pipeline.dedupe import dedupe_scroll_events
+from app.pipeline.dedupe import dedupe_scroll_events, drop_superseded_focus_events
 from app.pipeline.enrich import enrich_event
 from app.pipeline.selectors import canonicalize_selectors
 from app.pipeline.signals import apply_signal_budget
@@ -154,7 +154,7 @@ def run_pipeline(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         validated.append(RecordedEvent.model_validate(row).model_dump(mode="json"))
     cleaned = [_clean_one(e, policy) for e in _drop_non_actionable_hover_events(validated)]
     sem_enriched = [_semantic_enrich_one(e, policy) for e in cleaned]
-    deduped = dedupe_scroll_events(sem_enriched)
+    deduped = dedupe_scroll_events(drop_superseded_focus_events(sem_enriched))
     scroll_annotated = _annotate_scroll_amounts(deduped)
     return [
         enrich_event(e, pipeline_version=PIPELINE_VERSION, ordinal=i) for i, e in enumerate(scroll_annotated)

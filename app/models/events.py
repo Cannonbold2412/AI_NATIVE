@@ -86,11 +86,13 @@ class VisualFeatures(BaseModel):
     # Milliseconds since video recording started. Required for all non-auth events.
     timestamp_ms: int
     # Extracted video frames at T-500ms, T-100ms, T+100ms, T+500ms (relative paths).
-    # Must contain exactly the four required keys, each pointing to a non-empty path.
-    frames: dict[str, str]
+    # Empty while recording; populated by the shutdown frame extractor.
+    frames: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate_frames(self) -> "VisualFeatures":
+        if not self.frames:
+            return self
         missing = _REQUIRED_FRAME_KEYS - set(self.frames.keys())
         if missing:
             raise ValueError(
