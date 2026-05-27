@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,10 +18,19 @@ class ProviderConfig:
     vision_model: str
 
 
+def _provider_env(name: str) -> AliasChoices:
+    return AliasChoices(f"SKILL_{name}", name)
+
+
 class Settings(BaseSettings):
     """Environment-driven settings; safe defaults for local MVP."""
 
-    model_config = SettingsConfigDict(env_prefix="SKILL_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="SKILL_",
+        env_file=".env",
+        extra="ignore",
+        populate_by_name=True,
+    )
 
     data_dir: Path = Path(__file__).resolve().parent.parent / "data"
     host: str = "127.0.0.1"
@@ -96,47 +105,140 @@ class Settings(BaseSettings):
     tracking_hmac_secret: str = ""
 
     # Multi-provider LLM key pool (free-tier rotation)
-    groq_enabled: bool = True
-    groq_endpoint: str = "https://api.groq.com/openai/v1"
-    groq_api_keys: str = ""
-    groq_text_model: str = "llama-3.3-70b-versatile"
-    groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    groq_enabled: bool = Field(default=True, validation_alias=_provider_env("GROQ_ENABLED"))
+    groq_endpoint: str = Field(
+        default="https://api.groq.com/openai/v1",
+        validation_alias=_provider_env("GROQ_ENDPOINT"),
+    )
+    groq_api_keys: str = Field(default="", validation_alias=_provider_env("GROQ_API_KEYS"))
+    groq_text_model: str = Field(
+        default="llama-3.3-70b-versatile",
+        validation_alias=_provider_env("GROQ_TEXT_MODEL"),
+    )
+    groq_vision_model: str = Field(
+        default="meta-llama/llama-4-scout-17b-16e-instruct",
+        validation_alias=_provider_env("GROQ_VISION_MODEL"),
+    )
 
-    google_ai_studio_enabled: bool = True
-    google_ai_studio_endpoint: str = "https://generativelanguage.googleapis.com/v1beta/openai"
-    google_ai_studio_api_keys: str = ""
-    google_ai_studio_text_model: str = "gemini-2.5-flash"
-    google_ai_studio_vision_model: str = "gemini-2.5-flash"
+    google_ai_studio_enabled: bool = Field(
+        default=True,
+        validation_alias=_provider_env("GOOGLE_AI_STUDIO_ENABLED"),
+    )
+    google_ai_studio_endpoint: str = Field(
+        default="https://generativelanguage.googleapis.com/v1beta/openai",
+        validation_alias=_provider_env("GOOGLE_AI_STUDIO_ENDPOINT"),
+    )
+    google_ai_studio_api_keys: str = Field(
+        default="",
+        validation_alias=_provider_env("GOOGLE_AI_STUDIO_API_KEYS"),
+    )
+    google_ai_studio_text_model: str = Field(
+        default="gemini-2.5-flash",
+        validation_alias=_provider_env("GOOGLE_AI_STUDIO_TEXT_MODEL"),
+    )
+    google_ai_studio_vision_model: str = Field(
+        default="gemini-2.5-flash",
+        validation_alias=_provider_env("GOOGLE_AI_STUDIO_VISION_MODEL"),
+    )
 
-    nvidia_nim_enabled: bool = True
-    nvidia_nim_endpoint: str = "https://integrate.api.nvidia.com/v1"
-    nvidia_nim_api_keys: str = ""
-    nvidia_nim_text_model: str = "meta/llama-4-maverick-17b-128e-instruct"
-    nvidia_nim_vision_model: str = "meta/llama-3.2-90b-vision-instruct"
+    nvidia_nim_enabled: bool = Field(
+        default=True,
+        validation_alias=_provider_env("NVIDIA_NIM_ENABLED"),
+    )
+    nvidia_nim_endpoint: str = Field(
+        default="https://integrate.api.nvidia.com/v1",
+        validation_alias=_provider_env("NVIDIA_NIM_ENDPOINT"),
+    )
+    nvidia_nim_api_keys: str = Field(
+        default="",
+        validation_alias=_provider_env("NVIDIA_NIM_API_KEYS"),
+    )
+    nvidia_nim_text_model: str = Field(
+        default="meta/llama-4-maverick-17b-128e-instruct",
+        validation_alias=_provider_env("NVIDIA_NIM_TEXT_MODEL"),
+    )
+    nvidia_nim_vision_model: str = Field(
+        default="meta/llama-3.2-90b-vision-instruct",
+        validation_alias=_provider_env("NVIDIA_NIM_VISION_MODEL"),
+    )
 
-    cerebras_enabled: bool = False
-    cerebras_endpoint: str = "https://api.cerebras.ai/v1"
-    cerebras_api_keys: str = ""
-    cerebras_text_model: str = "llama-4-scout-17b-16e-instruct"
-    cerebras_vision_model: str = ""
+    cerebras_enabled: bool = Field(
+        default=False,
+        validation_alias=_provider_env("CEREBRAS_ENABLED"),
+    )
+    cerebras_endpoint: str = Field(
+        default="https://api.cerebras.ai/v1",
+        validation_alias=_provider_env("CEREBRAS_ENDPOINT"),
+    )
+    cerebras_api_keys: str = Field(
+        default="",
+        validation_alias=_provider_env("CEREBRAS_API_KEYS"),
+    )
+    cerebras_text_model: str = Field(
+        default="llama-4-scout-17b-16e-instruct",
+        validation_alias=_provider_env("CEREBRAS_TEXT_MODEL"),
+    )
+    cerebras_vision_model: str = Field(
+        default="",
+        validation_alias=_provider_env("CEREBRAS_VISION_MODEL"),
+    )
 
-    together_enabled: bool = False
-    together_endpoint: str = "https://api.together.xyz/v1"
-    together_api_keys: str = ""
-    together_text_model: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
-    together_vision_model: str = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+    together_enabled: bool = Field(
+        default=False,
+        validation_alias=_provider_env("TOGETHER_ENABLED"),
+    )
+    together_endpoint: str = Field(
+        default="https://api.together.xyz/v1",
+        validation_alias=_provider_env("TOGETHER_ENDPOINT"),
+    )
+    together_api_keys: str = Field(default="", validation_alias=_provider_env("TOGETHER_API_KEYS"))
+    together_text_model: str = Field(
+        default="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        validation_alias=_provider_env("TOGETHER_TEXT_MODEL"),
+    )
+    together_vision_model: str = Field(
+        default="meta-llama/Llama-4-Scout-17B-16E-Instruct",
+        validation_alias=_provider_env("TOGETHER_VISION_MODEL"),
+    )
 
-    openrouter_enabled: bool = False
-    openrouter_endpoint: str = "https://openrouter.ai/api/v1"
-    openrouter_api_keys: str = ""
-    openrouter_text_model: str = "deepseek/deepseek-v3:free"
-    openrouter_vision_model: str = "meta-llama/llama-4-scout:free"
+    openrouter_enabled: bool = Field(
+        default=False,
+        validation_alias=_provider_env("OPENROUTER_ENABLED"),
+    )
+    openrouter_endpoint: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias=_provider_env("OPENROUTER_ENDPOINT"),
+    )
+    openrouter_api_keys: str = Field(
+        default="",
+        validation_alias=_provider_env("OPENROUTER_API_KEYS"),
+    )
+    openrouter_text_model: str = Field(
+        default="deepseek/deepseek-v3:free",
+        validation_alias=_provider_env("OPENROUTER_TEXT_MODEL"),
+    )
+    openrouter_vision_model: str = Field(
+        default="meta-llama/llama-4-scout:free",
+        validation_alias=_provider_env("OPENROUTER_VISION_MODEL"),
+    )
 
-    mistral_enabled: bool = False
-    mistral_endpoint: str = "https://api.mistral.ai/v1"
-    mistral_api_keys: str = ""
-    mistral_text_model: str = "mistral-large-latest"
-    mistral_vision_model: str = "pixtral-large-latest"
+    mistral_enabled: bool = Field(
+        default=False,
+        validation_alias=_provider_env("MISTRAL_ENABLED"),
+    )
+    mistral_endpoint: str = Field(
+        default="https://api.mistral.ai/v1",
+        validation_alias=_provider_env("MISTRAL_ENDPOINT"),
+    )
+    mistral_api_keys: str = Field(default="", validation_alias=_provider_env("MISTRAL_API_KEYS"))
+    mistral_text_model: str = Field(
+        default="mistral-large-latest",
+        validation_alias=_provider_env("MISTRAL_TEXT_MODEL"),
+    )
+    mistral_vision_model: str = Field(
+        default="pixtral-large-latest",
+        validation_alias=_provider_env("MISTRAL_VISION_MODEL"),
+    )
 
     # Router behavior
     llm_router_cooldown_secs: int = 60
