@@ -95,8 +95,10 @@ class LLMRouter:
     ) -> dict[str, Any] | None:
         """Route a text-only LLM call to an available provider."""
         if not self.pool:
-            _debug_log("router: no enabled providers")
-            return None
+            raise RuntimeError(
+                "No LLM providers enabled. Set at least one *_API_KEYS and "
+                "*_ENABLED=true in .env (e.g. GROQ_API_KEYS=gsk_... + GROQ_ENABLED=true)."
+            )
 
         for attempt in range(self.max_retries):
             entry = self._next_available_entry(for_vision=False)
@@ -133,8 +135,10 @@ class LLMRouter:
     ) -> dict[str, Any] | None:
         """Route a vision-capable LLM call to an available provider."""
         if not self.pool:
-            _debug_log("router: no enabled providers")
-            return None
+            raise RuntimeError(
+                "No LLM providers enabled. Set at least one *_API_KEYS and "
+                "*_ENABLED=true in .env. Note: vision tasks require providers with a vision_model."
+            )
 
         for attempt in range(self.max_retries):
             entry = self._next_available_entry(for_vision=True)

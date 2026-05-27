@@ -1,9 +1,10 @@
 """Central configuration for the skill platform service."""
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,27 +28,13 @@ class Settings(BaseSettings):
     port: int = 8000
     default_action_timeout_ms: int = 5000
     screenshot_jpeg_quality: int = 78
-    # LLM toggles and shared settings
-    llm_enabled: bool = True
-    llm_semantic_enrichment: bool = True
-    llm_vision_reasoning: bool = True
-    llm_recovery_assist: bool = True
+    # LLM shared settings (no per-feature toggles; LLM is mandatory and routed via the multi-provider pool)
     llm_max_calls_per_step: int = 1
-    llm_anchor_vision: bool = True
     llm_parallel_fanout_anchor_vision: bool = True
     llm_debug: bool = False
 
-    # LLM endpoint A: Vision (anchor generation + Tier 4 vision recovery, multimodal)
-    llm_vision_endpoint: str = ""
-    llm_vision_api_key: str = ""
-    llm_vision_model: str = ""
+    # Timeouts (no legacy single-endpoint config — endpoints come from per-provider settings below)
     llm_vision_timeout_ms: int = 120000
-
-    # LLM endpoint B: Text (everything else — structuring, skill.md, selector compilation,
-    # intent inference, runtime Tier 3 recovery). One endpoint, one model, per-task tuning below.
-    llm_text_endpoint: str = ""
-    llm_text_api_key: str = ""
-    llm_text_model: str = ""
     llm_text_timeout_ms: int = 2000
 
     # Pack structuring + skill.md tuning (calls Text endpoint above)
@@ -176,6 +163,40 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         return [item.strip() for item in self.cors_allowed_origins.split(",") if item.strip()]
 
+    # Legacy single-endpoint accessors — derived from the multi-provider pool so out-of-scope
+    # callers (e.g. services/skill_pack/llm.py which does its own HTTP) keep working without
+    # additional env vars. NOT user-facing BC; just a runtime adapter pointing at the first
+    # enabled provider. Recorder+compile paths use the router directly and never read these.
+    @property
+    def llm_text_endpoint(self) -> str:
+        providers = self.enabled_llm_providers()
+        return providers[0].endpoint if providers else ""
+
+    @property
+    def llm_text_model(self) -> str:
+        providers = self.enabled_llm_providers()
+        return providers[0].text_model if providers else ""
+
+    @property
+    def llm_text_api_key(self) -> str:
+        providers = self.enabled_llm_providers()
+        return providers[0].api_key if providers else ""
+
+    @property
+    def llm_vision_endpoint(self) -> str:
+        providers = [p for p in self.enabled_llm_providers() if p.vision_model]
+        return providers[0].endpoint if providers else ""
+
+    @property
+    def llm_vision_model(self) -> str:
+        providers = [p for p in self.enabled_llm_providers() if p.vision_model]
+        return providers[0].vision_model if providers else ""
+
+    @property
+    def llm_vision_api_key(self) -> str:
+        providers = [p for p in self.enabled_llm_providers() if p.vision_model]
+        return providers[0].api_key if providers else ""
+
     @property
     def clerk_authorized_party_values(self) -> list[str]:
         return [item.strip() for item in self.clerk_authorized_parties.split(",") if item.strip()]
@@ -226,6 +247,22 @@ class Settings(BaseSettings):
                 ))
 
         return result
+
+    @model_validator(mode="after")
+    def _require_at_least_one_provider(self) -> "Settings":
+        """Fail fast if no LLM providers are enabled with API keys.
+
+        Tests and bootstrap scripts can bypass with SKILL_ALLOW_NO_PROVIDERS=1.
+        """
+        if os.environ.get("SKILL_ALLOW_NO_PROVIDERS") == "1":
+            return self
+        if not self.enabled_llm_providers():
+            raise ValueError(
+                "No LLM providers enabled. Set at least one *_API_KEYS and "
+                "*_ENABLED=true in .env (e.g. GROQ_API_KEYS=gsk_... + GROQ_ENABLED=true). "
+                "See ROUTER_SETUP.md or .env.example for the full provider list."
+            )
+        return self
 
     @field_validator("llm_text_timeout_ms", mode="before")
     @classmethod

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 ActionKind = Literal[
@@ -74,16 +74,39 @@ class AnchorRelation(BaseModel):
     relation: Literal["below", "above", "inside", "near"]
 
 
+_REQUIRED_FRAME_KEYS = {"before_far", "before_near", "after_near", "after_far"}
+
+
 class VisualFeatures(BaseModel):
     full_screenshot: str | None = None
     element_snapshot: str | None = None
     bbox: dict[str, int]
     viewport: str
     scroll_position: str
-    # Milliseconds since video recording started (None if no video recorded).
-    timestamp_ms: int | None = None
+    # Milliseconds since video recording started. Required for all non-auth events.
+    timestamp_ms: int
     # Extracted video frames at T-500ms, T-100ms, T+100ms, T+500ms (relative paths).
-    frames: dict[str, str] = Field(default_factory=dict)
+    # Must contain exactly the four required keys, each pointing to a non-empty path.
+    frames: dict[str, str]
+
+    @model_validator(mode="after")
+    def _validate_frames(self) -> "VisualFeatures":
+        missing = _REQUIRED_FRAME_KEYS - set(self.frames.keys())
+        if missing:
+            raise ValueError(
+                f"VisualFeatures.frames missing required keys: {sorted(missing)} "
+                f"(have: {sorted(self.frames.keys())})"
+            )
+        extra = set(self.frames.keys()) - _REQUIRED_FRAME_KEYS
+        if extra:
+            raise ValueError(
+                f"VisualFeatures.frames has unexpected keys: {sorted(extra)} "
+                f"(allowed: {sorted(_REQUIRED_FRAME_KEYS)})"
+            )
+        for key, path in self.frames.items():
+            if not str(path).strip():
+                raise ValueError(f"VisualFeatures.frames[{key!r}] is empty")
+        return self
 
 
 class PageContext(BaseModel):

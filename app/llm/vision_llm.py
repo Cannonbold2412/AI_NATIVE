@@ -85,11 +85,8 @@ def _fallback(inp: VisionLLMInput) -> VisionLLMOutput:
 
 
 def _call_provider(inp: VisionLLMInput) -> VisionLLMOutput | None:
-    if not settings.llm_vision_endpoint:
-        return None
     payload = {
         "task": "vision_reasoning",
-        "model": settings.llm_vision_model or None,
         "prompt": f"Given this UI screenshot and candidate elements, which element best matches the intent: {inp.intent}?",
         "input": inp.model_dump(mode="json"),
     }
@@ -106,12 +103,7 @@ def _call_provider(inp: VisionLLMInput) -> VisionLLMOutput | None:
 
 def assist_vision(inp: VisionLLMInput, *, call_count: int = 0, recovery_phase: bool = False) -> VisionLLMOutput | None:
     """Run vision assist only in recovery and only once per step."""
-    if (
-        not recovery_phase
-        or not settings.llm_enabled
-        or not settings.llm_vision_reasoning
-        or call_count >= settings.llm_max_calls_per_step
-    ):
+    if not recovery_phase or call_count >= settings.llm_max_calls_per_step:
         return None
     cache = _read_cache()
     k = _key(inp)

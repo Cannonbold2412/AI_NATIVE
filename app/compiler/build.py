@@ -404,20 +404,29 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     selector_rationale = ""
     selector_source = "heuristic"
 
-    # If heuristic produced a low-confidence or bare-tag selector, try LLM-native generation
+    # Heuristic survives ONLY at perfect confidence == 1.0 with a non-bare selector.
+    # Anything below 1.0 MUST go through the LLM with full multi-frame context.
     _primary_is_bare_tag = bool(re.fullmatch(r"[a-zA-Z][a-zA-Z0-9]*", primary.strip()))
-    # Also detect type-only selectors like input[type="text"] as problematic
-    _is_type_only_input = bool(re.match(r'^input\[type="[^"]*"\]$', primary.strip()))
-    if (selector_confidence < 0.75 or _primary_is_bare_tag or _is_type_only_input) and settings.llm_enabled:
-        llm_result = _try_llm_native_selector(ev, target, semantic)
-        if llm_result is not None:
-            llm_selector, llm_confidence, llm_breakdown, llm_rationale = llm_result
-            if llm_selector and llm_confidence > selector_confidence:
-                primary = llm_selector
-                selector_confidence = llm_confidence
-                confidence_breakdown = llm_breakdown
-                selector_rationale = llm_rationale
-                selector_source = "llm_native"
+    use_heuristic = (
+        selector_confidence >= 1.0
+        and bool(primary.strip())
+        and not _primary_is_bare_tag
+    )
+    if not use_heuristic:
+        # Mandatory LLM call. Failure raises and aborts the compile — no silent fallback.
+        llm_selector, llm_confidence, llm_breakdown, llm_rationale = _call_llm_native_selector(
+            ev, target, semantic
+        )
+        if not llm_selector:
+            raise RuntimeError(
+                f"LLM-native selector generation returned empty selector for action "
+                f"{ev.get('action', {}).get('action')!r}; cannot produce reliable compile."
+            )
+        primary = llm_selector
+        selector_confidence = llm_confidence
+        confidence_breakdown = llm_breakdown
+        selector_rationale = llm_rationale
+        selector_source = "llm_native"
 
     fallback_raw = list(stable.get("fallback_selectors") or []) + ranked_extra
     fallback = [s for s in fallback_raw if selector_passes_filters(str(s)) and str(s) != primary]
@@ -442,42 +451,38 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _try_llm_native_selector(
+def _call_llm_native_selector(
     ev: dict[str, Any],
     target: dict[str, Any],
     semantic: dict[str, Any],
-) -> tuple[str, float, dict[str, float], str] | None:
-    """Attempt LLM-native selector generation. Returns (selector, confidence, breakdown, rationale) or None."""
-    try:
-        action = ev.get("action") or {}
-        action_type = str(action.get("action") or "")
-        ancestors = ev.get("ancestors") or []
-        surrounding = str(ev.get("surrounding_text") or "")
-        visual = ev.get("visual") or {}
-        bbox = visual.get("bbox") or {}
+) -> tuple[str, float, dict[str, float], str]:
+    """LLM-native selector generation. Raises on failure — compile must fail loudly."""
+    action = ev.get("action") or {}
+    action_type = str(action.get("action") or "")
+    ancestors = ev.get("ancestors") or []
+    surrounding = str(ev.get("surrounding_text") or "")
+    visual = ev.get("visual") or {}
+    bbox = visual.get("bbox") or {}
 
-        # Build a DOM snippet from ancestors + target
-        dom_parts = []
-        for anc in ancestors[:3]:
-            if isinstance(anc, dict):
-                outer = str(anc.get("outer_html") or "")[:2000]
-                if outer:
-                    dom_parts.append(outer)
-        dom_snippet = "\n".join(dom_parts) or json.dumps(target, ensure_ascii=False)
+    # Build a DOM snippet from ancestors + target
+    dom_parts = []
+    for anc in ancestors[:3]:
+        if isinstance(anc, dict):
+            outer = str(anc.get("outer_html") or "")[:2000]
+            if outer:
+                dom_parts.append(outer)
+    dom_snippet = "\n".join(dom_parts) or json.dumps(target, ensure_ascii=False)
 
-        sel, conf, breakdown, rationale = generate_selector_with_objective_confidence(
-            dom_snippet=dom_snippet,
-            element_bbox=bbox if isinstance(bbox, dict) else {},
-            element_ancestors=ancestors if isinstance(ancestors, list) else [],
-            surrounding_text=surrounding,
-            action_type=action_type,
-            target_dom=target,
-            candidates_wanted=1,
-            num_samples=3,  # Reduced from 5 to keep compile times reasonable
-        )
-        return sel, conf, breakdown, rationale
-    except Exception:
-        return None
+    return generate_selector_with_objective_confidence(
+        dom_snippet=dom_snippet,
+        element_bbox=bbox if isinstance(bbox, dict) else {},
+        element_ancestors=ancestors if isinstance(ancestors, list) else [],
+        surrounding_text=surrounding,
+        action_type=action_type,
+        target_dom=target,
+        candidates_wanted=1,
+        num_samples=3,  # Reduced from 5 to keep compile times reasonable
+    )
 
 
 def _build_signals(
@@ -745,14 +750,15 @@ def _build_compile_report(steps: list[SkillStep]) -> dict[str, Any]:
     else:
         status = "failed"
 
-    router_stats: dict[str, Any] = {}
-    try:
-        from app.llm.router import get_router
-        router = get_router()
-        if router.pool:
-            router_stats = router.stats()
-    except Exception:
-        pass
+    from app.llm.router import get_router
+    router = get_router()
+    if not router.pool:
+        raise RuntimeError(
+            "LLM router has no providers configured. Compile cannot produce a "
+            "trustworthy report without LLM verification. Set at least one "
+            "*_API_KEYS + *_ENABLED=true in .env."
+        )
+    router_stats = router.stats()
 
     return {
         "status": status,
@@ -833,11 +839,6 @@ def compile_skill_package(
         skills=[SkillBlock(name="recorded", steps=steps)],
         policies=SkillPolicies(),
         llm={
-            "enabled": settings.llm_enabled,
-            "semantic_enrichment": settings.llm_semantic_enrichment,
-            "vision_reasoning": settings.llm_vision_reasoning,
-            "anchor_vision": settings.llm_anchor_vision,
-            "recovery_assist": settings.llm_recovery_assist,
             "max_calls_per_step": settings.llm_max_calls_per_step,
             "timeout_ms": settings.llm_pack_timeout_ms,
         },
@@ -854,13 +855,10 @@ def _llm_compile_selectors(
 ) -> "WorkflowIntentGraph":
     """Populate steps[i].compiled_selectors + semantic_description from LLM.
 
-    Returns the workflow intent graph (empty if LLM is disabled or fails).
+    Returns the workflow intent graph. Raises if the LLM router has no
+    providers configured.
     """
     from app.models.skill_spec import WorkflowIntentGraph  # noqa: PLC0415 — local import to avoid circular ref
-    if not settings.llm_enabled:
-        return WorkflowIntentGraph()
-    if not settings.llm_text_endpoint:
-        return WorkflowIntentGraph()
 
     try:
         from app.compiler.llm_selector_generator import (  # noqa: PLC0415

@@ -89,8 +89,6 @@ def _call_provider(inp: SemanticLLMInput) -> SemanticLLMOutput | None:
 
 def enrich_semantic(inp: SemanticLLMInput) -> SemanticLLMOutput:
     """Best-effort semantic assist with cache + deterministic fallback."""
-    if not settings.llm_enabled or not settings.llm_semantic_enrichment:
-        return _fallback(inp)
     cache = _read_cache()
     k = _key(inp)
     if k in cache:

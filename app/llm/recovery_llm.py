@@ -112,11 +112,8 @@ def _fallback(inp: RecoveryLLMInput) -> RecoveryLLMOutput:
 
 
 def _call_provider(inp: RecoveryLLMInput) -> RecoveryLLMOutput | None:
-    if not settings.llm_text_endpoint:
-        return None
     payload = {
         "task": "recovery_assist",
-        "model": settings.llm_text_model or None,
         "input": inp.model_dump(mode="json"),
     }
     data = call_llm("recovery_assist", payload, settings.llm_text_timeout_ms)
@@ -131,12 +128,8 @@ def _call_provider(inp: RecoveryLLMInput) -> RecoveryLLMOutput | None:
 
 
 def assist_recovery(inp: RecoveryLLMInput, *, call_count: int = 0) -> RecoveryLLMOutput | None:
-    """Resolve ambiguity only; returns None when feature is disabled or budget exhausted."""
-    if (
-        not settings.llm_enabled
-        or not settings.llm_recovery_assist
-        or call_count >= settings.llm_max_calls_per_step
-    ):
+    """Resolve ambiguity only; respects per-step call budget."""
+    if call_count >= settings.llm_max_calls_per_step:
         return None
     cache = _read_cache()
     k = _key(inp)

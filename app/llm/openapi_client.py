@@ -58,15 +58,10 @@ def generate_selector_candidates(
     Returns empty list on LLM failure. Caller should validate candidates against
     the recorded DOM snapshot before accepting them.
     """
-    if not settings.llm_enabled:
-        return []
-    if not settings.llm_text_endpoint:
-        return []
-
     n = candidates_wanted or settings.llm_selector_candidates
     payload = {
         "task": "selector_generation",
-        "model": model or settings.llm_text_model or None,
+        "model": model,
         "input": {
             "dom_snippet": dom_snippet,
             "element_bbox": element_bbox,
@@ -115,13 +110,9 @@ def resolve_element_recovery(
 
     Returns {selector, confidence, reason} or None on failure.
     """
-    if not settings.llm_enabled or not settings.llm_recovery_assist:
-        return None
-    if not settings.llm_text_endpoint:
-        return None
     payload = {
         "task": "recovery_resolve",
-        "model": model or settings.llm_text_model or None,
+        "model": model,
         "input": {
             "semantic_description": semantic_description,
             "original_bbox": original_bbox or {},
@@ -156,13 +147,9 @@ def infer_workflow_intent(
     error_detail: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Single LLM call to build workflow intent graph (Claude Browser-style)."""
-    if not settings.llm_enabled:
-        return None
-    if not settings.llm_text_endpoint:
-        return None
     payload = {
         "task": "workflow_intent",
-        "model": model or settings.llm_text_model or None,
+        "model": model,
         "input": {
             "steps": steps_summary,
             "page_urls": page_urls,

@@ -107,21 +107,19 @@ def generate_intent_with_llm(step: dict[str, object]) -> str:
         "(verb + object, no spaces). Examples of shape: focus_<name>, enter_<name>_value, click_<name>, "
         "navigate_to_<place>, scroll_viewport. Return ONLY the intent."
     )
-    if settings.llm_enabled and settings.llm_text_endpoint:
-        req_body = {
-            "task": "intent_generation",
-            "model": settings.llm_text_model or None,
-            "input": {"prompt": prompt},
-        }
-        data = call_llm("intent_generation", req_body, max(500, settings.llm_text_timeout_ms))
-        if data is not None:
-            raw_intent = str(data.get("intent") or data.get("output") or data.get("text") or "").strip()
-            intent = _sanitize_intent(raw_intent, fallback)
-            if intent in generics:
-                intent = fallback
-            cache[key] = intent
-            _write_cache(cache)
-            return intent
+    req_body = {
+        "task": "intent_generation",
+        "input": {"prompt": prompt},
+    }
+    data = call_llm("intent_generation", req_body, max(500, settings.llm_text_timeout_ms))
+    if data is not None:
+        raw_intent = str(data.get("intent") or data.get("output") or data.get("text") or "").strip()
+        intent = _sanitize_intent(raw_intent, fallback)
+        if intent in generics:
+            intent = fallback
+        cache[key] = intent
+        _write_cache(cache)
+        return intent
     cache[key] = fallback
     _write_cache(cache)
     return fallback

@@ -31,16 +31,18 @@ def _is_vision_task(task: str) -> bool:
 
 
 def _selected_endpoint_and_keys(task: str) -> tuple[str, list[str]]:
-    """Select endpoint and API keys based on task type."""
+    """Select endpoint and API keys derived from the first enabled provider.
+
+    Kept as an adapter for legacy callers (e.g. supports_multimodal_chat). All
+    real LLM calls go through the router via call_llm().
+    """
     if _is_vision_task(task):
         endpoint = settings.llm_vision_endpoint
         api_key_single = settings.llm_vision_api_key
     else:
         endpoint = settings.llm_text_endpoint
         api_key_single = settings.llm_text_api_key
-
-    csv_keys = [k.strip() for k in str(api_key_single or "").split(",") if k.strip()]
-    keys = csv_keys if csv_keys else []
+    keys = [api_key_single] if api_key_single else []
     return endpoint, keys
 
 
@@ -503,102 +505,13 @@ def call_llm(
     *,
     error_detail: list[str] | None = None,
 ) -> dict[str, Any] | None:
-    # Try multi-provider router first
-    try:
-        from app.llm.router import get_router
-        router = get_router()
-        if router.pool:  # Only use router if it has providers
-            is_vision = task in {"anchor_vision", "vision_reasoning"}
-            if is_vision:
-                return router.route_vision(task, payload, timeout_ms, error_detail=error_detail)
-            else:
-                return router.route_text(task, payload, timeout_ms, error_detail=error_detail)
-    except Exception:  # Graceful fallback on import or router error
-        pass
+    """Route all LLM calls through the multi-provider router. No legacy fallback.
 
-    # Fallback to single-endpoint logic
-    endpoint_raw, keys = _selected_endpoint_and_keys(task)
-    if not endpoint_raw:
-        return None
-
-    req_id = next(_REQUEST_COUNTER)
-    api_key, key_slot, key_count = _next_api_key(keys)
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    _debug_log(
-        "request_sent "
-        f"req_id={req_id} task={task} endpoint={endpoint_raw} "
-        f"key_slot={key_slot}/{key_count} timeout_ms={timeout_ms} keys={len(keys)}"
-    )
-    use_openai_shape = _is_openai_compatible_endpoint(endpoint_raw)
-
-    timeout_s = max(0.2, timeout_ms / 1000.0)
-
-    parallel_anchor = (
-        use_openai_shape
-        and task == "anchor_vision"
-        and bool(settings.llm_parallel_fanout_anchor_vision)
-        and len(keys) > 1
-    )
-
-    try:
-        if use_openai_shape:
-            modes = [(True, "json_mode")]
-            if task == "anchor_vision":
-                modes.append((False, "compat_no_json_format"))
-            ep = _chat_completions_url(endpoint_raw)
-            for json_mode, tag in modes:
-                raw_body = json.dumps(_openai_body_dict(task, payload, json_mode=json_mode)).encode("utf-8")
-                if parallel_anchor:
-                    out = _parallel_anchor_vision_first_success(
-                        keys=keys,
-                        ep=ep,
-                        raw_body=raw_body,
-                        timeout_s=timeout_s,
-                        attempt_tag=tag,
-                        req_id=req_id,
-                        task=task,
-                        error_detail=error_detail,
-                    )
-                else:
-                    out = _openai_complete_request(
-                        ep,
-                        raw_body,
-                        headers,
-                        timeout_s,
-                        attempt_tag=tag,
-                        req_id=req_id,
-                        task=task,
-                        error_detail=error_detail,
-                        sink_lock=None,
-                    )
-                if out is not None:
-                    return out
-                if task != "anchor_vision":
-                    break
-            return None
-
-        body_legacy = _legacy_payload(task, payload)
-        req = request.Request(endpoint_raw, data=body_legacy, headers=headers, method="POST")
-        with request.urlopen(req, timeout=timeout_s) as res:
-            raw = res.read().decode("utf-8")
-        data_legacy = json.loads(raw)
-        if not isinstance(data_legacy, dict):
-            _append_llm_detail(
-                error_detail,
-                f"unexpected_json_root legacy: {type(data_legacy).__name__}",
-            )
-            return None
-        _debug_log(f"response_received req_id={req_id} task={task} status=legacy_ok")
-        return data_legacy
-
-    except error.HTTPError as exc:
-        bod = _decode_http_error_body(exc)
-        snippet = _safe_error_snippet(bod or str(exc.reason or exc))
-        _append_llm_detail(error_detail, f"HTTPError {exc.code}: {snippet}")
-        return None
-    except (error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as exc:
-        _append_llm_detail(error_detail, f"request_failed legacy {type(exc).__name__}: {exc}")
-        return None
+    Raises RuntimeError if no providers are configured (via router).
+    """
+    from app.llm.router import get_router
+    router = get_router()
+    is_vision = task in {"anchor_vision", "vision_reasoning"}
+    if is_vision:
+        return router.route_vision(task, payload, timeout_ms, error_detail=error_detail)
+    return router.route_text(task, payload, timeout_ms, error_detail=error_detail)
