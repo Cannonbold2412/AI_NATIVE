@@ -118,7 +118,18 @@ class RecordedEventExtensionsTests(unittest.TestCase):
             "selectors": {"css": "button", "xpath": "/button", "text_based": "", "aria": ""},
             "context": {"parent": "", "siblings": [], "index_in_parent": 0, "form_context": None},
             "semantic": {"normalized_text": "", "role": "button", "intent_hint": "click"},
-            "visual": {"bbox": {"x": 0, "y": 0, "w": 10, "h": 10}, "viewport": "1024x768", "scroll_position": "0,0"},
+            "visual": {
+                "bbox": {"x": 0, "y": 0, "w": 10, "h": 10},
+                "viewport": "1024x768",
+                "scroll_position": "0,0",
+                "timestamp_ms": 1000,
+                "frames": {
+                    "before_far": "frames/evt_0001_before_far.png",
+                    "before_near": "frames/evt_0001_before_near.png",
+                    "after_near": "frames/evt_0001_after_near.png",
+                    "after_far": "frames/evt_0001_after_far.png",
+                },
+            },
             "page": {"url": "about:blank", "title": ""},
             "state_change": {"before": "", "after": ""},
             "timing": {"wait_for": "load", "timeout": 5000},
@@ -257,7 +268,17 @@ class EscalationQueueTests(unittest.TestCase):
 
 class WorkflowIntentGraphTests(unittest.TestCase):
     def test_graph_default_empty(self):
-        pkg = SkillPackage(meta=SkillMeta(id="x"), skills=[SkillBlock(steps=[])])
+        pkg = SkillPackage(
+            meta=SkillMeta(id="x"),
+            skills=[SkillBlock(steps=[])],
+            compile_report={
+                "status": "ok",
+                "steps_total": 0,
+                "min_confidence": 1.0,
+                "llm_router_stats": {"pool_size": 1, "entries": []},
+                "steps": [],
+            },
+        )
         self.assertEqual(pkg.intent_graph.goal, "")
         self.assertEqual(pkg.intent_graph.steps, [])
 
