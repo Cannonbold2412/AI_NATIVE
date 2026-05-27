@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ from app.llm.client import (
     _provider_top_level_error,
     _safe_error_snippet,
 )
+from app.services.jobs import append_current_job_event
 
 
 @dataclass
@@ -33,6 +35,100 @@ class PoolEntry:
     requests_429: int = 0
     last_used_at: float = 0.0
     cooled_until: float = 0.0
+
+
+_SECRET_KEYS = {
+    "authorization",
+    "api_key",
+    "apikey",
+    "access_token",
+    "refresh_token",
+    "cookie",
+    "cookies",
+    "storage_state",
+    "storage_state_path",
+}
+
+
+def _redact_url(value: str) -> str:
+    if "?" not in value:
+        return value
+    base, _, query = value.partition("?")
+    if not query:
+        return base
+    return f"{base}?[redacted_query]"
+
+
+def _redact_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if lowered in _SECRET_KEYS:
+                out[key_text] = "[redacted]"
+            elif lowered in {"image_base64", "base64"} and isinstance(item, str):
+                out[key_text] = _redacted_blob(item)
+            elif lowered == "url" and isinstance(item, str) and item.startswith("data:"):
+                out[key_text] = _redacted_data_url(item)
+            else:
+                out[key_text] = _redact_value(item)
+        return out
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value[:20]]
+    if isinstance(value, str):
+        if value.startswith("data:") and ";base64," in value[:80]:
+            return _redacted_data_url(value)
+        if len(value) > 1600:
+            return f"{value[:1600]}... [truncated {len(value) - 1600} chars]"
+    return value
+
+
+def _redacted_blob(value: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8", errors="ignore")).hexdigest()[:16]
+    return f"[redacted_base64 chars={len(value)} sha256={digest}]"
+
+
+def _redacted_data_url(value: str) -> str:
+    prefix, _, payload = value.partition(",")
+    return f"{prefix},[redacted chars={len(payload)} sha256={hashlib.sha256(payload.encode('utf-8', errors='ignore')).hexdigest()[:16]}]"
+
+
+def _redacted_preview(value: Any) -> str:
+    try:
+        text = json.dumps(_redact_value(value), ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        text = str(value)
+    return text if len(text) <= 2400 else f"{text[:2400]}... [truncated {len(text) - 2400} chars]"
+
+
+def _log_llm_exception(
+    req_id: int,
+    entry: PoolEntry,
+    endpoint: str,
+    model: Any,
+    task: str,
+    attempt: int,
+    status_code: int | None,
+    duration_ms: float,
+    message: str,
+) -> None:
+    append_current_job_event(
+        "api_call",
+        f"LLM request failed: {task}.",
+        {
+            "phase": "llm_request_failed",
+            "request_id": req_id,
+            "provider": entry.provider,
+            "endpoint": _redact_url(endpoint),
+            "model": model,
+            "task": task,
+            "attempt": attempt,
+            "status_code": status_code,
+            "duration_ms": duration_ms,
+            "error": message,
+        },
+    )
 
 
 class LLMRouter:
@@ -212,20 +308,41 @@ class LLMRouter:
 
         timeout_s = max(0.2, timeout_ms / 1000.0)
 
+        started = time.perf_counter()
+
         try:
-            raw_body = json.dumps(_openai_body_dict(task, payload_with_model, json_mode=True)).encode("utf-8")
+            body_dict = _openai_body_dict(task, payload_with_model, json_mode=True)
+            raw_body = json.dumps(body_dict).encode("utf-8")
+            append_current_job_event(
+                "api_call",
+                f"LLM request started: {task}.",
+                {
+                    "phase": "llm_request_start",
+                    "request_id": req_id,
+                    "provider": entry.provider,
+                    "endpoint": _redact_url(ep),
+                    "model": model,
+                    "task": task,
+                    "attempt": attempt,
+                    "request_bytes": len(raw_body),
+                    "request_preview": _redacted_preview(body_dict),
+                },
+            )
             req = request.Request(ep, data=raw_body, headers=headers, method="POST")
 
             with request.urlopen(req, timeout=timeout_s) as res:
+                status_code = getattr(res, "status", None) or getattr(res, "code", None)
                 raw = res.read().decode("utf-8")
 
             entry.requests_sent += 1
             entry.last_used_at = now
+            duration_ms = round((time.perf_counter() - started) * 1000, 2)
 
             data_raw = json.loads(raw)
             if not isinstance(data_raw, dict):
                 msg = f"unexpected_json_root: {type(data_raw).__name__}"
                 _debug_log(f"router: {msg}")
+                _log_llm_exception(req_id, entry, ep, model, task, attempt, status_code, duration_ms, msg)
                 if error_detail:
                     error_detail.append(msg)
                 return None
@@ -233,17 +350,55 @@ class LLMRouter:
             prov_msg = _provider_top_level_error(data_raw)
             if prov_msg:
                 _debug_log(f"router: provider_error {prov_msg}")
+                append_current_job_event(
+                    "api_call",
+                    f"LLM provider returned an error: {task}.",
+                    {
+                        "phase": "llm_provider_error",
+                        "request_id": req_id,
+                        "provider": entry.provider,
+                        "endpoint": _redact_url(ep),
+                        "model": model,
+                        "task": task,
+                        "attempt": attempt,
+                        "status_code": status_code,
+                        "duration_ms": duration_ms,
+                        "response_bytes": len(raw.encode("utf-8")),
+                        "error": prov_msg,
+                        "response_preview": _redacted_preview(data_raw),
+                    },
+                )
                 if error_detail:
                     error_detail.append(f"provider_error: {prov_msg}")
                 return None
 
             data = _normalize_openai_response(data_raw)
             _debug_log(f"router: response_ok req_id={req_id} provider={entry.provider}")
+            append_current_job_event(
+                "api_call",
+                f"LLM request completed: {task}.",
+                {
+                    "phase": "llm_request_done",
+                    "request_id": req_id,
+                    "provider": entry.provider,
+                    "endpoint": _redact_url(ep),
+                    "model": model,
+                    "task": task,
+                    "attempt": attempt,
+                    "status_code": status_code,
+                    "duration_ms": duration_ms,
+                    "request_bytes": len(raw_body),
+                    "response_bytes": len(raw.encode("utf-8")),
+                    "response_preview": _redacted_preview(data_raw),
+                    "normalized_preview": _redacted_preview(data),
+                },
+            )
             return data if isinstance(data, dict) else None
 
         except error.HTTPError as exc:
             bod = _decode_http_error_body(exc)
             snippet = _safe_error_snippet(bod or str(exc.reason or exc))
+            duration_ms = round((time.perf_counter() - started) * 1000, 2)
 
             # Handle 429 rate limit: cool this key
             if exc.code == 429:
@@ -251,6 +406,7 @@ class LLMRouter:
                 entry.cooled_until = now + self.cooldown_secs
                 msg = f"HTTPError 429 rate_limited (cooled {self.cooldown_secs}s): {snippet}"
                 _debug_log(f"router: {msg}")
+                _log_llm_exception(req_id, entry, ep, model, task, attempt, exc.code, duration_ms, msg)
                 if error_detail:
                     error_detail.append(msg)
                 return None
@@ -259,6 +415,7 @@ class LLMRouter:
             if exc.code in {401, 403}:
                 msg = f"HTTPError {exc.code} auth_failed (dropping key): {snippet}"
                 _debug_log(f"router: {msg}")
+                _log_llm_exception(req_id, entry, ep, model, task, attempt, exc.code, duration_ms, msg)
                 if error_detail:
                     error_detail.append(msg)
                 # Remove this entry from pool
@@ -269,6 +426,7 @@ class LLMRouter:
             # Other HTTP errors: transient, retry
             msg = f"HTTPError {exc.code}: {snippet}"
             _debug_log(f"router: {msg}")
+            _log_llm_exception(req_id, entry, ep, model, task, attempt, exc.code, duration_ms, msg)
             if error_detail:
                 error_detail.append(msg)
             return None
@@ -276,6 +434,8 @@ class LLMRouter:
         except (error.URLError, TimeoutError, OSError) as exc:
             msg = f"{type(exc).__name__}: {exc}"
             _debug_log(f"router: transient_error {msg}")
+            duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            _log_llm_exception(req_id, entry, ep, model, task, attempt, None, duration_ms, msg)
             if error_detail:
                 error_detail.append(msg)
             return None
@@ -283,6 +443,8 @@ class LLMRouter:
         except (json.JSONDecodeError, ValueError) as exc:
             msg = f"{type(exc).__name__}: {exc}"
             _debug_log(f"router: parse_error {msg}")
+            duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            _log_llm_exception(req_id, entry, ep, model, task, attempt, None, duration_ms, msg)
             if error_detail:
                 error_detail.append(msg)
             return None

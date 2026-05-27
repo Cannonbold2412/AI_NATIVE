@@ -14,6 +14,7 @@ from app.confidence.uncertainty import audit_reference
 from app.llm.anchor_vision_llm import VisionAnchorGenerationError
 from app.metrics.store import metrics
 from app.pipeline.run import run_pipeline
+from app.services.jobs import append_current_job_event
 from app.recorder.session import registry
 from app.storage.json_store import read_skill, write_skill
 from app.storage.session_events import read_session_events
@@ -182,9 +183,24 @@ async def stop_record(session_id: str) -> dict[str, str]:
 async def compile_skill(body: CompileBody) -> dict[str, Any]:
     """Run Phase 2 pipeline + Phase 3 compiler; persist JSON skill package."""
     metrics.inc("compile_attempts")
+    append_current_job_event(
+        "compile_phase",
+        "Compile requested.",
+        {"phase": "start", "session_id": body.session_id, "skill_title": body.skill_title.strip()},
+    )
     raw = _load_events_for_compile(body.session_id)
+    append_current_job_event(
+        "compile_phase",
+        "Loaded recorded events.",
+        {"phase": "load_events", "session_id": body.session_id, "event_count": len(raw)},
+    )
     if not raw:
         metrics.inc("compile_failures")
+        append_current_job_event(
+            "compile_error",
+            "No events available for this session.",
+            {"phase": "load_events", "session_id": body.session_id},
+        )
         raise HTTPException(
             status_code=400,
             detail="No events for this session. Poll GET /record/{id}/events or use a stopped session with events.jsonl.",
@@ -192,15 +208,31 @@ async def compile_skill(body: CompileBody) -> dict[str, Any]:
     skill_title = body.skill_title.strip()
     if not skill_title:
         metrics.inc("compile_failures")
+        append_current_job_event("compile_error", "Skill Name is required.", {"phase": "validate_request"})
         raise HTTPException(status_code=400, detail="Skill Name is required.")
     skill_id = f"skill_{body.session_id}"
     try:
+        append_current_job_event(
+            "compile_phase",
+            "Normalizing recorded events.",
+            {"phase": "pipeline_start", "input_event_count": len(raw)},
+        )
         normalized = run_pipeline(raw)
+        append_current_job_event(
+            "compile_phase",
+            "Pipeline normalization finished.",
+            {"phase": "pipeline_done", "output_event_count": len(normalized)},
+        )
         existing = read_skill(skill_id)
         if existing:
             version = int((existing.get("meta") or {}).get("version") or 0) + 1
         else:
             version = 1
+        append_current_job_event(
+            "compile_phase",
+            "Compiling skill package.",
+            {"phase": "compiler_start", "skill_id": skill_id, "version": version},
+        )
         package = compile_skill_package(
             normalized,
             skill_id=skill_id,
@@ -208,9 +240,25 @@ async def compile_skill(body: CompileBody) -> dict[str, Any]:
             title=skill_title,
             version=version,
         )
+        step_count = len(package.skills[0].steps)
+        append_current_job_event(
+            "compile_phase",
+            "Skill package compiled.",
+            {"phase": "compiler_done", "skill_id": skill_id, "version": version, "step_count": step_count},
+        )
+        append_current_job_event(
+            "compile_phase",
+            "Running static audit.",
+            {"phase": "static_audit_start", "step_count": step_count},
+        )
         audit_report, hard_failures = _build_audit_report(package.skills[0].steps)
         if hard_failures:
             metrics.inc("compile_failures")
+            append_current_job_event(
+                "compile_error",
+                "Static audit failed.",
+                {"phase": "static_audit_failed", "hard_failures": hard_failures},
+            )
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -218,22 +266,42 @@ async def compile_skill(body: CompileBody) -> dict[str, Any]:
                     "hard_failures": hard_failures,
                 },
             )
+        append_current_job_event(
+            "compile_phase",
+            "Static audit passed.",
+            {"phase": "static_audit_done", "audit_status": "passed"},
+        )
         write_skill(skill_id, package.model_dump(mode="json"))
+        append_current_job_event(
+            "compile_phase",
+            "Compiled skill written to storage.",
+            {"phase": "write_skill_done", "skill_id": skill_id, "version": version},
+        )
         metrics.inc("compile_successes")
-        metrics.inc("fallback_usage", len(package.skills[0].steps))
+        metrics.inc("fallback_usage", step_count)
     except HTTPException:
         raise
     except VisionAnchorGenerationError as exc:
         metrics.inc("compile_failures")
+        append_current_job_event(
+            "compile_error",
+            "Vision anchor generation failed.",
+            {"phase": "vision_anchor_failed", "detail": exc.api_detail()},
+        )
         raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
     except Exception as exc:
         metrics.inc("compile_failures")
+        append_current_job_event(
+            "compile_error",
+            "Compile failed.",
+            {"phase": "compile_failed", "error": str(exc), "error_type": exc.__class__.__name__},
+        )
         raise HTTPException(status_code=500, detail=f"compile_failed: {exc!s}") from exc
 
     return {
         "skill_id": skill_id,
         "version": version,
-        "step_count": len(package.skills[0].steps),
+        "step_count": step_count,
         "audit_status": "passed",
     }
 

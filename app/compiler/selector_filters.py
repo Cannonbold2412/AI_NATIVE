@@ -107,6 +107,19 @@ def is_brittle_deep_chain(selector: str, *, max_xpath_segments: int = 10, max_cs
     return False
 
 
+def _strip_invalid_role_fragments(selector: str) -> str:
+    """Remove [role="<invalid>"] fragments from compound aria selectors.
+
+    '[role="input"][name="Search services"]' → '[name="Search services"]'
+    Lets useful name/testid attributes survive a bad role token from bridge.js.
+    """
+    return re.sub(
+        r'\[role=["\']([^"\']+)["\']\]',
+        lambda m: "" if m.group(1).strip().lower() in _INVALID_ARIA_ROLE_TOKENS else m.group(0),
+        selector,
+    ).strip()
+
+
 def filter_selectors_dict(selectors: dict[str, Any] | None) -> dict[str, Any]:
     """Strip selector channels that fail quality gates before persisting to skill steps."""
     if not isinstance(selectors, dict):
@@ -117,10 +130,19 @@ def filter_selectors_dict(selectors: dict[str, Any] | None) -> dict[str, Any]:
         if not isinstance(raw, str):
             continue
         s = raw.strip()
-        if not s or not selector_passes_filters(s):
+        if not s:
             out[key] = ""
-        else:
+            continue
+        if selector_passes_filters(s):
             out[key] = s
+            continue
+        # For aria selectors with an invalid role token, try salvaging the rest
+        if key == "aria" and is_invalid_aria_semantic_role(s):
+            salvaged = _strip_invalid_role_fragments(s)
+            if salvaged and selector_passes_filters(salvaged):
+                out[key] = salvaged
+                continue
+        out[key] = ""
     return out
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,7 @@ from app.models.skill_spec import (
 )
 from app.policy.bundle import PolicyBundle, get_policy_bundle
 from app.policy.intent_ontology import intent_specificity_score, normalize_compiler_intent
+from app.services.jobs import append_current_job_event
 
 
 _RECOVERABLE_VISION_ANCHOR_REASONS = frozenset({
@@ -60,6 +62,10 @@ _RECOVERABLE_VISION_ANCHOR_REASONS = frozenset({
     "vision_llm_empty_response",
     "vision_llm_invalid_primary_phrase",
 })
+
+
+def _compile_log(event: str, message: str, data: dict[str, Any] | None = None) -> None:
+    append_current_job_event(event, message, data or {})
 
 
 def _default_confidence_protocol(bundle: PolicyBundle) -> dict[str, Any]:
@@ -418,15 +424,30 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
             ev, target, semantic
         )
         if not llm_selector:
-            raise RuntimeError(
-                f"LLM-native selector generation returned empty selector for action "
-                f"{ev.get('action', {}).get('action')!r}; cannot produce reliable compile."
-            )
-        primary = llm_selector
-        selector_confidence = llm_confidence
-        confidence_breakdown = llm_breakdown
-        selector_rationale = llm_rationale
-        selector_source = "llm_native"
+            _action_kind = str((ev.get("action") or {}).get("action") or "").lower()
+            if _action_kind == "focus":
+                # Focus is a soft action — the runtime recovery cascade is designed to
+                # handle weak selectors. Record confidence 0.0; compile report flags it.
+                selector_confidence = 0.0
+                confidence_breakdown = {
+                    "dom_uniqueness": 0.0,
+                    "self_consistency": 0.0,
+                    "visual_verification": 0.0,
+                }
+                selector_rationale = "focus: LLM selector unavailable; heuristic fallback"
+                selector_source = "heuristic_fallback"
+                # primary remains whatever the heuristic produced above
+            else:
+                raise RuntimeError(
+                    f"LLM-native selector generation returned empty selector for action "
+                    f"{ev.get('action', {}).get('action')!r}; cannot produce reliable compile."
+                )
+        else:
+            primary = llm_selector
+            selector_confidence = llm_confidence
+            confidence_breakdown = llm_breakdown
+            selector_rationale = llm_rationale
+            selector_source = "llm_native"
 
     fallback_raw = list(stable.get("fallback_selectors") or []) + ranked_extra
     fallback = [s for s in fallback_raw if selector_passes_filters(str(s)) and str(s) != primary]
@@ -582,6 +603,12 @@ def _build_step(
 ) -> SkillStep:
     policy = bundle.data
     action_payload = optimize_scroll(ev)
+    started = time.perf_counter()
+    _compile_log(
+        "compile_step",
+        f"Compiling step {step_index + 1}.",
+        {"phase": "step_start", "step_index": step_index, "action": action_payload},
+    )
     if action_payload == "scroll":
         scroll_action = scroll_payload(ev, policy)
         visual = ev.get("visual") or {}
@@ -595,7 +622,7 @@ def _build_step(
         visual_signals: dict[str, Any] = {"scroll_position": scroll_position}
         if scroll_screenshot:
             visual_signals["scroll_screenshot"] = scroll_screenshot
-        return SkillStep(
+        step = SkillStep(
             action=scroll_action,
             intent="scroll_viewport",
             frame=_build_frame_context(ev),
@@ -604,6 +631,18 @@ def _build_step(
             },
             recovery=RecoveryBlock(**no_recovery_block("scroll_viewport")),
         )
+        _compile_log(
+            "compile_step",
+            f"Compiled step {step_index + 1}.",
+            {
+                "phase": "step_done",
+                "step_index": step_index,
+                "action": action_payload,
+                "intent": step.intent,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            },
+        )
+        return step
     llm_raw = generate_intent_with_llm(ev)
     intent = normalize_compiler_intent(ev, llm_raw, policy)
     state_before = capture_state_snapshot(ev, before=True)
@@ -620,6 +659,11 @@ def _build_step(
     ev_with_intent["semantic"] = semantic
     vision_anchor_warning: dict[str, Any] | None = None
     try:
+        _compile_log(
+            "compile_step",
+            f"Generating vision anchors for step {step_index + 1}.",
+            {"phase": "vision_anchor_start", "step_index": step_index, "intent": intent},
+        )
         merged_anchors = generate_anchors_for_step_or_raise(
             ev_with_intent,
             session_root=session_root,
@@ -627,11 +671,26 @@ def _build_step(
             policy=policy,
             step_index=step_index,
         )
+        _compile_log(
+            "compile_step",
+            f"Vision anchors generated for step {step_index + 1}.",
+            {"phase": "vision_anchor_done", "step_index": step_index, "anchor_count": len(merged_anchors)},
+        )
     except VisionAnchorGenerationError as exc:
         if not _vision_anchor_failure_is_recoverable(exc):
             raise
         merged_anchors = _fallback_anchors_from_event(ev_with_intent, policy)
         vision_anchor_warning = _vision_anchor_warning(exc, step_index=step_index)
+        _compile_log(
+            "compile_step",
+            f"Vision anchors fell back for step {step_index + 1}.",
+            {
+                "phase": "vision_anchor_fallback",
+                "step_index": step_index,
+                "reason": exc.reason,
+                "anchor_count": len(merged_anchors),
+            },
+        )
     merged_anchors = rank_merged_anchors(merged_anchors, ev_with_intent, intent, policy)
     validation = _build_validation(ev_with_intent, state_diff, policy)
     if recovery_enabled_for_action(action_payload):
@@ -674,7 +733,7 @@ def _build_step(
             assertions=assertions,
         )
     snapshot = ev.get("snapshot") or {}
-    return SkillStep(
+    step = SkillStep(
         action=action_payload,
         intent=intent,
         frame=_build_frame_context(ev),
@@ -691,6 +750,20 @@ def _build_step(
         snapshot_ref=str(snapshot.get("ref") or ""),
         snapshot_dom_hash=str(snapshot.get("dom_hash") or ""),
     )
+    _compile_log(
+        "compile_step",
+        f"Compiled step {step_index + 1}.",
+        {
+            "phase": "step_done",
+            "step_index": step_index,
+            "action": action_payload,
+            "intent": step.intent,
+            "selector": (step.target or {}).get("primary_selector"),
+            "selector_confidence": (step.target or {}).get("selector_confidence"),
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
+    return step
 
 
 def _build_compile_report(steps: list[SkillStep]) -> dict[str, Any]:
@@ -809,7 +882,17 @@ def compile_skill_package(
     if not sid:
         raise VisionAnchorGenerationError("source_session_id_required")
     session_root = (settings.data_dir / "sessions" / sid).resolve()
+    _compile_log(
+        "compile_phase",
+        "Preparing compiler inputs.",
+        {"phase": "compiler_prepare", "event_count": len(events), "session_id": sid},
+    )
     cleaned_events = fix_step_order(clean_steps(events, pol), pol)
+    _compile_log(
+        "compile_phase",
+        "Compiler inputs prepared.",
+        {"phase": "compiler_prepare_done", "cleaned_event_count": len(cleaned_events)},
+    )
     steps = [_build_step(e, bundle, session_root=session_root, step_index=i) for i, e in enumerate(cleaned_events)]
 
     # Phase 3: LLM-driven selector compilation. Only runs when snapshots exist and
@@ -819,7 +902,22 @@ def compile_skill_package(
 
     _deduplicate_input_bindings(steps)
 
+    _compile_log(
+        "compile_phase",
+        "Building compile confidence report.",
+        {"phase": "compile_report_start", "step_count": len(steps)},
+    )
     compile_report = _build_compile_report(steps)
+    _compile_log(
+        "compile_phase",
+        "Compile confidence report finished.",
+        {
+            "phase": "compile_report_done",
+            "status": compile_report.get("status"),
+            "min_confidence": compile_report.get("min_confidence"),
+            "steps_with_warnings": compile_report.get("steps_with_warnings"),
+        },
+    )
 
     now = datetime.now(timezone.utc).isoformat()
     structural_fp = _build_structural_fingerprint(steps)
@@ -877,8 +975,28 @@ def _llm_compile_selectors(
             continue
         tasks.append(task_from_recorded_event(ev, step_index=i))
 
+    _compile_log(
+        "compile_phase",
+        "Preparing LLM selector compilation.",
+        {"phase": "llm_selector_prepare", "task_count": len(tasks), "step_count": len(cleaned_events)},
+    )
+
     if tasks:
+        _compile_log(
+            "compile_phase",
+            "Compiling LLM selector candidates.",
+            {"phase": "llm_selector_start", "task_count": len(tasks)},
+        )
         candidates_by_step = compile_workflow_selectors(tasks, session_id=session_id)
+        _compile_log(
+            "compile_phase",
+            "LLM selector compilation finished.",
+            {
+                "phase": "llm_selector_done",
+                "task_count": len(tasks),
+                "steps_with_candidates": sum(1 for cands in candidates_by_step.values() if cands),
+            },
+        )
         for i, step in enumerate(steps):
             cands = candidates_by_step.get(i) or []
             if not cands:
@@ -903,6 +1021,26 @@ def _llm_compile_selectors(
     ]
     page_urls = sorted({(ev.get("page") or {}).get("url") or "" for ev in cleaned_events} - {""})
     try:
-        return build_workflow_intent_graph(steps_summary, page_urls)
+        _compile_log(
+            "compile_phase",
+            "Building workflow intent graph.",
+            {"phase": "workflow_intent_start", "step_count": len(steps_summary), "page_url_count": len(page_urls)},
+        )
+        graph = build_workflow_intent_graph(steps_summary, page_urls)
+        _compile_log(
+            "compile_phase",
+            "Workflow intent graph finished.",
+            {
+                "phase": "workflow_intent_done",
+                "goal": graph.goal,
+                "intent_step_count": len(graph.steps),
+            },
+        )
+        return graph
     except Exception:  # noqa: BLE001 — LLM failure is non-fatal at compile time
+        _compile_log(
+            "compile_phase",
+            "Workflow intent graph generation failed; continuing with an empty graph.",
+            {"phase": "workflow_intent_failed"},
+        )
         return WorkflowIntentGraph()

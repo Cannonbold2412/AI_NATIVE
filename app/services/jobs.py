@@ -8,11 +8,14 @@ import threading
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 JobStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
 TerminalStatus = Literal["succeeded", "failed", "canceled"]
+_current_job_id: ContextVar[str | None] = ContextVar("current_job_id", default=None)
 
 
 @dataclass
@@ -85,6 +88,14 @@ class JobStore:
             return []
         return [event.public() for event in job.events[index:]]
 
+    def append_event(self, job_id: str, event: str, message: str, data: dict[str, Any] | None = None) -> None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return
+            job.updated_at = time.time()
+            job.events.append(JobEvent(time.time(), event, message, dict(data or {})))
+
     def mark_running(self, job_id: str) -> None:
         self._update(job_id, "running", "running", "Job started.")
 
@@ -133,6 +144,30 @@ class JobStore:
 job_store = JobStore()
 
 
+@contextmanager
+def job_event_scope(job_id: str) -> Any:
+    token = _current_job_id.set(job_id)
+    try:
+        yield
+    finally:
+        _current_job_id.reset(token)
+
+
+def current_job_id() -> str | None:
+    return _current_job_id.get()
+
+
+def append_job_event(job_id: str, event: str, message: str, data: dict[str, Any] | None = None) -> None:
+    job_store.append_event(job_id, event, message, data)
+
+
+def append_current_job_event(event: str, message: str, data: dict[str, Any] | None = None) -> None:
+    job_id = current_job_id()
+    if not job_id:
+        return
+    append_job_event(job_id, event, message, data)
+
+
 async def enqueue_job(
     kind: str,
     runner: Callable[[], Awaitable[dict[str, Any]] | dict[str, Any]],
@@ -144,9 +179,10 @@ async def enqueue_job(
     async def _run() -> None:
         job_store.mark_running(job.job_id)
         try:
-            result = runner()
-            if inspect.isawaitable(result):
-                result = await result
+            with job_event_scope(job.job_id):
+                result = runner()
+                if inspect.isawaitable(result):
+                    result = await result
             job_store.mark_succeeded(job.job_id, dict(result or {}))
         except Exception as exc:  # noqa: BLE001
             status_code = getattr(exc, "status_code", None)

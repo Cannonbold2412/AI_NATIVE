@@ -76,15 +76,21 @@ def stream_job_events(job_id: str) -> StreamingResponse:
 
 @router.post("/compile")
 async def enqueue_compile_job(body: CompileBody) -> dict[str, Any]:
-    job = await enqueue_job("compile_skill", lambda: compile_skill(body), resource_id=f"skill_{body.session_id}")
+    async def run() -> dict[str, Any]:
+        return await asyncio.to_thread(lambda: asyncio.run(compile_skill(body)))
+
+    job = await enqueue_job("compile_skill", run, resource_id=f"skill_{body.session_id}")
     return {"job_id": job.job_id, "status": job.status, "resource_id": job.resource_id}
 
 
 @router.post("/skills/{skill_id}/compile-updated")
 async def enqueue_compile_updated_job(skill_id: str, body: CompileUpdatedBody) -> dict[str, Any]:
+    async def run() -> dict[str, Any]:
+        return await asyncio.to_thread(lambda: asyncio.run(compile_updated(skill_id, body)))
+
     job = await enqueue_job(
         "recompile_skill",
-        lambda: compile_updated(skill_id, body),
+        run,
         resource_id=skill_id,
     )
     return {"job_id": job.job_id, "status": job.status, "resource_id": job.resource_id}

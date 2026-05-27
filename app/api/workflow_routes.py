@@ -32,6 +32,7 @@ from app.llm.anchor_vision_llm import VisionAnchorGenerationError
 from app.metrics.store import metrics
 from app.pipeline.run import run_pipeline
 from app.policy.bundle import get_policy_bundle
+from app.services.jobs import append_current_job_event
 from app.storage.json_store import delete_skill, list_skill_summaries, read_skill, write_skill
 from app.storage.session_events import read_session_events
 
@@ -346,28 +347,65 @@ def post_validate(skill_id: str) -> dict[str, Any]:
 
 @router.post("/{skill_id}/compile-updated")
 async def compile_updated(skill_id: str, body: CompileUpdatedBody) -> dict[str, Any]:
+    append_current_job_event(
+        "compile_phase",
+        "Recompile requested.",
+        {"phase": "recompile_start", "skill_id": skill_id},
+    )
     doc = read_skill(skill_id)
     if doc is None:
+        append_current_job_event("compile_error", "Unknown skill id.", {"phase": "load_skill", "skill_id": skill_id})
         raise HTTPException(status_code=404, detail="Unknown skill_id")
     session_id = (doc.get("meta") or {}).get("source_session_id")
     if not session_id:
+        append_current_job_event(
+            "compile_error",
+            "Skill has no source session id.",
+            {"phase": "load_skill", "skill_id": skill_id},
+        )
         raise HTTPException(
             status_code=409,
             detail="no_source_session_id_on_skill_use_patch_revalidate_instead",
         )
     raw = read_session_events(str(session_id))
+    append_current_job_event(
+        "compile_phase",
+        "Loaded source recording events.",
+        {"phase": "load_events", "session_id": str(session_id), "event_count": len(raw)},
+    )
     if not raw:
+        append_current_job_event(
+            "compile_error",
+            "Source recording events are missing.",
+            {"phase": "load_events", "session_id": str(session_id)},
+        )
         raise HTTPException(
             status_code=409,
             detail="session_events_missing_cannot_full_recompile",
         )
     try:
+        append_current_job_event(
+            "compile_phase",
+            "Normalizing recorded events.",
+            {"phase": "pipeline_start", "input_event_count": len(raw)},
+        )
         normalized = run_pipeline(raw)
+        append_current_job_event(
+            "compile_phase",
+            "Pipeline normalization finished.",
+            {"phase": "pipeline_done", "output_event_count": len(normalized)},
+        )
         version = int((doc.get("meta") or {}).get("version") or 0) + 1
         title_override = body.skill_title.strip() if body.skill_title is not None else None
         if body.skill_title is not None and not title_override:
+            append_current_job_event("compile_error", "Skill Name is required.", {"phase": "validate_request"})
             raise HTTPException(status_code=400, detail="Skill Name is required.")
         title = title_override or str((doc.get("meta") or {}).get("title") or skill_id)
+        append_current_job_event(
+            "compile_phase",
+            "Compiling updated skill package.",
+            {"phase": "compiler_start", "skill_id": skill_id, "version": version},
+        )
         package = compile_skill_package(
             normalized,
             skill_id=skill_id,
@@ -375,8 +413,19 @@ async def compile_updated(skill_id: str, body: CompileUpdatedBody) -> dict[str, 
             title=title,
             version=version,
         )
+        step_count = len(package.skills[0].steps)
+        append_current_job_event(
+            "compile_phase",
+            "Updated skill package compiled.",
+            {"phase": "compiler_done", "skill_id": skill_id, "version": version, "step_count": step_count},
+        )
         _, hard_failures = _build_audit_report(package.skills[0].steps)
         if hard_failures:
+            append_current_job_event(
+                "compile_error",
+                "Static audit failed.",
+                {"phase": "static_audit_failed", "hard_failures": hard_failures},
+            )
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -386,11 +435,26 @@ async def compile_updated(skill_id: str, body: CompileUpdatedBody) -> dict[str, 
             )
         package_json = package.model_dump(mode="json")
         write_skill(skill_id, package_json)
+        append_current_job_event(
+            "compile_phase",
+            "Updated skill written to storage.",
+            {"phase": "write_skill_done", "skill_id": skill_id, "version": version},
+        )
     except HTTPException:
         raise
     except VisionAnchorGenerationError as exc:
+        append_current_job_event(
+            "compile_error",
+            "Vision anchor generation failed.",
+            {"phase": "vision_anchor_failed", "detail": exc.api_detail()},
+        )
         raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
     except Exception as exc:
+        append_current_job_event(
+            "compile_error",
+            "Recompile failed.",
+            {"phase": "recompile_failed", "error": str(exc), "error_type": exc.__class__.__name__},
+        )
         raise HTTPException(status_code=500, detail=f"compile_updated_failed: {exc!s}") from exc
     return {"skill_id": skill_id, "version": package_json["meta"]["version"], "step_count": len(package.skills[0].steps)}
 
