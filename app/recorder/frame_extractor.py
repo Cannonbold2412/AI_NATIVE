@@ -21,14 +21,31 @@ from typing import Any
 
 def _find_ffmpeg() -> str | None:
     """Locate ffmpeg binary. Prefers Playwright's bundled ffmpeg, falls back to PATH."""
+    import os
+    # Search the Playwright browsers path (where ffmpeg is actually installed in
+    # production deployments — driven by PLAYWRIGHT_BROWSERS_PATH env var, often /opt/pw-browsers).
+    candidate_roots: list[Path] = []
+    pw_env = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "").strip()
+    if pw_env and pw_env != "0":
+        candidate_roots.append(Path(pw_env))
+    # Common default locations
+    for default in ("/opt/pw-browsers", str(Path.home() / ".cache" / "ms-playwright")):
+        p = Path(default)
+        if p.is_dir() and p not in candidate_roots:
+            candidate_roots.append(p)
+    # Playwright package dir (for in-package bundled ffmpeg in older versions)
     try:
         import playwright
-        pw_dir = Path(playwright.__file__).parent
-        for candidate in pw_dir.rglob("ffmpeg*"):
-            if candidate.is_file() and candidate.stat().st_mode & 0o111:
-                return str(candidate)
+        candidate_roots.append(Path(playwright.__file__).parent)
     except ImportError:
         pass
+    for root in candidate_roots:
+        try:
+            for candidate in root.rglob("ffmpeg*"):
+                if candidate.is_file() and candidate.stat().st_mode & 0o111:
+                    return str(candidate)
+        except OSError:
+            continue
     return shutil.which("ffmpeg")
 
 

@@ -1,0 +1,240 @@
+{
+  "status": "failed",
+  "steps_total": 21,
+  "steps_with_warnings": 0,
+  "min_confidence": 0.7,
+  "steps": [
+    {
+      "index": 0,
+      "intent": "interact_contacts",
+      "selector": "[aria-label=\"Contacts\"]",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 1,
+      "intent": "activate_control_person",
+      "selector": "text=\"Person\"",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 2,
+      "intent": "focus_input",
+      "selector": "label:has-text(\"Name\") + input",
+      "confidence": 0.93,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 3,
+      "intent": "enter_input_value",
+      "selector": "label:has-text(\"Name\") + input",
+      "confidence": 0.93,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": "name",
+      "warnings": []
+    },
+    {
+      "index": 4,
+      "intent": "focus_input",
+      "selector": "label:has-text(\"Name\") + input",
+      "confidence": 0.93,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 5,
+      "intent": "enter_input_value",
+      "selector": "label:has-text(\"Name\") + input",
+      "confidence": 0.93,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": "name_2",
+      "warnings": []
+    },
+    {
+      "index": 6,
+      "intent": "focus_input",
+      "selector": "input[type=\"text\"]",
+      "confidence": 0.7,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 7,
+      "intent": "enter_input_value",
+      "selector": "input[type=\"text\"]",
+      "confidence": 0.7,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 8,
+      "intent": "keyboard_shortcut_ui_flow",
+      "selector": "input[type=\"text\"]",
+      "confidence": 0.7,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 9,
+      "intent": "focus_input",
+      "selector": "input[type=\"text\"]",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 10,
+      "intent": "keyboard_shortcut_ui_flow",
+      "selector": "input[type=\"text\"]",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 11,
+      "intent": "focus_input",
+      "selector": "input[type=\"text\"]",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 12,
+      "intent": "enter_input_value",
+      "selector": "input[type=\"text\"]",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": "email",
+      "warnings": []
+    },
+    {
+      "index": 13,
+      "intent": "focus_input",
+      "selector": "input[type=\"text\"]",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 14,
+      "intent": "interact_add_labels",
+      "selector": "label:has-text(\"Labels\") + div",
+      "confidence": 0.93,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 15,
+      "intent": "focus_search_for_labels",
+      "selector": "[placeholder=\"Search for labels\"]",
+      "confidence": 0.7,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 16,
+      "intent": "enter_input_value",
+      "selector": "[placeholder=\"Search for labels\"]",
+      "confidence": 0.7,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": "search_for_labels",
+      "warnings": []
+    },
+    {
+      "index": 17,
+      "intent": "keyboard_shortcut_ui_flow",
+      "selector": "[placeholder=\"Search for labels\"]",
+      "confidence": 0.7,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 18,
+      "intent": "activate_control_item_owner_s_visibility_group",
+      "selector": "label:has-text(\"Visible to\") + button",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 19,
+      "intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+      "selector": "label:has-text(\"Visible to\") + div",
+      "confidence": 0.93,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    },
+    {
+      "index": 20,
+      "intent": "activate_control_save",
+      "selector": "label:has-text(\"Add person\") + button",
+      "confidence": 1.0,
+      "confidence_breakdown": {},
+      "source": "heuristic",
+      "reasoning": "",
+      "input_binding": null,
+      "warnings": []
+    }
+  ],
+  "llm_router_stats": {}
+}
