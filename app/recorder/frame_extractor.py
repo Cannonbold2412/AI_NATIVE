@@ -7,7 +7,7 @@ For each event at timestamp T (in ms since video start), extract:
 - T+500ms → frames/evt_NNNN_after_far.png
 
 Updates events.jsonl in place: each event's visual.frames dict gets the 4 paths.
-Uses ffmpeg (from Playwright's bundled binary, or PATH).
+Uses ffmpeg (from Playwright's bundled binary, imageio-ffmpeg, or PATH).
 
 Raises on any failure (missing video, missing ffmpeg, per-frame failure,
 missing event timestamp) — silent degradation is not allowed.
@@ -16,15 +16,23 @@ missing event timestamp) — silent degradation is not allowed.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
 
+def _is_executable_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if os.name == "nt" and path.suffix.lower() in {".exe", ".cmd", ".bat"}:
+        return True
+    return bool(path.stat().st_mode & 0o111)
+
+
 def _find_ffmpeg() -> str | None:
-    """Locate ffmpeg binary. Prefers Playwright's bundled ffmpeg, falls back to PATH."""
-    import os
+    """Locate ffmpeg binary. Prefers Playwright, then imageio-ffmpeg, then PATH."""
     # Search the Playwright browsers path (where ffmpeg is actually installed in
     # production deployments — driven by PLAYWRIGHT_BROWSERS_PATH env var, often /opt/pw-browsers).
     candidate_roots: list[Path] = []
@@ -45,10 +53,20 @@ def _find_ffmpeg() -> str | None:
     for root in candidate_roots:
         try:
             for candidate in root.rglob("ffmpeg*"):
-                if candidate.is_file() and candidate.stat().st_mode & 0o111:
+                if _is_executable_file(candidate):
                     return str(candidate)
         except OSError:
             continue
+
+    try:
+        import imageio_ffmpeg
+
+        candidate = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        if candidate.is_file():
+            return str(candidate)
+    except (ImportError, OSError, RuntimeError):
+        pass
+
     return shutil.which("ffmpeg")
 
 
@@ -105,8 +123,9 @@ def extract_frames_for_session(session_dir: Path) -> dict[int, dict[str, str]]:
     if not ffmpeg:
         raise RuntimeError(
             "ffmpeg not available; install Playwright browsers (which bundles ffmpeg) "
-            "or add ffmpeg to PATH. Searched PLAYWRIGHT_BROWSERS_PATH, /opt/pw-browsers, "
-            "~/.cache/ms-playwright, and the playwright package directory."
+            "or install imageio-ffmpeg, or add ffmpeg to PATH. Searched "
+            "PLAYWRIGHT_BROWSERS_PATH, /opt/pw-browsers, ~/.cache/ms-playwright, "
+            "the playwright package directory, imageio-ffmpeg, and PATH."
         )
 
     frames_dir = session_dir / "frames"

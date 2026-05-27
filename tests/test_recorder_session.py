@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.recorder import session as recorder_session
 from app.recorder.session import RecordingSession
 
@@ -168,6 +170,7 @@ def test_binding_source_child_frame_adds_frame_context() -> None:
 
 def test_frame_offset_adjusts_visual_bbox_before_capture(monkeypatch, tmp_path) -> None:
     sess = RecordingSession(session_id="frame-bbox", data_root=tmp_path)
+    sess._video_session_start_wall_ms = 1
     captured: dict[str, object] = {}
 
     class FakePage:
@@ -205,6 +208,7 @@ def test_frame_offset_adjusts_visual_bbox_before_capture(monkeypatch, tmp_path) 
 
 def test_visual_capture_failure_keeps_event(monkeypatch, tmp_path) -> None:
     sess = RecordingSession(session_id="visual-fallback", data_root=tmp_path)
+    sess._video_session_start_wall_ms = 1
 
     class FakePage:
         def is_closed(self) -> bool:
@@ -222,3 +226,29 @@ def test_visual_capture_failure_keeps_event(monkeypatch, tmp_path) -> None:
     assert len(sess.snapshot_events()) == 1
     assert sess.snapshot_events()[0]["visual"]["full_screenshot"] is None
     assert any(err.startswith("visual_capture_error:click") for err in sess.binding_errors)
+
+
+def test_finalize_video_recording_skips_frame_extraction_when_no_events(tmp_path) -> None:
+    sess = RecordingSession(session_id="empty-video", data_root=tmp_path)
+    session_dir = tmp_path / "sessions" / sess.session_id
+    session_dir.mkdir(parents=True)
+    raw_video = session_dir / "playwright-output.webm"
+    raw_video.write_bytes(b"video")
+
+    sess._finalize_video_recording_sync()
+
+    assert not raw_video.exists()
+    assert (session_dir / "recording.webm").read_bytes() == b"video"
+    assert not (session_dir / "events.jsonl").exists()
+    assert sess.binding_errors == ["video_frame_extraction_skipped:no_events"]
+
+
+def test_finalize_video_recording_requires_events_file_when_events_exist(tmp_path) -> None:
+    sess = RecordingSession(session_id="missing-events-file", data_root=tmp_path)
+    session_dir = tmp_path / "sessions" / sess.session_id
+    session_dir.mkdir(parents=True)
+    (session_dir / "recording.webm").write_bytes(b"video")
+    sess._materialized.append(object())  # type: ignore[arg-type]
+
+    with pytest.raises(FileNotFoundError, match="events.jsonl not found"):
+        sess._finalize_video_recording_sync()

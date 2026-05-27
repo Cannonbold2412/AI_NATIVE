@@ -391,21 +391,39 @@
     return null;
   }
 
+  function implicitAriaRole(el) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input") {
+      const t = (el.getAttribute("type") || "text").toLowerCase();
+      if (t === "checkbox") return "checkbox";
+      if (t === "radio") return "radio";
+      if (t === "range") return "slider";
+      if (t === "submit" || t === "button" || t === "reset") return "button";
+      if (t === "search") return "searchbox";
+      if (t === "number") return "spinbutton";
+      return "textbox";
+    }
+    if (tag === "textarea") return "textbox";
+    if (tag === "select") return el.hasAttribute("multiple") ? "listbox" : "combobox";
+    if (tag === "button") return "button";
+    if (tag === "a" && el.hasAttribute("href")) return "link";
+    return null;
+  }
+
   function buildAriaSelector(el) {
     // Try stable selector first
     const stable = buildStableSelector(el);
     if (stable) return stable;
-    let role = el.getAttribute("role") || el.tagName.toLowerCase();
-    const badRoles = { path: 1, svg: 1, g: 1, div: 1, span: 1 };
-    if (badRoles[role]) {
-      role = el.tagName.toLowerCase();
-    }
+    const explicitRole = el.getAttribute("role");
+    const nonSemanticTags = { path: 1, svg: 1, g: 1, div: 1, span: 1, input: 1, textarea: 1, select: 1 };
+    const role = explicitRole || implicitAriaRole(el);
+    if (!role || nonSemanticTags[role]) return null;
     const name =
       el.getAttribute("aria-label") ||
       el.getAttribute("name") ||
       el.getAttribute("placeholder") ||
       safeText(el, 60);
-    if (!name) return `[role="${role}"]`;
+    if (!name) return null;
     const esc = name.replace(/"/g, '\\"');
     return `[role="${role}"][name="${esc}"]`;
   }

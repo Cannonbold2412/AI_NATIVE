@@ -357,20 +357,29 @@ class RecordingSession:
         if not session_dir.is_dir():
             raise RuntimeError(f"session_dir missing at finalize: {session_dir}")
 
+        target = session_dir / "recording.webm"
         webm_files = sorted(
             (p for p in session_dir.iterdir() if p.suffix == ".webm" and p.name != "recording.webm"),
             key=lambda p: p.stat().st_mtime,
         )
-        if not webm_files:
+        if webm_files:
+            latest = webm_files[-1]
+            latest.replace(target)
+        elif not target.is_file():
             raise RuntimeError(
                 f"recording.webm not produced by Playwright in {session_dir}. "
                 "Check that the browser context was launched with record_video_dir and the "
                 "session closed cleanly via context.close()."
             )
 
-        latest = webm_files[-1]
-        target = session_dir / "recording.webm"
-        latest.rename(target)
+        events_path = session_dir / "events.jsonl"
+        if not events_path.is_file():
+            with self._lock:
+                event_count = len(self._materialized)
+            if event_count == 0:
+                self.binding_errors.append("video_frame_extraction_skipped:no_events")
+                return
+            raise FileNotFoundError(f"events.jsonl not found in {session_dir}")
 
         from app.recorder.frame_extractor import extract_frames_for_session
         # Raises on missing ffmpeg, missing video, missing events, or per-frame failure.
