@@ -16,7 +16,7 @@
 !define INSTALL_DIR    "$PROGRAMFILES64\Conxa"
 !define RUNTIME_DIR    "${INSTALL_DIR}\runtime"
 !define CHROMIUM_DIR   "${INSTALL_DIR}\chromium"
-!define SKILL_DIR      "${INSTALL_DIR}\plugins\${COMPANY_SLUG}"
+!define SKILL_DIR      "${INSTALL_DIR}\skill-packs\${COMPANY_SLUG}"
 !define CLAUDE_CONFIG       "$APPDATA\Claude\claude_desktop_config.json"
 !define CLAUDE_CODE_CONFIG  "$PROFILE\.claude.json"
 !define UNINSTALL_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\Conxa-${COMPANY_SLUG}"
@@ -66,7 +66,7 @@ SectionEnd
 Section "SkillPacks" SEC_SKILLS
   SetOutPath "${SKILL_DIR}"
   ; Copy company skill pack — preserves other companies' directories
-  File /r "${STAGING_DIR}\plugins\${COMPANY_SLUG}\*.*"
+  File /r "${STAGING_DIR}\skill-packs\${COMPANY_SLUG}\*.*"
 SectionEnd
 
 ; ── Deep-link registration ─────────────────────────────────────────────────────
@@ -113,11 +113,11 @@ Section "Uninstall"
   ; Remove this company's skill packs only
   RMDir /r "${SKILL_DIR}"
   ; Remove deep-link registration (shared — only remove if no other skill packs remain)
-  IfFileExists "${INSTALL_DIR}\plugins\*.*" skip_deeplink_removal
+  IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_deeplink_removal
   DeleteRegKey HKCR "conxa-runtime"
   skip_deeplink_removal:
   ; Remove MCP registration only if no other companies remain
-  IfFileExists "${INSTALL_DIR}\plugins\*.*" skip_mcp_removal
+  IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_mcp_removal
   IfFileExists "${CLAUDE_CODE_CONFIG}" do_unregister_code
   IfFileExists "${CLAUDE_CONFIG}" do_unregister_mcp
   IfFileExists "$LOCALAPPDATA\Claude\claude_desktop_config.json" do_unregister_localappdata
@@ -132,7 +132,7 @@ Section "Uninstall"
   ExecWait '"${RUNTIME_DIR}\runtime.exe" "--unregister-mcp" "${CLAUDE_CONFIG}"'
   skip_mcp_removal:
   ; Remove runtime only if no skill packs remain
-  IfFileExists "${INSTALL_DIR}\plugins\*.*" skip_runtime_removal
+  IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_runtime_removal
   RMDir /r "${RUNTIME_DIR}"
   RMDir /r "${CHROMIUM_DIR}"
   RMDir /r "${INSTALL_DIR}\cache"

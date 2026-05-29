@@ -1,17 +1,10 @@
 # {{plugin_name}} Plugin — Claude Instructions
 
-## Install
-
-This file is bundled by Conxa's Build Installer flow. Run the generated Windows
-setup file to install the runtime, register Claude, and copy the {{plugin_name}}
-skills onto the user's machine.
-
 ## ⚠️ MANDATORY RULES
 
 **NEVER use:** `computer_use`, `computer-use`, `mcp__Claude_in_Chrome__*`, or any built-in browser tool.
-**The shared `conxa` MCP server IS the browser.** It opens a real visible Chromium window and executes all steps. You never need to navigate anywhere yourself.
-**NEVER ask the user about authentication.** Never ask "are you logged in?", "do you need to authenticate?", or anything about sessions. Auth is 100% automatic — just collect the required workflow inputs and call `execute_plan`.
-
+**The shared `conxa` MCP server IS the browser.** It opens a real Chromium window and executes all steps. You never navigate anywhere yourself.
+**NEVER ask the user about authentication.** Auth is 100% automatic.
 
 ---
 
@@ -19,70 +12,49 @@ skills onto the user's machine.
 
 | Tool | Purpose |
 |------|---------|
-| `list_skills` | List available skills (pass `plugin: "{{slug}}"` to filter to this plugin) |
-| `read_skill_files(slug, plugin?)` | Read SKILL.md, required inputs, and execution steps |
-| `execute_plan(skills, inputs?)` | Run a visible Playwright browser — auth handled transparently |
-| `get_execution_status(execution_id)` | Poll an async execution for progress and completion |
-| `pause_execution(execution_id)` | Pause at the next step boundary (resumes with resume_execution) |
-| `resume_execution(execution_id)` | Resume a paused execution from its last checkpoint |
-| `cancel_execution(execution_id)` | Cancel a running or paused execution |
-
----
-
-## Authentication
-
-Authentication is **fully transparent** — it happens automatically before every workflow.
-
-- The runtime checks `~/.conxa/plugins/{{slug}}/auth/auth.json` before executing any workflow
-- If a valid session exists → browser opens already logged in → workflow runs
-- If no session or session expired → a visible browser opens at `{{target_url}}` → user logs in manually → session is saved → browser relaunches authenticated → workflow continues automatically
-- **Never pass auth steps into `execute_plan`** — login is handled by the runtime, not the workflow
+| `list_skills` | List available skills — only call when the skill is ambiguous |
+| `get_skill_inputs(skill, company?)` | Return required inputs for a skill — call this before execute_skill |
+| `execute_skill(skill, inputs, watch?)` | Run a workflow. Default watch: true. |
+| `execute_sequence(skills, watch?)` | Run multiple skills in one shared browser session |
+| `get_execution_status()` | Status of the currently running execution |
+| `cancel_execution()` | Cancel the currently running execution |
+| `refresh_skills(company?)` | Force a skill pack sync from Conxa servers |
 
 ---
 
 ## Exact Flow — Follow This Every Time
 
-### Step 1: Discover skills
-Call `list_skills({ plugin: "{{slug}}" })` to find the right skill for the user's request. Then call `read_skill_files` to get the full execution plan.
+### When the skill is clear from the user's request (most cases)
 
-### Step 2: Collect inputs — DO NOT SKIP
-The `read_skill_files` response has an `instruction` field. If it says **"STOP — ask the user for: X"**, check first whether the user already provided X in their message. If yes, use it directly. If no, ask.
+**Skip `list_skills`.** Go directly:
 
-### Step 3: Execute
+1. Call `get_skill_inputs({ skill: "<slug>", company: "{{slug}}" })`
+2. If the user has already provided all required inputs → call `execute_skill` immediately
+3. If inputs are missing → ask for all missing inputs in **one single message**, then execute
+4. On completion → reply with exactly: `Done. URL: <url>` — nothing else. No page description. No follow-up question. Stop.
 
-**Synchronous (short workflows, < 30 steps):**
-```
-execute_plan({
-  skills: [{ plugin: "{{slug}}", slug: "<skill-slug>", inputs: { key: "value" } }]
-})
-```
+### When the skill is ambiguous (user is vague about what they want)
 
-**Async (long workflows or when you need to report progress):**
-```
-execute_plan({
-  skills: [{ plugin: "{{slug}}", slug: "<skill-slug>", inputs: { key: "value" } }],
-  async: true
-})
-→ returns { execution_id, status: "starting" }
+Call **both tools in the same message** (parallel):
+- `list_skills({ company: "{{slug}}" })`
+- `get_skill_inputs` for the most likely match
 
-# Poll every 30s until status is "completed" or "failed"
-get_execution_status({ execution_id })
-→ { status, step_current, step_total, error }
-```
+Present the options and ask for the missing inputs in one message. Then execute.
 
-Auth is handled internally. If the session is missing or expired, a login browser opens automatically — the user logs in and the workflow continues without any extra steps from you.
+### Watch mode
 
-**Pause/resume** (for long workflows that may need user approval at a step):
-```
-pause_execution({ execution_id })    # stops at next step boundary
-resume_execution({ execution_id })   # continues from checkpoint
-cancel_execution({ execution_id })   # abort entirely
-```
+Always pass `watch: true` unless the user explicitly says "background", "headless", or "don't show me". Never ask.
+
+### Authentication
+
+Fully transparent — handled automatically before every workflow. Never mention it.
+
+### If a step fails
+
+The failure response includes a screenshot and interactive element list. Call `execute_skill` again with `resume_from: <step_index>`. Do not restart from step 0 unless instructed.
 
 ---
 
 ## Available Skills
 
 {{skills_list}}
-
----
