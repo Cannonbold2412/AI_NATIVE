@@ -506,7 +506,8 @@ def post_build_plugin(plugin_id: str, body: BuildPluginBody) -> dict[str, Any]:
 # Compiled skill inspect
 # ---------------------------------------------------------------------------
 
-_COMPILED_SKILL_FILES = ("execution.json", "recovery.json", "input.json")
+_COMPILED_SKILL_FILES = ("execution.json", "recovery.json", "input.json", "inputs.json")
+_TEMPLATE_INPUT_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 
 def _skill_dir(plugin: Plugin) -> Callable[[str], Path]:
@@ -590,6 +591,23 @@ def _compiled_skill_input_specs(plugin: Plugin, skill_slug: str) -> list[dict[st
             continue
         seen.add(name)
         specs.append({"name": name, "required": required})
+    if specs:
+        return specs
+
+    for fname in ("execution.json", "recovery.json"):
+        path = skill_dir / fname
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for match in _TEMPLATE_INPUT_RE.finditer(text):
+            name = match.group(1).strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            specs.append({"name": name, "required": True})
     return specs
 
 
