@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     clerk_authorized_parties: str = ""
     clerk_audience: str = ""
 
+    # Metered LLM proxy used by Build Studio. Quota is per org per calendar month
+    # (input + output tokens). 0 disables enforcement. The proxy only accepts
+    # requests carrying the X-Conxa-Client header below.
+    llm_proxy_monthly_token_quota: int = 5_000_000
+    llm_proxy_client_header: str = "build-studio"
+
     # Production backing services. The local MVP still has file-backed fallbacks.
     database_url: str = ""
     redis_url: str = ""

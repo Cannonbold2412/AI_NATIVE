@@ -22,6 +22,10 @@ PUBLIC_PATHS = {
 # Runtime telemetry ingestion uses its own package token; tracking reads stay behind Clerk.
 PUBLIC_TRACKING_EVENT_PREFIXES = ("/api/tracking/", "/api/v1/tracking/")
 
+# Installer downloads are fetched by end users who have no Clerk account; the
+# plugin_id in the path is the only credential and the file is non-sensitive.
+PUBLIC_PATH_PREFIXES = ("/api/v1/installers/",)
+
 
 def _request_id(request: Request) -> str:
     rid = request.headers.get("x-request-id", "").strip()
@@ -31,6 +35,8 @@ def _request_id(request: Request) -> str:
 def _is_public_path(path: str, method: str = "GET") -> bool:
     normalized = path.rstrip("/") or "/"
     if normalized in PUBLIC_PATHS:
+        return True
+    if any(normalized.startswith(p.rstrip("/")) for p in PUBLIC_PATH_PREFIXES):
         return True
     if method.upper() == "POST" and normalized.endswith("/events"):
         return any(normalized.startswith(p) for p in PUBLIC_TRACKING_EVENT_PREFIXES)

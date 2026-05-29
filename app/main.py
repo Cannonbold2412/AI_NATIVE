@@ -15,8 +15,10 @@ async def _lifespan(app: FastAPI):
 
 from app.api.execution_routes import router as execution_router
 from app.api.job_routes import router as job_router
+from app.api.llm_proxy_routes import router as llm_proxy_router
 from app.api.plugin_routes import router as plugin_router
 from app.api.product_routes import router as product_router
+from app.api.publish_routes import installers_router, router as publish_router
 from app.api.razorpay_routes import router as razorpay_router
 from app.api.routes import router
 from app.api.run_routes import router as run_router
@@ -49,6 +51,9 @@ app.include_router(job_router, prefix="/api/v1")
 app.include_router(product_router, prefix="/api/v1")
 app.include_router(v1_alias_router, prefix="/api/v1")
 app.include_router(plugin_router, prefix="/api/v1")
+app.include_router(llm_proxy_router, prefix="/api/v1")
+app.include_router(publish_router, prefix="/api/v1")
+app.include_router(installers_router, prefix="/api/v1")
 app.include_router(run_router, prefix="/api/v1")
 app.include_router(execution_router, prefix="/api/v1")
 app.include_router(razorpay_router, prefix="/api/v1")
