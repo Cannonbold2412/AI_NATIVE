@@ -36,6 +36,14 @@ const STRATEGY_LABELS: Record<string, string> = {
   llm_intent:         'LLM Intent',
 }
 
+const TIER_LABELS: Record<string, string> = {
+  tier1_compiled: 'Tier 1 — Compiled Selector',
+  tier2_a11y:     'Tier 2 — A11y Tree',
+  tier3_llm:      'Tier 3 — LLM Recovery',
+  tier4_vision:   'Tier 4 — Vision',
+  tier5_escalate: 'Tier 5 — Escalation',
+}
+
 const FAILURE_LABELS: Record<string, string> = {
   selector_missing:  'Selector Missing',
   url_mismatch:      'URL Mismatch',
@@ -50,6 +58,7 @@ const EVENT_LABELS: Record<string, string> = {
   wf_ok:     'Workflow Success',
   wf_fail:   'Workflow Failed',
   step_fail: 'Step Failed',
+  tier_ok:   'Step Resolved',
   rec_start: 'Recovery Started',
   rec_ok:    'Recovery Succeeded',
   rec_fail:  'Recovery Failed',
@@ -125,9 +134,11 @@ function computeStrategyStats(timeline: TrackingEvent[]) {
   const ok:   Record<string, number> = {}
   const fail: Record<string, number> = {}
   for (const e of timeline) {
-    if (!e.sc) continue
-    if (e.e === 'rec_ok')   ok[e.sc]   = (ok[e.sc]   || 0) + 1
-    if (e.e === 'rec_fail') fail[e.sc] = (fail[e.sc] || 0) + 1
+    // tier_ok events use the `tier` field; rec_ok/rec_fail use `sc`
+    const key = e.tier || e.sc
+    if (!key) continue
+    if (e.e === 'tier_ok' || e.e === 'rec_ok')   ok[key]   = (ok[key]   || 0) + 1
+    if (e.e === 'rec_fail')                       fail[key] = (fail[key] || 0) + 1
   }
   const keys = Array.from(new Set([...Object.keys(ok), ...Object.keys(fail)]))
   return keys.map((sc) => ({ sc, ok: ok[sc] || 0, fail: fail[sc] || 0 }))
@@ -207,7 +218,7 @@ function StrategyBar({ sc, ok, fail }: { sc: string; ok: number; fail: number })
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-zinc-300">{STRATEGY_LABELS[sc] ?? sc}</span>
+        <span className="text-zinc-300">{TIER_LABELS[sc] ?? STRATEGY_LABELS[sc] ?? sc}</span>
         <span className="tabular-nums text-zinc-500">{pct}% ok <span className="text-zinc-700">({total})</span></span>
       </div>
       <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
@@ -299,14 +310,18 @@ function TimelineDrawer({
                 <div className="absolute left-[5px] top-0 bottom-0 w-px bg-white/8" />
                 {data.timeline.map((evt, idx) => {
                   const dot =
-                    evt.e === 'wf_ok' || evt.e === 'rec_ok'   ? 'bg-emerald-500 ring-emerald-500/20' :
+                    evt.e === 'wf_ok' || evt.e === 'rec_ok'                              ? 'bg-emerald-500 ring-emerald-500/20' :
                     evt.e === 'wf_fail' || evt.e === 'step_fail' || evt.e === 'rec_fail' ? 'bg-red-500 ring-red-500/20' :
+                    evt.e === 'tier_ok'                                                  ? 'bg-blue-500 ring-blue-500/20' :
                     'bg-zinc-600 ring-zinc-600/20'
                   return (
                     <div key={idx} className="relative mb-3 last:mb-0">
                       <span className={`absolute -left-4 mt-1 size-2.5 rounded-full ring-2 ${dot}`} />
                       <p className="text-xs font-medium text-zinc-300">{EVENT_LABELS[evt.e] ?? evt.e}</p>
                       <p className="mt-0.5 text-[11px] text-zinc-600 flex flex-wrap gap-x-2">
+                        {evt.tier && (
+                          <span className="text-blue-400/80">{TIER_LABELS[evt.tier] ?? evt.tier}</span>
+                        )}
                         {evt.sc && <span>{STRATEGY_LABELS[evt.sc] ?? evt.sc}</span>}
                         {evt.fc && <span className="text-red-400">{FAILURE_LABELS[evt.fc] ?? evt.fc}</span>}
                         {evt.si != null && <span>step {evt.si + 1}</span>}

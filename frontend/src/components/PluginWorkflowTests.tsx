@@ -11,9 +11,17 @@ import {
 } from '@/api/pluginApi'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, ChevronDown, ChevronUp, Loader2, PlayCircle, XCircle } from 'lucide-react'
+import { CheckCircle2, Loader2, PlayCircle, SlidersHorizontal, XCircle } from 'lucide-react'
 
 type InputSpec = {
   id: string
@@ -25,6 +33,8 @@ type InputSpec = {
   sensitive?: boolean
   required?: boolean
 }
+
+const TEMPLATE_INPUT_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
@@ -71,6 +81,24 @@ function inputSpecsFromPayload(payload: unknown): InputSpec[] {
         ? rec.required
         : []
   return rawItems.map(normalizeInputSpec).filter((item): item is InputSpec => item !== null)
+}
+
+function inferInputSpecsFromTemplates(...payloads: unknown[]): InputSpec[] {
+  const seen = new Set<string>()
+  const specs: InputSpec[] = []
+
+  for (const payload of payloads) {
+    if (payload == null) continue
+    const text = typeof payload === 'string' ? payload : JSON.stringify(payload)
+    for (const match of text.matchAll(TEMPLATE_INPUT_RE)) {
+      const id = match[1]?.trim()
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      specs.push({ id, label: id.replace(/_/g, ' '), type: 'text', required: true })
+    }
+  }
+
+  return specs
 }
 
 function missingRequiredInputLabels(specs: InputSpec[], values: Record<string, string>) {
@@ -181,7 +209,9 @@ export function WorkflowTestRow({
     ),
   )
   const [inputSpecs, setInputSpecs] = useState<InputSpec[] | null>(null)
-  const [expanded, setExpanded] = useState(false)
+  const [inputDialogOpen, setInputDialogOpen] = useState(false)
+  const [inputDialogMode, setInputDialogMode] = useState<'edit' | 'run'>('run')
+  const [inputError, setInputError] = useState('')
   const [running, setRunning] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [runError, setRunError] = useState('')
@@ -206,6 +236,12 @@ export function WorkflowTestRow({
       try {
         const compiled = await getCompiledSkill(plugin.id, wf.slug)
         specs = inputSpecsFromPayload(compiled.files['input.json'])
+        if (specs.length === 0) {
+          specs = inputSpecsFromPayload(compiled.files['inputs.json'])
+        }
+        if (specs.length === 0) {
+          specs = inferInputSpecsFromTemplates(compiled.files['execution.json'], compiled.files['recovery.json'])
+        }
       } catch {
         specs = []
       }
@@ -241,19 +277,22 @@ export function WorkflowTestRow({
     setLogs([])
     setRunError('')
     setRunDone(false)
+    setInputError('')
     if (inputSpecs === null) {
       setRunError('Inputs are still loading. Try again in a moment.')
-      setExpanded(true)
       return
     }
     const missingInputs = missingRequiredInputLabels(inputSpecs, inputs)
     if (missingInputs.length > 0) {
-      setRunError(`Enter required inputs before running: ${missingInputs.join(', ')}`)
-      setExpanded(true)
+      const message = `Enter required inputs before running: ${missingInputs.join(', ')}`
+      setInputError(message)
+      setRunError(message)
+      setInputDialogMode('run')
+      setInputDialogOpen(true)
       return
     }
     setRunning(true)
-    setExpanded(true)
+    setInputDialogOpen(false)
     try {
       const parsedInputs: Record<string, unknown> = {}
       if (inputSpecs.length > 0) {
@@ -276,7 +315,18 @@ export function WorkflowTestRow({
     }
   }
 
-  const canRun = !stale && !running && wf.skill_id
+  function openInputDialog(mode: 'edit' | 'run') {
+    setInputError('')
+    setInputDialogMode(mode)
+    setInputDialogOpen(true)
+  }
+
+  function saveInputs() {
+    setInputError('')
+    setInputDialogOpen(false)
+  }
+
+  const canRun = !stale && !running && Boolean(wf.skill_id)
 
   return (
     <div className="rounded-lg border border-white/8 bg-white/[0.02]">
@@ -287,7 +337,7 @@ export function WorkflowTestRow({
           {stale && (
             <p className="mt-0.5 text-xs text-amber-400">Edited since last build — rebuild before testing</p>
           )}
-          {wf.last_test_status === 'failed' && wf.last_test_error && !expanded && (
+          {wf.last_test_status === 'failed' && wf.last_test_error && !runError && logs.length === 0 && (
             <p className="mt-0.5 truncate text-xs text-red-300">{wf.last_test_error}</p>
           )}
         </div>
@@ -312,22 +362,33 @@ export function WorkflowTestRow({
             </Button>
           )}
 
-          {/* Input workflows: Configure toggle expands the form */}
+          {/* Input workflows: edit values separately, then run through the same input dialog. */}
           {inputSpecs !== null && inputSpecs.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setExpanded((e) => !e)}
-              disabled={stale || !wf.skill_id}
-              title={stale ? 'Rebuild the plugin first' : undefined}
-            >
-              {expanded ? (
-                <ChevronUp className="size-3.5" />
-              ) : (
-                <ChevronDown className="size-3.5" />
-              )}
-              Inputs
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openInputDialog('edit')}
+                disabled={stale || !wf.skill_id}
+                title={stale ? 'Rebuild the plugin first' : undefined}
+              >
+                <SlidersHorizontal className="size-3.5" />
+                Inputs
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => openInputDialog('run')}
+                disabled={!canRun}
+                title={stale ? 'Rebuild the plugin first' : undefined}
+              >
+                {running ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <PlayCircle className="size-3.5" />
+                )}
+                {running ? 'Testing...' : runDone ? 'Re-run' : 'Run test'}
+              </Button>
+            </>
           )}
 
           {/* Loading state */}
@@ -340,70 +401,109 @@ export function WorkflowTestRow({
         </div>
       </div>
 
-      {/* Expanded panel: input form for workflows that need inputs */}
-      {expanded && inputSpecs !== null && inputSpecs.length > 0 && (
-        <div className="border-t border-white/8 px-3 pb-3 pt-3">
-          <p className="mb-3 text-xs text-zinc-400">
-            Enter the required inputs first, then run this workflow test.
-          </p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              void runTest()
-            }}
-            className="space-y-3"
-          >
-            <div className="grid gap-3">
-              {inputSpecs.map((spec) => {
-                const displayLabel = spec.label || spec.id
-                return (
-                  <div key={spec.id} className="grid gap-1">
-                    <Label className="text-xs font-medium text-zinc-300">{displayLabel}</Label>
-                    {spec.options && spec.options.length > 0 ? (
-                      <select
-                        value={inputs[spec.id] ?? ''}
-                        onChange={(e) => setInputs((prev) => ({ ...prev, [spec.id]: e.target.value }))}
-                        required={spec.required !== false}
-                        className="h-7 rounded-md border border-white/10 bg-black/30 px-2 text-xs text-white outline-none focus:border-white/25"
-                      >
-                        <option value="">Select {displayLabel.toLowerCase()}</option>
-                        {spec.options.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        type={spec.sensitive ? 'password' : 'text'}
-                        value={inputs[spec.id] ?? ''}
-                        onChange={(e) => setInputs((prev) => ({ ...prev, [spec.id]: e.target.value }))}
-                        placeholder={displayLabel ? `Enter ${displayLabel.toLowerCase()}...` : ''}
-                        required={spec.required !== false}
-                        pattern={spec.pattern ?? undefined}
-                        className="h-7 text-xs"
-                      />
-                    )}
-                  </div>
+      <Dialog open={inputDialogOpen} onOpenChange={setInputDialogOpen}>
+        <DialogContent className="border-white/10 bg-[#0d0f12] text-zinc-100 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Workflow inputs</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {inputDialogMode === 'run'
+                ? 'Enter the required values, then run this workflow test.'
+                : 'Edit the values that will be used the next time this workflow test runs.'}
+            </DialogDescription>
+          </DialogHeader>
+          {inputSpecs !== null && inputSpecs.length > 0 && (
+            <form
+              id={`workflow-inputs-${wf.id}`}
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (inputDialogMode === 'run') {
+                  void runTest()
+                } else {
+                  saveInputs()
+                }
+              }}
+              className="space-y-3"
+            >
+              <div className="grid max-h-[50vh] gap-3 overflow-y-auto pr-1">
+                {inputSpecs.map((spec) => {
+                  const displayLabel = spec.label || spec.id
+                  return (
+                    <div key={spec.id} className="grid gap-1">
+                      <Label className="text-xs font-medium text-zinc-300">{displayLabel}</Label>
+                      {spec.options && spec.options.length > 0 ? (
+                        <select
+                          value={inputs[spec.id] ?? ''}
+                          onChange={(e) => setInputs((prev) => ({ ...prev, [spec.id]: e.target.value }))}
+                          required={spec.required !== false}
+                          className="h-8 rounded-md border border-white/10 bg-black/30 px-2 text-xs text-white outline-none focus:border-white/25"
+                        >
+                          <option value="">Select {displayLabel.toLowerCase()}</option>
+                          {spec.options.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          type={spec.sensitive ? 'password' : 'text'}
+                          value={inputs[spec.id] ?? ''}
+                          onChange={(e) => setInputs((prev) => ({ ...prev, [spec.id]: e.target.value }))}
+                          placeholder={displayLabel ? `Enter ${displayLabel.toLowerCase()}...` : ''}
+                          required={spec.required !== false}
+                          pattern={spec.pattern ?? undefined}
+                          className="h-8 text-xs"
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {inputError && (
+                <div className="flex items-start gap-2 text-xs text-red-300">
+                  <XCircle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{inputError}</span>
+                </div>
+              )}
+            </form>
+          )}
+          <DialogFooter className="border-white/8 bg-white/[0.03]">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setInputDialogOpen(false)}
+              disabled={running}
+              className="border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form={`workflow-inputs-${wf.id}`}
+              disabled={inputDialogMode === 'run' ? !canRun : stale || !wf.skill_id}
+            >
+              {inputDialogMode === 'run' ? (
+                running ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Testing...
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="size-3.5" />
+                    Run test
+                  </>
                 )
-              })}
-            </div>
-            <Button type="submit" size="sm" disabled={!canRun}>
-              {running ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Testing...
-                </>
               ) : (
                 <>
-                  <PlayCircle className="size-3.5" />
-                  Run test
+                  <SlidersHorizontal className="size-3.5" />
+                  Save inputs
                 </>
               )}
             </Button>
-          </form>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Log + result panel — shown whenever there's output */}
       {(logs.length > 0 || runDone || runError) && (

@@ -331,6 +331,7 @@ export type CompiledSkillFiles = {
   'execution.json': Record<string, unknown> | unknown[] | null
   'recovery.json': Record<string, unknown> | unknown[] | null
   'input.json': Record<string, unknown> | unknown[] | null
+  'inputs.json'?: Record<string, unknown> | unknown[] | null
 }
 
 export function getCompiledSkill(
@@ -365,6 +366,7 @@ export type TrackingEvent = {
   l?: number
   sc?: string
   fc?: string
+  tier?: string
   dur?: number
   tot?: number
   rec?: number
