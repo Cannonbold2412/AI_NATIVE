@@ -1,0 +1,163 @@
+"""First-run dependency bootstrap for Build Studio.
+
+The installer ships only the irreducible app (Electron + PyInstaller backend).
+Everything large or license-encumbered is fetched on first launch into
+``%LOCALAPPDATA%\\Conxa\\deps\\`` and SHA-256 verified:
+
+- NSIS (makensis.exe)  -> deps\\nsis\\       (download per cloud manifest)
+- Chromium             -> playwright-managed  (playwright install chromium)
+- runtime-win.exe      -> deps\\runtime\\{ver} (GitHub Releases via manifest)
+
+Each ``ensure_*`` is idempotent. Progress is reported through ``on_event`` so
+the Electron setup screen can render it. Failures surface the exact URL so IT
+teams on proxied networks can whitelist or pre-seed manually.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import subprocess
+import sys
+import urllib.request
+import zipfile
+from pathlib import Path
+from typing import Any, Callable
+
+EventSink = Callable[[dict[str, Any]], None]
+
+
+def _deps_dir() -> Path:
+    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa")
+    d = Path(base) / "deps"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _emit(on_event: EventSink | None, **kw: Any) -> None:
+    if on_event:
+        on_event({"phase": "bootstrap", **kw})
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _download(url: str, dest: Path, on_event: EventSink | None, label: str) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _emit(on_event, dep=label, status="downloading", url=url)
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    try:
+        with urllib.request.urlopen(url, timeout=120) as resp, open(tmp, "wb") as out:
+            total = int(resp.headers.get("content-length") or 0)
+            read = 0
+            while True:
+                chunk = resp.read(1 << 20)
+                if not chunk:
+                    break
+                out.write(chunk)
+                read += len(chunk)
+                if total:
+                    _emit(on_event, dep=label, status="downloading", pct=round(100 * read / total))
+        tmp.replace(dest)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        _emit(on_event, dep=label, status="error", url=url,
+              message=f"Download failed. If on a corporate network, allow: {url}")
+        raise
+
+
+def ensure_nsis(manifest: dict[str, Any], on_event: EventSink | None = None) -> Path:
+    """Ensure makensis.exe is present; return its path. Sets MAKENSIS_PATH."""
+    nsis_dir = _deps_dir() / "nsis"
+    makensis = nsis_dir / "makensis.exe"
+    if makensis.is_file():
+        os.environ["MAKENSIS_PATH"] = str(makensis)
+        _emit(on_event, dep="nsis", status="ready")
+        return makensis
+
+    spec = manifest.get("nsis") or {}
+    url, sha = spec.get("url"), spec.get("sha256")
+    if not url:
+        raise RuntimeError("deps manifest missing nsis.url")
+    archive = nsis_dir / "nsis.zip"
+    _download(url, archive, on_event, "nsis")
+    if sha and _sha256(archive) != sha:
+        archive.unlink(missing_ok=True)
+        raise RuntimeError("nsis checksum mismatch")
+    with zipfile.ZipFile(archive) as z:
+        z.extractall(nsis_dir)
+    archive.unlink(missing_ok=True)
+    # makensis.exe may be nested; locate it.
+    found = next((p for p in nsis_dir.rglob("makensis.exe")), None)
+    if not found:
+        raise RuntimeError("makensis.exe not found in NSIS archive")
+    os.environ["MAKENSIS_PATH"] = str(found)
+    _emit(on_event, dep="nsis", status="ready")
+    return found
+
+
+def ensure_chromium(on_event: EventSink | None = None) -> None:
+    """Install the Playwright Chromium build into the managed deps path."""
+    browsers_path = _deps_dir() / "chromium"
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
+    if any(browsers_path.glob("chromium-*")):
+        _emit(on_event, dep="chromium", status="ready")
+        return
+    _emit(on_event, dep="chromium", status="installing")
+    proc = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        _emit(on_event, dep="chromium", status="error", message=proc.stderr[-500:])
+        raise RuntimeError(f"playwright install chromium failed: {proc.stderr[-300:]}")
+    _emit(on_event, dep="chromium", status="ready")
+
+
+def ensure_runtime(manifest: dict[str, Any], on_event: EventSink | None = None) -> Path:
+    """Ensure runtime-win.exe + keytar.node are cached. Returns the runtime dir."""
+    spec = manifest.get("runtime") or {}
+    version = spec.get("version") or "v0.0.0"
+    runtime_dir = _deps_dir() / "runtime" / version
+    exe = runtime_dir / "runtime-win.exe"
+    if exe.is_file():
+        _emit(on_event, dep="runtime", status="ready", version=version)
+        return runtime_dir
+
+    url, sha = spec.get("url"), spec.get("sha256")
+    if not url:
+        raise RuntimeError("deps manifest missing runtime.url")
+    _download(url, exe, on_event, "runtime")
+    if sha and _sha256(exe) != sha:
+        exe.unlink(missing_ok=True)
+        raise RuntimeError("runtime checksum mismatch")
+    keytar_url = spec.get("keytar_url")
+    if keytar_url:
+        _download(keytar_url, runtime_dir / "keytar.node", on_event, "runtime")
+    os.environ["CONXA_RUNTIME_LOCAL_DIR"] = str(runtime_dir)
+    _emit(on_event, dep="runtime", status="ready", version=version)
+    return runtime_dir
+
+
+def fetch_manifest(cloud_api: str) -> dict[str, Any]:
+    """Fetch the deps manifest so versions bump without reshipping Studio."""
+    import json
+
+    url = f"{cloud_api.rstrip('/')}/api/v1/updates/deps-manifest"
+    with urllib.request.urlopen(url, timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def ensure_all(cloud_api: str, on_event: EventSink | None = None) -> dict[str, Any]:
+    """Run every ensure_* step. Returns a summary the UI can display."""
+    manifest = fetch_manifest(cloud_api)
+    ensure_chromium(on_event)
+    ensure_nsis(manifest, on_event)
+    ensure_runtime(manifest, on_event)
+    _emit(on_event, status="complete")
+    return {"ok": True, "manifest_version": manifest.get("version")}
