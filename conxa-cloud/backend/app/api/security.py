@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.config import settings
+from conxa_core.config import settings
 
 PUBLIC_PATHS = {
     "/",

@@ -24,14 +24,12 @@ import threading
 import traceback
 from typing import Any, Callable
 
-# Make both the cloud backend dir (for the shared `app` package) and this
-# `python` dir (for the local `services` package) importable, regardless of
-# launch CWD.
+# Make this `python` dir importable (for the local `services` package and the
+# bundled `conxa_compile` pipeline), regardless of launch CWD. The shared
+# `conxa_core` package is installed as a dependency, not imported by path.
 _PY_DIR = os.path.abspath(os.path.dirname(__file__))
-_CLOUD_BACKEND = os.path.abspath(os.path.join(_PY_DIR, "..", "..", "conxa-cloud", "backend"))
-for _p in (_CLOUD_BACKEND, _PY_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if _PY_DIR not in sys.path:
+    sys.path.insert(0, _PY_DIR)
 
 from services import bootstrap as _bootstrap_pkg  # noqa: E402
 
@@ -99,14 +97,14 @@ class Backend:
     def _install_proxy_router(self) -> None:
         """Redirect every compiler LLM call to the metered cloud proxy."""
         from services.llm_proxy_client import LLMProxyClient
-        import app.llm.router as router_mod
+        from conxa_core import llm as core_llm
 
         client = LLMProxyClient(
             self._cloud_api,
             token_provider=lambda: self._auth_service().get_token(),
             client_header=os.environ.get("CONXA_PROXY_CLIENT", "build-studio"),
         )
-        router_mod.get_router = lambda: client  # type: ignore[assignment]
+        core_llm.set_router(client)
 
     # -- command handlers ----------------------------------------------------
 
@@ -127,7 +125,7 @@ class Backend:
         return {"identity": self._auth_service().current_identity()}
 
     def cmd_start_recording(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from app.recorder.session import registry
+        from conxa_compile.recorder.session import registry
 
         with self._rec_lock:
             if self._active_recording is not None:
@@ -152,7 +150,7 @@ class Backend:
             return {"session_id": sess.session_id, "start_url": start_url}
 
     def cmd_stop_recording(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from app.recorder.session import registry
+        from conxa_compile.recorder.session import registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
         sess = registry.get(session_id)
@@ -166,9 +164,9 @@ class Backend:
         return {"session_id": session_id, "event_count": len(events)}
 
     def cmd_run_pipeline(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from app.pipeline.run import run_pipeline
-        from app.storage.session_events import read_session_events
-        from app.recorder.session import registry
+        from conxa_compile.pipeline.run import run_pipeline
+        from conxa_core.storage.session_events import read_session_events
+        from conxa_compile.recorder.session import registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
         sess = registry.get(session_id)
@@ -177,11 +175,11 @@ class Backend:
         return {"session_id": session_id, "event_count": len(normalized)}
 
     def cmd_compile(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:
-        from app.compiler.build import compile_skill_package
-        from app.pipeline.run import run_pipeline
-        from app.storage.json_store import read_skill, write_skill
-        from app.storage.session_events import read_session_events
-        from app.recorder.session import registry
+        from conxa_compile.compiler.build import compile_skill_package
+        from conxa_compile.pipeline.run import run_pipeline
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_core.storage.session_events import read_session_events
+        from conxa_compile.recorder.session import registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
         title = str(payload.get("skill_title") or "").strip()
@@ -217,7 +215,7 @@ class Backend:
         return {"skill_id": skill_id, "version": version, "step_count": step_count}
 
     def cmd_create_plugin(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from app.storage.plugin_store import create_plugin as _create
+        from conxa_core.storage.plugin_store import create_plugin as _create
 
         name = str(payload.get("name") or "").strip()
         if not name:
@@ -227,13 +225,13 @@ class Backend:
         return {"plugin": plugin.model_dump(mode="json")}
 
     def cmd_list_plugins(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from app.storage.plugin_store import list_plugins as _list
+        from conxa_core.storage.plugin_store import list_plugins as _list
 
         plugins = _list()
         return {"plugins": [p.model_dump(mode="json") for p in plugins]}
 
     def cmd_list_workflows(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from app.storage.plugin_store import get_plugin
+        from conxa_core.storage.plugin_store import get_plugin
 
         plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
         plugin = get_plugin(plugin_id)
@@ -245,7 +243,7 @@ class Backend:
         }
 
     def cmd_build_plugin(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:
-        from app.services.plugin_builder import build_plugin
+        from conxa_compile.plugin_builder import build_plugin
 
         plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
         version = str(payload.get("version") or "0.1.0")
@@ -259,7 +257,7 @@ class Backend:
         company_slug = _safe_id(payload.get("company_slug"), "company_slug")
 
         # Invariant: auth.json must never enter the installer input.
-        from app.config import settings as _settings
+        from conxa_core.config import settings as _settings
         plugin_dir = Path(_settings.data_dir) / "plugins" / plugin_id
         if plugin_dir.exists() and any(plugin_dir.rglob("auth.json")):
             raise _CommandError(
@@ -275,7 +273,7 @@ class Backend:
         import base64
         import urllib.request
         from pathlib import Path
-        from app.config import settings as _settings
+        from conxa_core.config import settings as _settings
 
         slug = _safe_id(payload.get("slug"), "slug")
         packs_dir = Path(_settings.data_dir) / "skill-packs" / slug

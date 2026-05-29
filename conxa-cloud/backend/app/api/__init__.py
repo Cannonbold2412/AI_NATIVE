@@ -1,3 +1,1 @@
-from app.api.routes import router
-
-__all__ = ["router"]
+"""HTTP route modules, mounted under /api/v1 by app.main."""

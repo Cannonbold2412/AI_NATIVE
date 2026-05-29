@@ -1,4 +1,4 @@
-"""Build Studio wrapper over app.services.installer_builder.
+"""Build Studio wrapper over conxa_compile.installer_builder.
 
 The shared builder already locates makensis via the MAKENSIS_PATH env var, which
 bootstrap.ensure_nsis sets to the cached deps\\nsis\\makensis.exe. This wrapper
@@ -25,6 +25,6 @@ def build_installer(
         if cached.is_file():
             os.environ["MAKENSIS_PATH"] = str(cached)
 
-    from app.services.installer_builder import build_installer as _build
+    from conxa_compile.installer_builder import build_installer as _build
 
     return _build(plugin_id, company_slug=company_slug, realtime_sink=realtime_sink)

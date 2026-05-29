@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib import error, request
 
-from app.config import ProviderConfig, settings
-from app.llm.client import (
+from conxa_core.config import ProviderConfig, settings
+from conxa_core.llm.client import (
     _chat_completions_url,
     _debug_log,
     _is_openai_compatible_endpoint,
@@ -20,7 +20,7 @@ from app.llm.client import (
     _provider_top_level_error,
     _safe_error_snippet,
 )
-from app.services.jobs import append_current_job_event
+from conxa_core.progress import append_current_job_event
 
 
 @dataclass

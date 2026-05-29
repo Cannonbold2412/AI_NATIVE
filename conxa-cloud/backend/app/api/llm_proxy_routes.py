@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from conxa_core.config import settings
 from app.llm.router import get_router
 from app.services import llm_metering
 from app.services.saas import principal_from_request

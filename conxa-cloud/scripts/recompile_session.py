@@ -20,9 +20,9 @@ def main() -> int:
 
     session_id = sys.argv[1]
 
-    from app.compiler.build import compile_skill_package
-    from app.config import settings
-    from app.pipeline.run import run_pipeline
+    from conxa_compile.compiler.build import compile_skill_package
+    from conxa_core.config import settings
+    from conxa_compile.pipeline.run import run_pipeline
 
     session_dir = settings.data_dir / "sessions" / session_id
     events_path = session_dir / "events.jsonl"

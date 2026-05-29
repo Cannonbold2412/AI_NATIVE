@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from conxa_core.config import settings
 from app.services.saas import (
     Principal,
     add_audit_event,
@@ -22,7 +22,7 @@ from app.services.saas import (
     upsert_billing,
     usage_for,
 )
-from app.storage.skill_packages import bundle_root_dir
+from conxa_core.storage.skill_packages import bundle_root_dir
 
 router = APIRouter(tags=["product"])
 

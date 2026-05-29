@@ -25,7 +25,7 @@ class TestResolveRuntimeDir:
     def test_env_override_ignored_if_missing_server_js(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # tmp_path exists but has no server.js
         monkeypatch.setenv("CONXA_DIR", str(tmp_path))
-        from app.services.conxa_runtime import resolve_runtime_dir
+        from conxa_compile.conxa_runtime import resolve_runtime_dir
         with patch.dict("os.environ", {"CONXA_DIR": str(tmp_path)}):
             result = resolve_runtime_dir()
         # Should fall through to installed or dev fallback, not return tmp_path
@@ -33,7 +33,7 @@ class TestResolveRuntimeDir:
 
     def test_dev_fallback_found_when_server_js_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Repo's ./runtime/ should be returned when server.js + package.json exist."""
-        from app.services.conxa_runtime import resolve_runtime_dir
+        from conxa_compile.conxa_runtime import resolve_runtime_dir
         repo_root = Path(__file__).resolve().parent.parent
         dev = repo_root / "runtime"
         if not (dev / "server.js").is_file():
@@ -47,9 +47,9 @@ class TestResolveRuntimeDir:
 
     def test_returns_none_when_nothing_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("CONXA_DIR", raising=False)
-        from app.services.conxa_runtime import resolve_runtime_dir
+        from conxa_compile.conxa_runtime import resolve_runtime_dir
         # Patch Path.home() and the repo-root lookup to point at empty tmp dirs
-        with patch("app.services.conxa_runtime.Path") as mock_path:
+        with patch("conxa_compile.conxa_runtime.Path") as mock_path:
             mock_path.home.return_value = tmp_path / "fakehome"
             mock_path.return_value.__truediv__ = lambda s, o: tmp_path / o
             # This is hard to mock cleanly due to __file__ usage; just assert None is possible
@@ -79,8 +79,8 @@ class TestSyncSkillPack:
         runtime_dir = tmp_path / "runtime"
         runtime_dir.mkdir()
 
-        from app.services.conxa_runtime import sync_skill_pack
-        with patch("app.services.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
+        from conxa_compile.conxa_runtime import sync_skill_pack
+        with patch("conxa_compile.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
             sync_skill_pack(company="my-plugin", source_dir=source, runtime_dir=runtime_dir)
 
         dest = runtime_dir / "skill-packs" / "my-plugin"
@@ -90,8 +90,8 @@ class TestSyncSkillPack:
     def test_noop_when_source_missing(self, tmp_path: Path) -> None:
         runtime_dir = tmp_path / "runtime"
         runtime_dir.mkdir()
-        from app.services.conxa_runtime import sync_skill_pack
-        with patch("app.services.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
+        from conxa_compile.conxa_runtime import sync_skill_pack
+        with patch("conxa_compile.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
             sync_skill_pack(company="x", source_dir=tmp_path / "nonexistent", runtime_dir=runtime_dir)
         # No dest should be created
         assert not (runtime_dir / "skill-packs" / "x").exists()
@@ -108,8 +108,8 @@ class TestSyncSkillPack:
         cache_file = cache_dir / "manifests.json"
         cache_file.write_text("{}", encoding="utf-8")
 
-        from app.services.conxa_runtime import sync_skill_pack
-        with patch("app.services.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
+        from conxa_compile.conxa_runtime import sync_skill_pack
+        with patch("conxa_compile.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
             sync_skill_pack(company="c", source_dir=source, runtime_dir=runtime_dir)
 
         assert not cache_file.exists(), "Manifest cache should be deleted after sync"
@@ -123,8 +123,8 @@ class TestSyncSkillPack:
         dest.mkdir(parents=True)
         (dest / "pack.json").write_text('{"v":1}', encoding="utf-8")  # old version
 
-        from app.services.conxa_runtime import sync_skill_pack
-        with patch("app.services.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
+        from conxa_compile.conxa_runtime import sync_skill_pack
+        with patch("conxa_compile.conxa_runtime.resolve_conxa_data_dir", return_value=tmp_path / "data"):
             sync_skill_pack(company="c", source_dir=source, runtime_dir=runtime_dir)
 
         assert (dest / "pack.json").read_text() == '{"v":2}'
@@ -152,7 +152,7 @@ class TestPluginExecutor:
     async def test_raises_with_actionable_message_when_runtime_missing(self) -> None:
         from app.services.plugin_executor import execute_skill
         plugin = self._make_plugin()
-        with patch("app.services.conxa_runtime.resolve_runtime_dir", return_value=None):
+        with patch("conxa_compile.conxa_runtime.resolve_runtime_dir", return_value=None):
             with pytest.raises(RuntimeError, match="Conxa runtime not found"):
                 await execute_skill(plugin, "my-skill", {})
 
@@ -163,8 +163,8 @@ class TestPluginExecutor:
         fake_result = {"success": True, "output": "done"}
         fake_runtime = Path("/fake/runtime")
 
-        with patch("app.services.conxa_runtime.resolve_runtime_dir", return_value=fake_runtime), \
-             patch("app.services.conxa_runtime.sync_skill_pack"), \
+        with patch("conxa_compile.conxa_runtime.resolve_runtime_dir", return_value=fake_runtime), \
+             patch("conxa_compile.conxa_runtime.sync_skill_pack"), \
              patch("app.services.mcp_stdio_client.execute_skill_via_runtime", new=AsyncMock(return_value=fake_result)):
             result = await execute_skill(plugin, "my-skill", {"key": "val"})
 
@@ -176,8 +176,8 @@ class TestPluginExecutor:
         plugin = self._make_plugin()
         fake_runtime = Path("/fake/runtime")
 
-        with patch("app.services.conxa_runtime.resolve_runtime_dir", return_value=fake_runtime), \
-             patch("app.services.conxa_runtime.sync_skill_pack"), \
+        with patch("conxa_compile.conxa_runtime.resolve_runtime_dir", return_value=fake_runtime), \
+             patch("conxa_compile.conxa_runtime.sync_skill_pack"), \
              patch("app.services.mcp_stdio_client.execute_skill_via_runtime",
                    new=AsyncMock(side_effect=RuntimeError("selector not found"))):
             with pytest.raises(RuntimeError, match="selector not found"):

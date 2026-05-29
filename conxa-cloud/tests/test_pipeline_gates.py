@@ -12,8 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.models.plugin import Plugin, PluginBuild, PluginInstaller, PluginWorkflow
-from app.storage.plugin_store import (
+from conxa_core.models.plugin import Plugin, PluginBuild, PluginInstaller, PluginWorkflow
+from conxa_core.storage.plugin_store import (
     invalidate_workflow_test_by_skill,
     set_workflow_test_error,
     set_workflow_test_result,
@@ -64,10 +64,10 @@ class TestBuildPluginGates:
     """build_plugin must refuse to run when workflows are uncompiled or unedited."""
 
     def _run_build(self, plugin: Plugin, tmp_path: Path) -> None:
-        from app.services.plugin_builder import build_plugin
-        with patch("app.services.plugin_builder.get_plugin", return_value=plugin), \
-             patch("app.services.plugin_builder.set_build", return_value=plugin), \
-             patch("app.services.plugin_builder._build_workflow_from_saved_skill"):
+        from conxa_compile.plugin_builder import build_plugin
+        with patch("conxa_compile.plugin_builder.get_plugin", return_value=plugin), \
+             patch("conxa_compile.plugin_builder.set_build", return_value=plugin), \
+             patch("conxa_compile.plugin_builder._build_workflow_from_saved_skill"):
             build_plugin(plugin.id)
 
     def test_raises_when_no_workflows(self, tmp_path: Path) -> None:
@@ -108,8 +108,8 @@ class TestInvalidateWorkflowTest:
 
         saved: list[Plugin] = []
 
-        monkeypatch.setattr("app.storage.plugin_store.list_plugins", lambda: [plugin])
-        monkeypatch.setattr("app.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.list_plugins", lambda: [plugin])
+        monkeypatch.setattr("conxa_core.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
 
         before = time.time()
         invalidate_workflow_test_by_skill("sk-123")
@@ -129,8 +129,8 @@ class TestInvalidateWorkflowTest:
         plugin = _make_plugin(workflows=[wf_target, wf_other])
 
         saved: list[Plugin] = []
-        monkeypatch.setattr("app.storage.plugin_store.list_plugins", lambda: [plugin])
-        monkeypatch.setattr("app.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.list_plugins", lambda: [plugin])
+        monkeypatch.setattr("conxa_core.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
 
         invalidate_workflow_test_by_skill("sk-target")
 
@@ -145,8 +145,8 @@ class TestInvalidateWorkflowTest:
         plugin = _make_plugin(workflows=[wf])
 
         saved: list[Plugin] = []
-        monkeypatch.setattr("app.storage.plugin_store.list_plugins", lambda: [plugin])
-        monkeypatch.setattr("app.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.list_plugins", lambda: [plugin])
+        monkeypatch.setattr("conxa_core.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
 
         invalidate_workflow_test_by_skill("sk-does-not-exist")
 
@@ -159,9 +159,9 @@ class TestWriteSkillInvalidationHook:
     """write_skill must invalidate on UPDATE but not on initial CREATE."""
 
     def _call_write_skill(self, skill_id: str, doc: dict[str, Any], existing: dict | None) -> None:
-        from app.storage import json_store
+        from conxa_core.storage import json_store
         with patch.object(json_store, "read_skill", return_value=existing), \
-             patch("app.db.db_set"), \
+             patch("conxa_core.db.db_set"), \
              patch.object(json_store, "skills_dir", return_value=MagicMock(
                  __truediv__=lambda self, other: MagicMock(
                      write_text=lambda *a, **kw: None
@@ -176,18 +176,18 @@ class TestWriteSkillInvalidationHook:
             invalidated.append(skill_id)
 
         monkeypatch.setattr(
-            "app.storage.json_store.invalidate_workflow_test_by_skill",
+            "conxa_core.storage.json_store.invalidate_workflow_test_by_skill",
             fake_invalidate,
             raising=False,
         )
 
         # Patch at the module level where it's imported lazily
-        with patch("app.storage.json_store.read_skill", return_value={"existing": True}), \
-             patch("app.db.db_set"), \
+        with patch("conxa_core.storage.json_store.read_skill", return_value={"existing": True}), \
+             patch("conxa_core.db.db_set"), \
              patch("pathlib.Path.write_text"):
-            from app.storage import json_store
+            from conxa_core.storage import json_store
             # Temporarily inject the mock so the deferred import path hits it
-            import app.storage.plugin_store as ps
+            import conxa_core.storage.plugin_store as ps
             original = getattr(ps, "invalidate_workflow_test_by_skill")
             ps.invalidate_workflow_test_by_skill = fake_invalidate  # type: ignore[assignment]
             try:
@@ -199,7 +199,7 @@ class TestWriteSkillInvalidationHook:
         """First write (existing=None) must not trigger invalidation."""
         invalidated: list[str] = []
 
-        import app.storage.plugin_store as ps
+        import conxa_core.storage.plugin_store as ps
         original = getattr(ps, "invalidate_workflow_test_by_skill")
 
         def fake_invalidate(skill_id: str) -> None:
@@ -207,10 +207,10 @@ class TestWriteSkillInvalidationHook:
 
         ps.invalidate_workflow_test_by_skill = fake_invalidate  # type: ignore[assignment]
         try:
-            with patch("app.storage.json_store.read_skill", return_value=None), \
-                 patch("app.db.db_set"), \
+            with patch("conxa_core.storage.json_store.read_skill", return_value=None), \
+                 patch("conxa_core.db.db_set"), \
                  patch("pathlib.Path.write_text"):
-                from app.storage import json_store
+                from conxa_core.storage import json_store
                 json_store.write_skill("sk-brand-new", {"new": True})
         finally:
             ps.invalidate_workflow_test_by_skill = original  # type: ignore[assignment]
@@ -226,8 +226,8 @@ class TestSetWorkflowTestPersistence:
         plugin = _make_plugin(workflows=[wf])
 
         saved: list[Plugin] = []
-        monkeypatch.setattr("app.storage.plugin_store.get_plugin", lambda pid, **kw: plugin)
-        monkeypatch.setattr("app.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.get_plugin", lambda pid, **kw: plugin)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
 
         set_workflow_test_result(plugin.id, wf.id, status="passed", inputs={"url": "https://x.com"})
 
@@ -242,8 +242,8 @@ class TestSetWorkflowTestPersistence:
         plugin = _make_plugin(workflows=[wf])
 
         saved: list[Plugin] = []
-        monkeypatch.setattr("app.storage.plugin_store.get_plugin", lambda pid, **kw: plugin)
-        monkeypatch.setattr("app.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.get_plugin", lambda pid, **kw: plugin)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
 
         set_workflow_test_error(plugin.id, wf.id, "Selector not found")
 
@@ -256,8 +256,8 @@ class TestSetWorkflowTestPersistence:
         plugin = _make_plugin(workflows=[wf])
 
         saved: list[Plugin] = []
-        monkeypatch.setattr("app.storage.plugin_store.get_plugin", lambda pid, **kw: plugin)
-        monkeypatch.setattr("app.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.get_plugin", lambda pid, **kw: plugin)
+        monkeypatch.setattr("conxa_core.storage.plugin_store.save_plugin", lambda p: saved.append(p) or p)
 
         long_error = "x" * 5000
         set_workflow_test_error(plugin.id, wf.id, long_error)
@@ -324,7 +324,7 @@ class TestStaleBuildGate:
 
         plugin, wf = self._make_stale_plugin()
 
-        with patch("app.config.settings.auth_required", False), \
+        with patch("conxa_core.config.settings.auth_required", False), \
              patch("app.api.plugin_routes.get_plugin", return_value=plugin):
             client = TestClient(app)
             resp = client.post(
@@ -361,7 +361,7 @@ class TestStaleBuildGate:
             build=build,
         )
 
-        with patch("app.config.settings.auth_required", False), \
+        with patch("conxa_core.config.settings.auth_required", False), \
              patch("app.api.plugin_routes.get_plugin", return_value=plugin):
             client = TestClient(app)
             resp = client.post(
@@ -397,7 +397,7 @@ class TestBuildInstallerGate:
             build=build,
         )
 
-        with patch("app.config.settings.auth_required", False), \
+        with patch("conxa_core.config.settings.auth_required", False), \
              patch("app.api.plugin_routes.get_plugin", return_value=plugin):
             client = TestClient(app)
             resp = client.post(f"/api/v1/plugins/{plugin.id}/build-installer/stream")
@@ -424,7 +424,7 @@ class TestBuildInstallerGate:
             build=build,
         )
 
-        with patch("app.config.settings.auth_required", False), \
+        with patch("conxa_core.config.settings.auth_required", False), \
              patch("app.api.plugin_routes.get_plugin", return_value=plugin):
             client = TestClient(app)
             resp = client.post(f"/api/v1/plugins/{plugin.id}/build-installer/stream")

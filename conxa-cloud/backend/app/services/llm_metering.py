@@ -15,7 +15,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
-from app.db import db_get, db_set
+from conxa_core.db import db_get, db_set
 
 _NAMESPACE = "llm_usage"
 _lock = threading.RLock()

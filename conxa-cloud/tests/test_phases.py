@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from app.config import settings
+from conxa_core.config import settings
 
 
 def _minimal_click_event() -> dict:
@@ -82,14 +82,14 @@ def _compile_with_vision_mocks(session_id: str, events: list[dict], *, call_llm_
         patch.object(settings, "llm_vision_endpoint", "https://example.com/v1"),
         patch.object(settings, "llm_enabled", True),
         patch.object(settings, "llm_anchor_vision", True),
-        patch("app.llm.intent_llm.call_llm", return_value=None),
-        patch("app.llm.anchor_vision_llm.call_llm", return_value=call_llm_return),
+        patch("conxa_compile.llm.intent_llm.call_llm", return_value=None),
+        patch("conxa_compile.llm.anchor_vision_llm.call_llm", return_value=call_llm_return),
     )
 
 
 class PhaseTests(unittest.TestCase):
     def test_phase2_pipeline_cleans_and_enriches(self) -> None:
-        from app.pipeline.run import PIPELINE_VERSION, run_pipeline
+        from conxa_compile.pipeline.run import PIPELINE_VERSION, run_pipeline
 
         out = run_pipeline([_minimal_click_event()])
         self.assertEqual(len(out), 1)
@@ -100,8 +100,8 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("selector_signature", out[0]["extras"])
 
     def test_phase5_layered_self_match_executes(self) -> None:
-        from app.compiler.build import build_signal_reference
-        from app.confidence.layered import layered_decision
+        from conxa_compile.compiler.build import build_signal_reference
+        from conxa_compile.confidence.layered import layered_decision
 
         ev = _minimal_click_event()
         ref = build_signal_reference(ev)
@@ -110,8 +110,8 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(decision["layer"], "dom")
 
     def test_phase3_compiler_emits_steps(self) -> None:
-        from app.compiler.build import compile_skill_package
-        from app.pipeline.run import run_pipeline
+        from conxa_compile.compiler.build import compile_skill_package
+        from conxa_compile.pipeline.run import run_pipeline
 
         evs = run_pipeline([_minimal_click_event()])
         data_dir, *patchers = _compile_with_vision_mocks("sess", evs)
@@ -146,8 +146,8 @@ class PhaseTests(unittest.TestCase):
         self.assertNotIn("h1", blob)
 
     def test_phase3_compiler_preserves_frame_context(self) -> None:
-        from app.compiler.build import compile_skill_package
-        from app.pipeline.run import run_pipeline
+        from conxa_compile.compiler.build import compile_skill_package
+        from conxa_compile.pipeline.run import run_pipeline
 
         ev = _minimal_click_event()
         ev["frame"] = {
@@ -181,9 +181,9 @@ class PhaseTests(unittest.TestCase):
         assert step["frame"]["chain"][0]["fallback_selectors"] == ['iframe[data-test-id="object-builder-ui-iframe"]']
 
     def test_phase6_patch_bumps_version(self) -> None:
-        from app.compiler.build import compile_skill_package
-        from app.compiler.patch import apply_step_patch
-        from app.pipeline.run import run_pipeline
+        from conxa_compile.compiler.build import compile_skill_package
+        from conxa_compile.compiler.patch import apply_step_patch
+        from conxa_compile.pipeline.run import run_pipeline
 
         evs = run_pipeline([_minimal_click_event()])
         data_dir, *patchers = _compile_with_vision_mocks("s", evs)
@@ -212,10 +212,10 @@ class PhaseTests(unittest.TestCase):
     def test_phase6_patch_recomputes_recovery_strategies_from_resolved_intent(self) -> None:
         from unittest.mock import patch
 
-        from app.compiler.build import compile_skill_package
-        from app.compiler.patch import apply_step_patch
-        from app.llm.semantic_llm import SemanticLLMOutput
-        from app.pipeline.run import run_pipeline
+        from conxa_compile.compiler.build import compile_skill_package
+        from conxa_compile.compiler.patch import apply_step_patch
+        from conxa_compile.llm.semantic_llm import SemanticLLMOutput
+        from conxa_compile.pipeline.run import run_pipeline
 
         evs = run_pipeline([_minimal_click_event()])
         data_dir, *patchers = _compile_with_vision_mocks("s", evs)
@@ -247,7 +247,7 @@ class PhaseTests(unittest.TestCase):
             confidence=0.95,
             source="test",
         )
-        with patch("app.compiler.patch.enrich_semantic", return_value=fake):
+        with patch("conxa_compile.compiler.patch.enrich_semantic", return_value=fake):
             patched = apply_step_patch(doc, 0, {"target": {"primary_selector": "#go"}})
 
         out_rec = patched["skills"][0]["steps"][0]["recovery"]
@@ -257,7 +257,7 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("llm_reasoned_match", out_rec.get("strategies") or [])
 
     def test_compiler_validation_commit_waits_dom_when_no_url_signal(self) -> None:
-        from app.compiler.validation_planner import infer_wait_for_shape
+        from conxa_compile.compiler.validation_planner import infer_wait_for_shape
 
         policy = {
             "workflow": {"commit_intent_substrings": ["submit", "confirm"]},
@@ -279,7 +279,7 @@ class PhaseTests(unittest.TestCase):
         self.assertGreaterEqual(int(wf.get("timeout") or 0), 8000)
 
     def test_compiler_validation_commit_prefers_url_when_recorded(self) -> None:
-        from app.compiler.validation_planner import infer_wait_for_shape
+        from conxa_compile.compiler.validation_planner import infer_wait_for_shape
 
         policy = {
             "workflow": {"commit_intent_substrings": ["submit"]},
@@ -297,7 +297,7 @@ class PhaseTests(unittest.TestCase):
         self.assertGreaterEqual(int(wf.get("timeout") or 0), 8000)
 
     def test_compiler_validation_commit_no_diff_prefers_url_when_intent_checkout(self) -> None:
-        from app.compiler.validation_planner import infer_wait_for_shape
+        from conxa_compile.compiler.validation_planner import infer_wait_for_shape
 
         policy = {
             "workflow": {"commit_intent_substrings": ["submit"]},
@@ -320,7 +320,7 @@ class PhaseTests(unittest.TestCase):
         self.assertGreaterEqual(int(wf.get("timeout") or 0), 8000)
 
     def test_compiler_validation_non_commit_intent_dropdown_element_appear(self) -> None:
-        from app.compiler.validation_planner import infer_wait_for_shape
+        from conxa_compile.compiler.validation_planner import infer_wait_for_shape
 
         policy = {
             "workflow": {"commit_intent_substrings": ["submit"]},
@@ -350,7 +350,7 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("aria-haspopup", str(wf.get("target") or ""))
 
     def test_infer_success_conditions_merges_intent_tokens_when_intent_primary(self) -> None:
-        from app.compiler.validation_planner import infer_success_conditions
+        from conxa_compile.compiler.validation_planner import infer_success_conditions
 
         policy = {
             "decision_layer": {"intent_primary_validation": True, "success_add_intent_tokens": True},
@@ -367,7 +367,7 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(out.get("final_intent"), "submit_login_form")
 
     def test_effective_intent_prefers_final_intent_field(self) -> None:
-        from app.compiler.intent_access import get_effective_intent
+        from conxa_compile.compiler.intent_access import get_effective_intent
 
         self.assertEqual(
             get_effective_intent({"final_intent": "focus_email", "llm_intent": "old_value"}),
@@ -375,8 +375,8 @@ class PhaseTests(unittest.TestCase):
         )
 
     def test_clean_anchors_prefers_semantic_parent_scope_over_bare_form(self) -> None:
-        from app.compiler.v3 import clean_anchors
-        from app.policy.bundle import load_policy_bundle
+        from conxa_compile.compiler.v3 import clean_anchors
+        from conxa_compile.policy.bundle import load_policy_bundle
 
         pol = load_policy_bundle().data
         out = clean_anchors(
@@ -391,8 +391,8 @@ class PhaseTests(unittest.TestCase):
         self.assertNotIn("form", elements)
 
     def test_anchor_ranking_orders_by_target_overlap(self) -> None:
-        from app.compiler.decision_layer import rank_merged_anchors
-        from app.policy.bundle import load_policy_bundle
+        from conxa_compile.compiler.decision_layer import rank_merged_anchors
+        from conxa_compile.policy.bundle import load_policy_bundle
 
         pol = load_policy_bundle().data
         ev = {
@@ -408,8 +408,8 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(ranked[0].get("element"), "save draft")
 
     def test_anchor_ranking_prefers_scope_and_intent_over_bare_form(self) -> None:
-        from app.compiler.decision_layer import rank_merged_anchors
-        from app.policy.bundle import load_policy_bundle
+        from conxa_compile.compiler.decision_layer import rank_merged_anchors
+        from conxa_compile.policy.bundle import load_policy_bundle
 
         pol = load_policy_bundle().data
         ev = {
@@ -430,8 +430,8 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(ranked[0].get("element"), "form#checkout")
 
     def test_recovery_strategies_merge_decision_layer_intent_facets(self) -> None:
-        from app.compiler.recovery_policy import recovery_strategies_for_intent
-        from app.policy.bundle import load_policy_bundle
+        from conxa_compile.compiler.recovery_policy import recovery_strategies_for_intent
+        from conxa_compile.policy.bundle import load_policy_bundle
 
         pol = load_policy_bundle().data
         strat = recovery_strategies_for_intent("navigate_to_account_settings", pol)
@@ -439,9 +439,9 @@ class PhaseTests(unittest.TestCase):
         self.assertNotIn("url_state_match", strat)
 
     def test_default_recovery_block_includes_final_intent(self) -> None:
-        from app.compiler.recovery_policy import default_recovery_block
-        from app.models.skill_spec import RecoveryBlock
-        from app.policy.bundle import load_policy_bundle
+        from conxa_compile.compiler.recovery_policy import default_recovery_block
+        from conxa_core.models.skill_spec import RecoveryBlock
+        from conxa_compile.policy.bundle import load_policy_bundle
 
         pol = load_policy_bundle().data
         raw = default_recovery_block("open_filter_dropdown", [], pol)
@@ -451,7 +451,7 @@ class PhaseTests(unittest.TestCase):
 
     def test_clean_steps_merges_nonconsecutive_duplicate_type_in_place(self) -> None:
         """Later type on same field updates the earlier type row; cross-field order stays chronological."""
-        from app.compiler.v3 import clean_steps
+        from conxa_compile.compiler.v3 import clean_steps
 
         def _ev(action: str, name: str, value: str | None = None) -> dict:
             base = {
@@ -491,14 +491,14 @@ class PhaseTests(unittest.TestCase):
                 ("type", "password", "secret"),
             ],
         )
-        from app.compiler.v3 import sanitize_steps_preserving_order
+        from conxa_compile.compiler.v3 import sanitize_steps_preserving_order
 
         with_focus = sanitize_steps_preserving_order(out, {})
         actions = [(s.get("action") or {}).get("action") for s in with_focus]
         self.assertEqual(actions, ["focus", "type", "focus", "type"])
 
     def test_sanitize_steps_preserving_order_inserts_focus_only_when_needed(self) -> None:
-        from app.compiler.v3 import clean_steps, sanitize_steps_preserving_order
+        from conxa_compile.compiler.v3 import clean_steps, sanitize_steps_preserving_order
 
         type_email = {
             "action": {"action": "type", "value": "x@y.com"},
@@ -533,7 +533,7 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(actions, ["focus", "type", "focus", "type"])
 
     def test_compiler_clean_steps_drops_post_type_field_click(self) -> None:
-        from app.compiler.v3 import clean_steps
+        from conxa_compile.compiler.v3 import clean_steps
 
         type_ev = {
             "action": {"action": "type", "value": "secret"},
@@ -558,7 +558,7 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(out[0]["action"]["action"], "type")
 
     def test_pipeline_drops_zero_bbox_hover_events(self) -> None:
-        from app.pipeline.run import _drop_non_actionable_hover_events
+        from conxa_compile.pipeline.run import _drop_non_actionable_hover_events
 
         def _event(action: str, width: int, height: int) -> dict:
             return {
@@ -584,7 +584,7 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual([item["action"]["action"] for item in out], ["click", "hover"])
 
     def test_selector_filters_reject_dynamic_id_and_weak_tokens(self) -> None:
-        from app.compiler.selector_filters import selector_passes_filters
+        from conxa_compile.compiler.selector_filters import selector_passes_filters
 
         self.assertFalse(selector_passes_filters("#_r_3_"))
         self.assertFalse(selector_passes_filters("password"))
@@ -593,7 +593,7 @@ class PhaseTests(unittest.TestCase):
         self.assertTrue(selector_passes_filters('input[name="password"]'))
 
     def test_intent_normalization_maps_click_prefix_on_editable(self) -> None:
-        from app.policy.intent_ontology import normalize_compiler_intent
+        from conxa_compile.policy.intent_ontology import normalize_compiler_intent
 
         ev = {
             "action": {"action": "focus"},
@@ -605,7 +605,7 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(out, "focus_password")
 
     def test_static_audit_flags_weak_reference(self) -> None:
-        from app.confidence.uncertainty import audit_reference
+        from conxa_compile.confidence.uncertainty import audit_reference
 
         ref = {
             "action_kind": "click",
@@ -619,7 +619,7 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("weak_visual_bbox", issues)
 
     def test_static_audit_downgrades_missing_anchors_when_signals_are_strong(self) -> None:
-        from app.confidence.uncertainty import audit_reference
+        from conxa_compile.confidence.uncertainty import audit_reference
 
         ref = {
             "action_kind": "type",
@@ -633,7 +633,7 @@ class PhaseTests(unittest.TestCase):
         self.assertNotIn("anchors_empty", issues)
 
     def test_static_audit_requires_anchors_for_destructive_intent(self) -> None:
-        from app.confidence.uncertainty import audit_reference
+        from conxa_compile.confidence.uncertainty import audit_reference
 
         ref = {
             "action_kind": "click",
@@ -647,7 +647,7 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("anchors_empty_required", issues)
 
     def test_static_audit_weak_destructive_intent_is_warning_only(self) -> None:
-        from app.confidence.uncertainty import audit_reference
+        from conxa_compile.confidence.uncertainty import audit_reference
 
         ref = {
             "action_kind": "click",
@@ -662,7 +662,7 @@ class PhaseTests(unittest.TestCase):
         self.assertNotIn("anchors_empty_required", issues)
 
     def test_static_audit_explicit_destructive_flag_requires_anchors(self) -> None:
-        from app.confidence.uncertainty import audit_reference
+        from conxa_compile.confidence.uncertainty import audit_reference
 
         ref = {
             "action_kind": "click",
@@ -676,7 +676,7 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("anchors_empty_required", issues)
 
     def test_infer_wait_non_commit_ignores_dom_when_policy_none(self) -> None:
-        from app.compiler.validation_planner import infer_wait_for_shape
+        from conxa_compile.compiler.validation_planner import infer_wait_for_shape
 
         policy = {
             "workflow": {"commit_intent_substrings": ["submit"]},
@@ -693,7 +693,7 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(wf.get("type"), "none")
 
     def test_destructive_click_uses_element_appear_when_selector_present(self) -> None:
-        from app.compiler.validation_planner import infer_wait_for_shape
+        from conxa_compile.compiler.validation_planner import infer_wait_for_shape
 
         policy = {
             "workflow": {"commit_intent_substrings": ["submit"]},
@@ -718,7 +718,7 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("confirm-delete", str(wf.get("target") or ""))
 
     def test_commit_no_evidence_intent_first_prefers_url_for_checkout(self) -> None:
-        from app.compiler.validation_planner import infer_wait_for_shape
+        from conxa_compile.compiler.validation_planner import infer_wait_for_shape
 
         policy = {
             "workflow": {"commit_intent_substrings": ["submit"]},
@@ -744,8 +744,8 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(wf.get("type"), "url_change")
 
     def test_normalize_upgrades_click_button_with_visible_text(self) -> None:
-        from app.policy.bundle import get_policy_bundle
-        from app.policy.intent_ontology import normalize_compiler_intent
+        from conxa_compile.policy.bundle import get_policy_bundle
+        from conxa_compile.policy.intent_ontology import normalize_compiler_intent
 
         pol = get_policy_bundle().data
         ev = {
@@ -757,8 +757,8 @@ class PhaseTests(unittest.TestCase):
         self.assertTrue(out.startswith("activate_control_") or "save" in out)
 
     def test_normalize_strips_click_path_uses_intent_hint(self) -> None:
-        from app.policy.bundle import get_policy_bundle
-        from app.policy.intent_ontology import normalize_compiler_intent
+        from conxa_compile.policy.bundle import get_policy_bundle
+        from conxa_compile.policy.intent_ontology import normalize_compiler_intent
 
         pol = get_policy_bundle().data
         ev = {
@@ -771,9 +771,9 @@ class PhaseTests(unittest.TestCase):
         self.assertNotEqual(out, "click_path")
 
     def test_compile_requires_source_session_for_vision_anchors(self) -> None:
-        from app.compiler.build import compile_skill_package
-        from app.llm.anchor_vision_llm import VisionAnchorGenerationError
-        from app.pipeline.run import run_pipeline
+        from conxa_compile.compiler.build import compile_skill_package
+        from conxa_compile.llm.anchor_vision_llm import VisionAnchorGenerationError
+        from conxa_compile.pipeline.run import run_pipeline
 
         evs = run_pipeline([_minimal_click_event()])
         with self.assertRaises(VisionAnchorGenerationError) as ctx:
@@ -787,8 +787,8 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "source_session_id_required")
 
     def test_vision_llm_failure_falls_back_to_deterministic_anchors(self) -> None:
-        from app.compiler.build import compile_skill_package
-        from app.pipeline.run import run_pipeline
+        from conxa_compile.compiler.build import compile_skill_package
+        from conxa_compile.pipeline.run import run_pipeline
 
         evs = run_pipeline([_minimal_click_event()])
         data_dir, *patchers = _compile_with_vision_mocks("sess", evs, call_llm_return=None)
@@ -819,8 +819,8 @@ class PhaseTests(unittest.TestCase):
 
     def test_anchor_vision_prompt_defines_relation_direction_target_relative_to_anchor(self) -> None:
         from app.llm import anchor_vision_llm
-        from app.llm.anchor_vision_llm import generate_anchors_for_step_or_raise
-        from app.policy.bundle import get_policy_bundle
+        from conxa_compile.llm.anchor_vision_llm import generate_anchors_for_step_or_raise
+        from conxa_compile.policy.bundle import get_policy_bundle
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -831,9 +831,9 @@ class PhaseTests(unittest.TestCase):
                 patch.object(settings, "llm_enabled", True),
                 patch.object(settings, "llm_anchor_vision", True),
                 patch.object(settings, "llm_vision_endpoint", "http://llm.test"),
-                patch("app.llm.anchor_vision_llm.supports_multimodal_chat", return_value=True),
+                patch("conxa_compile.llm.anchor_vision_llm.supports_multimodal_chat", return_value=True),
                 patch(
-                    "app.llm.anchor_vision_llm.call_llm",
+                    "conxa_compile.llm.anchor_vision_llm.call_llm",
                     return_value={"primary_phrase": "email field", "secondary": []},
                 ) as call,
             ):

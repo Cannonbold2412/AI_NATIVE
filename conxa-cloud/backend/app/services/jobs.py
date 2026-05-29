@@ -8,14 +8,18 @@ import threading
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from conxa_core.progress import (
+    append_current_job_event,  # noqa: F401  (re-exported for existing importers)
+    current_job_id,  # noqa: F401
+    job_event_scope,
+    set_event_sink,
+)
+
 JobStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
 TerminalStatus = Literal["succeeded", "failed", "canceled"]
-_current_job_id: ContextVar[str | None] = ContextVar("current_job_id", default=None)
 
 
 @dataclass
@@ -144,28 +148,13 @@ class JobStore:
 job_store = JobStore()
 
 
-@contextmanager
-def job_event_scope(job_id: str) -> Any:
-    token = _current_job_id.set(job_id)
-    try:
-        yield
-    finally:
-        _current_job_id.reset(token)
-
-
-def current_job_id() -> str | None:
-    return _current_job_id.get()
-
-
 def append_job_event(job_id: str, event: str, message: str, data: dict[str, Any] | None = None) -> None:
     job_store.append_event(job_id, event, message, data)
 
 
-def append_current_job_event(event: str, message: str, data: dict[str, Any] | None = None) -> None:
-    job_id = current_job_id()
-    if not job_id:
-        return
-    append_job_event(job_id, event, message, data)
+# Route ambient ``append_current_job_event`` calls (emitted by the compile
+# pipeline via conxa_core.progress) into this process's in-memory job store.
+set_event_sink(append_job_event)
 
 
 async def enqueue_job(

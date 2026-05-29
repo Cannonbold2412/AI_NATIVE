@@ -1,16 +1,17 @@
+# Thin Conxa cloud SaaS dependencies.
+# The shared foundation (config, db, models, storage) is installed separately
+# from ../../packages/conxa-core by build.sh — it brings pydantic, pydantic-settings
+# and SQLAlchemy. Recording/compiling/building deps (playwright, Pillow, lxml, …)
+# now live with the Build Studio, not here.
+
+# Web framework
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
-pydantic>=2.9.0
-pydantic-settings>=2.6.0
-playwright>=1.49.0
-imageio-ffmpeg>=0.5.1
-Pillow>=10.4.0
+
+# Auth / billing
 PyJWT[crypto]>=2.8.0
 stripe>=11.0.0
-SQLAlchemy>=2.0.0
-psycopg2-binary>=2.9.0
-alembic>=1.14.0
-httpx>=0.28.0
 razorpay>=1.4.0
-beautifulsoup4>=4.12.0
-lxml>=5.0.0
+
+# Postgres driver (db.py uses SQLAlchemy + psycopg2 in production)
+psycopg2-binary>=2.9.0

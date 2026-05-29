@@ -1,4 +1,4 @@
-from app.services.installer_builder import _render_nsis_script
+from conxa_compile.installer_builder import _render_nsis_script
 
 
 def test_rendered_nsis_uses_skill_packs_paths(tmp_path):
@@ -14,11 +14,11 @@ def test_rendered_nsis_uses_skill_packs_paths(tmp_path):
 def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, monkeypatch):
     import subprocess
 
-    from app.config import settings
-    from app.models.plugin import Plugin, PluginBuild
+    from conxa_core.config import settings
+    from conxa_core.models.plugin import Plugin, PluginBuild
     from app.services import installer_builder
     from app.services import plugin_builder
-    from app.storage import plugin_store
+    from conxa_core.storage import plugin_store
 
     skill_pack = tmp_path / "skill-packs" / "render"
     skill_pack.mkdir(parents=True)

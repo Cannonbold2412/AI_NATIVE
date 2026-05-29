@@ -15,8 +15,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.config import settings
-from app.db import db_append, db_get, db_list_kv
+from conxa_core.config import settings
+from conxa_core.db import db_append, db_get, db_list_kv
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 

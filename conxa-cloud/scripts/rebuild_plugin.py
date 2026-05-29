@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from app.services.plugin_builder import build_plugin
+from conxa_compile.plugin_builder import build_plugin
 
 print("[BUILD] Starting plugin rebuild...")
 try:

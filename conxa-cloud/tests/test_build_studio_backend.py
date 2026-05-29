@@ -73,7 +73,7 @@ def test_proxy_router_injection_swaps_singleton(backend, monkeypatch):
     monkeypatch.setenv("CONXA_CLERK_CLIENT_ID", "client_x")
 
     b._install_proxy_router()
-    import app.llm.router as router_mod
+    from conxa_core import llm as core_llm
     from services.llm_proxy_client import LLMProxyClient
 
-    assert isinstance(router_mod.get_router(), LLMProxyClient)
+    assert isinstance(core_llm.get_router(), LLMProxyClient)

@@ -1,0 +1,15 @@
+# Build Studio Python backend dependencies.
+#
+# The local record/compile/build pipeline (conxa_compile) lives in this tree.
+# The shared foundation (conxa-core) is installed separately — `pip install
+# packages/conxa-core` from the repo root — because it brings pydantic,
+# pydantic-settings and SQLAlchemy. For the packaged .exe, CI installs conxa-core
+# as a built wheel (non-editable) before PyInstaller so its data files
+# (bridge.js, templates, policy JSON) materialize on disk.
+
+# Recording + compilation
+playwright>=1.49.0
+Pillow>=10.4.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+imageio-ffmpeg>=0.5.1

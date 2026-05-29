@@ -12,10 +12,10 @@ from fastapi.testclient import TestClient
 class ProductRoutesTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
-        patcher = patch("app.config.settings.data_dir", self.tmp / "data")
+        patcher = patch("conxa_core.config.settings.data_dir", self.tmp / "data")
         self.addCleanup(patcher.stop)
         patcher.start()
-        auth_patcher = patch("app.config.settings.auth_required", False)
+        auth_patcher = patch("conxa_core.config.settings.auth_required", False)
         self.addCleanup(auth_patcher.stop)
         auth_patcher.start()
 

@@ -41,7 +41,14 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install -r conxa-cloud/backend/requirements.txt pyinstaller
+        run: |
+          python -m pip install --upgrade pip
+          # Build + install conxa-core as a wheel (non-editable) so its package
+          # data (bridge.js, templates, policy JSON) materializes on disk for
+          # PyInstaller's collect_data_files.
+          python -m pip wheel --no-deps -w dist-wheels packages/conxa-core
+          python -m pip install dist-wheels/conxa_core-*.whl
+          python -m pip install -r conxa-builder/python/requirements.txt pyinstaller
         working-directory: .
 
       - name: Bundle Python backend with PyInstaller

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import sys
-from app.services.plugin_builder import build_plugin
+from conxa_compile.plugin_builder import build_plugin
 
 print("[BUILD] Rebuilding plugin with latest code...")
 try:

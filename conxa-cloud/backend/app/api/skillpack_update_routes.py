@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.config import settings
+from conxa_core.config import settings
 
 router = APIRouter(prefix="/skill-packs", tags=["skill-packs"])
 

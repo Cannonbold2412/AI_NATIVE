@@ -22,8 +22,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.config import settings
-from app.db import db_get, db_set
+from conxa_core.config import settings
+from conxa_core.db import db_get, db_set
 from app.services.saas import ensure_principal, principal_from_request
 
 router = APIRouter(prefix="/plugins", tags=["publish"])

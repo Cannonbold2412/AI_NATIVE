@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.config import settings
+from conxa_core.config import settings
 from app.main import app
-from app.recorder.session import registry
-from app.storage.plugin_store import add_workflow, create_plugin, get_plugin, set_plugin_auth
+from conxa_compile.recorder.session import registry
+from conxa_core.storage.plugin_store import add_workflow, create_plugin, get_plugin, set_plugin_auth
 
 
 class ClosedAuthSession:

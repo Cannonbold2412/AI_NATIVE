@@ -1,4 +1,4 @@
-from app.recorder.session import format_startup_error
+from conxa_compile.recorder.session import format_startup_error
 
 
 def test_format_startup_error_for_missing_playwright_browser() -> None:

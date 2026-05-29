@@ -8,7 +8,7 @@ import re
 import pytest
 from PIL import Image
 
-from app.services.plugin_builder import (
+from conxa_compile.plugin_builder import (
     _build_workflow_from_saved_skill,
     _clean_stale_artifacts,
     _copy_plugin_templates,
@@ -500,7 +500,7 @@ class TestSavedSkillJsonBuild:
         ]
 
     def test_saved_skill_recovery_writes_visual_refs_from_saved_step_screenshots(self, tmp_path, monkeypatch):
-        import app.services.plugin_builder as plugin_builder
+        import conxa_compile.plugin_builder as plugin_builder
 
         data_dir = tmp_path / "data"
         image_dir = data_dir / "sessions" / "sess_visual" / "images"
@@ -720,7 +720,7 @@ class TestSavedSkillJsonBuild:
 
     def test_build_plugin_prefers_saved_skill_over_original_recording(self, tmp_path, monkeypatch):
         from types import SimpleNamespace
-        import app.services.plugin_builder as plugin_builder
+        import conxa_compile.plugin_builder as plugin_builder
 
         plugin = SimpleNamespace(
             id="plugin123456",

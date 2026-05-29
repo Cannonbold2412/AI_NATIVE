@@ -17,15 +17,15 @@ from typing import Any
 
 from fastapi import Request
 
-from app.config import settings
-from app.db import db_get, db_set
-from app.metrics.store import metrics
+from conxa_core.config import settings
+from conxa_core.db import db_get, db_set
+from conxa_core.metrics.store import metrics
+from conxa_core.workspace import LOCAL_WORKSPACE_ID  # single source of truth
 from app.services.jobs import job_store
-from app.storage.json_store import list_skill_summaries
-from app.storage.skill_packages import list_skill_bundle_summaries
+from conxa_core.storage.json_store import list_skill_summaries
+from conxa_core.storage.skill_packages import list_skill_bundle_summaries
 
 LOCAL_USER_ID = "user_local"
-LOCAL_WORKSPACE_ID = "wrk_local"
 LOCAL_WORKSPACE_SLUG = "local"
 
 _lock = threading.RLock()

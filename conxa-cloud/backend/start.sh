@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
-# Backend start script for Render.
+# Backend start script for Render. The schema is created by init_db() on startup.
 set -euo pipefail
-
-export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-0}"
-
-echo "=== Ensuring Playwright Chromium is installed ==="
-python -m playwright install chromium
 
 echo "=== Starting API ==="
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"

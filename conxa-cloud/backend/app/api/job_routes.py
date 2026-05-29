@@ -10,11 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.api.routes import CompileBody, compile_skill
-from app.api.skill_pack_routes import SkillPackBuildBody
-from app.api.workflow_routes import CompileUpdatedBody, compile_updated
-from app.services.jobs import enqueue_job, job_store
-from app.services.skill_pack.compiler import build_skill_package
+from app.services.jobs import job_store
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -72,39 +68,3 @@ def stream_job_events(job_id: str) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-@router.post("/compile")
-async def enqueue_compile_job(body: CompileBody) -> dict[str, Any]:
-    async def run() -> dict[str, Any]:
-        return await asyncio.to_thread(lambda: asyncio.run(compile_skill(body)))
-
-    job = await enqueue_job("compile_skill", run, resource_id=f"skill_{body.session_id}")
-    return {"job_id": job.job_id, "status": job.status, "resource_id": job.resource_id}
-
-
-@router.post("/skills/{skill_id}/compile-updated")
-async def enqueue_compile_updated_job(skill_id: str, body: CompileUpdatedBody) -> dict[str, Any]:
-    async def run() -> dict[str, Any]:
-        return await asyncio.to_thread(lambda: asyncio.run(compile_updated(skill_id, body)))
-
-    job = await enqueue_job(
-        "recompile_skill",
-        run,
-        resource_id=skill_id,
-    )
-    return {"job_id": job.job_id, "status": job.status, "resource_id": job.resource_id}
-
-
-@router.post("/packages/build")
-async def enqueue_package_build_job(body: SkillPackBuildBody) -> dict[str, Any]:
-    async def run() -> dict[str, Any]:
-        return await asyncio.to_thread(
-            build_skill_package,
-            body.json_text,
-            package_name=body.package_name,
-            bundle_slug=body.bundle_name,
-        )
-
-    job = await enqueue_job("package_build", run)
-    return {"job_id": job.job_id, "status": job.status, "resource_id": job.resource_id}

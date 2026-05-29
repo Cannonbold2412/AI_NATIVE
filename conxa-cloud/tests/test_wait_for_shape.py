@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.compiler.wait_for_shape import (
+from conxa_compile.compiler.wait_for_shape import (
     destructive_wait_for_is_non_none,
     is_wait_group,
     leaf_wait_for_conditions,

@@ -13,8 +13,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.db import db_append, db_get, db_list_kv
-from app.config import settings
+from conxa_core.db import db_append, db_get, db_list_kv
+from conxa_core.config import settings
 from app.services.saas import Principal, ensure_principal, principal_from_request
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])

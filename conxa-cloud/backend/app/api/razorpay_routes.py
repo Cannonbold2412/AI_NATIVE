@@ -11,8 +11,8 @@ from typing import Any
 import razorpay
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.config import settings
-from app.db import db_get, db_set
+from conxa_core.config import settings
+from conxa_core.db import db_get, db_set
 from app.services.rbac import require_admin
 from app.services.saas import Principal, ensure_principal, principal_from_request, upsert_billing
 

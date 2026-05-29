@@ -4,7 +4,7 @@ import os
 import sys
 from types import SimpleNamespace
 
-from app.recorder import frame_extractor
+from conxa_compile.recorder import frame_extractor
 
 
 def test_find_ffmpeg_uses_imageio_ffmpeg_fallback(monkeypatch, tmp_path) -> None:

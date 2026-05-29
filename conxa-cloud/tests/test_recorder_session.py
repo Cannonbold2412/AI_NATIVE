@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.recorder import session as recorder_session
-from app.recorder.session import RecordingSession
+from conxa_compile.recorder import session as recorder_session
+from conxa_compile.recorder.session import RecordingSession
 
 
 def _payload(action: str = "click") -> dict:

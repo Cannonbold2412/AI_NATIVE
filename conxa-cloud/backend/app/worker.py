@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import time
 
-from app.config import settings
+from conxa_core.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ai-native-worker")

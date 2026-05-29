@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from app.models.events import (
+from conxa_core.models.events import (
     ActionMeta, DomContext, PageContext, RecordedEvent, SnapshotRef,
     SemanticFeatures, Selectors, StateChange, TargetDom, Timing, VisualFeatures,
 )
-from app.recorder.session import classify_login_flow
+from conxa_compile.recorder.session import classify_login_flow
 
 
 # ─────────────────────────────────────────────────

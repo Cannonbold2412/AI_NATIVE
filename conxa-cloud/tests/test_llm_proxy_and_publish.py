@@ -7,7 +7,7 @@ import base64
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import settings
+from conxa_core.config import settings
 from app.main import app
 from app.services import llm_metering
 

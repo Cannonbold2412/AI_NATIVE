@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app.models.plugin import Plugin
-from app.storage import plugin_store
+from conxa_core.models.plugin import Plugin
+from conxa_core.storage import plugin_store
 
 
 @pytest.fixture()

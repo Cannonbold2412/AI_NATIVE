@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.compiler.build import (
+from conxa_compile.compiler.build import (
     _build_assertions,
     _build_element_fingerprint,
     _build_structural_fingerprint,
 )
-from app.models.skill_spec import (
+from conxa_core.models.skill_spec import (
     Assertion,
     ElementFingerprint,
     RecoveryBlock,

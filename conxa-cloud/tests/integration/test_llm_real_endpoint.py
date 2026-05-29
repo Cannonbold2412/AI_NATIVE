@@ -3,8 +3,8 @@
 import os
 import pytest
 
-from app.config import settings
-from app.llm.openapi_client import generate_selector_candidates
+from conxa_core.config import settings
+from conxa_compile.llm.openapi_client import generate_selector_candidates
 
 
 pytestmark = pytest.mark.skipif(

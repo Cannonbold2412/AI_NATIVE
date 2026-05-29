@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conxa-core"
+version = "0.1.0"
+description = "Conxa shared foundation: config, db, models, storage, and pipeline primitives."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "SQLAlchemy>=2.0.0",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["conxa_core*"]
+
+[tool.setuptools.package-data]
+conxa_core = [
+    "storage/plugin_templates/**/*",
+    "storage/installer_templates/**/*",
+    "**/*.json",
+]
