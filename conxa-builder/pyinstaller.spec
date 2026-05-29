@@ -12,16 +12,17 @@ import sys
 import os
 from pathlib import Path
 
-# Repo root is two levels up from this spec file.
-REPO_ROOT = Path(SPECPATH).parent.parent  # noqa: F821  (SPECPATH is injected by PyInstaller)
+# Repo root is one level up from this spec file (conxa-builder/pyinstaller.spec).
+REPO_ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH is injected by PyInstaller)
 BACKEND_DIR = REPO_ROOT / "conxa-builder" / "python"
-APP_DIR = REPO_ROOT / "app"
+CLOUD_BACKEND_DIR = REPO_ROOT / "conxa-cloud" / "backend"
+APP_DIR = CLOUD_BACKEND_DIR / "app"
 
 block_cipher = None
 
 a = Analysis(
     [str(BACKEND_DIR / "backend.py")],
-    pathex=[str(REPO_ROOT), str(BACKEND_DIR)],
+    pathex=[str(CLOUD_BACKEND_DIR), str(BACKEND_DIR)],
     binaries=[],
     datas=[
         # Include the entire app/ package so it can be imported at runtime.

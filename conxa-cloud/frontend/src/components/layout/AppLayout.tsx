@@ -26,7 +26,6 @@ import {
   FolderKanban,
   Hammer,
   Home,
-  Layers,
   Menu,
   PackageCheck,
   Puzzle,
@@ -68,7 +67,7 @@ export function ProductMark({ className }: { className?: string }) {
       )}
       aria-hidden
     >
-      <Layers className="size-4" strokeWidth={2} />
+      <img src="/conxa-icon.png" alt="" width={24} height={24} className="h-6 w-6 object-contain" />
     </span>
   )
 }

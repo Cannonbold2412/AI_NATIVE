@@ -22,7 +22,6 @@ import {
   FolderKanban,
   Hammer,
   Home,
-  Layers,
   Menu,
   PackageCheck,
   PlayCircle,
@@ -62,7 +61,7 @@ function ProductMark() {
       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white shadow-sm"
       aria-hidden
     >
-      <Layers className="size-4" strokeWidth={2} />
+      <img src="/conxa-icon.png" alt="" width={24} height={24} className="h-6 w-6 object-contain" />
     </span>
   )
 }

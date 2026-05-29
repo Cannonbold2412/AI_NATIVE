@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import conxaIcon from "../assets/conxa-icon.png";
 import { StatusDot, type PluginStatus } from "./StatusDot";
 
 export interface PluginSummary {
@@ -11,6 +12,13 @@ export function Sidebar({ plugins }: { plugins: PluginSummary[] }) {
   const navigate = useNavigate();
   return (
     <nav className="sidebar">
+      <div className="sidebar__brand" aria-label="Conxa Build Studio">
+        <img className="sidebar__brand-icon" src={conxaIcon} alt="" width={32} height={32} />
+        <div className="sidebar__brand-text">
+          <span>Conxa</span>
+          <small>Build Studio</small>
+        </div>
+      </div>
       <div className="sidebar__heading">Plugins</div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         {plugins.map((p) => (

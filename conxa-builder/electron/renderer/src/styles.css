@@ -40,6 +40,36 @@ button {
   padding: 12px;
 }
 
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  min-height: 48px;
+  color: var(--text-primary);
+}
+
+.sidebar__brand-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  object-fit: contain;
+}
+
+.sidebar__brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.sidebar__brand-text small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .sidebar__heading {
   color: var(--text-muted);
   text-transform: uppercase;

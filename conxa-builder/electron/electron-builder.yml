@@ -1,7 +1,7 @@
 # Conxa Build Studio — electron-builder configuration
 # Produces a per-machine NSIS installer for Windows.
-# The backend PyInstaller bundle is injected as an extraFile (not extraResource)
-# so it sits alongside the main executable and can be spawned by main.js.
+# The backend PyInstaller bundle is injected as an extraResource so it lands in
+# resources/backend/ — matching process.resourcesPath used in main.js.
 
 appId: ai.conxa.build-studio
 productName: Conxa Build Studio
@@ -14,8 +14,8 @@ files:
   - "!renderer/src"      # compiled renderer goes to renderer/dist; exclude source
   - "!test"
 
-# PyInstaller backend bundle — placed next to the Electron executable
-extraFiles:
+# PyInstaller backend bundle — placed in resources/ so process.resourcesPath resolves it
+extraResources:
   - from: "../../dist/backend"
     to: "backend"
     filter:
@@ -38,6 +38,7 @@ publish:
 # channel metadata that electron-updater reads from latest.yml / latest-beta.yml.
 
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
@@ -52,20 +53,8 @@ nsis:
   perMachine: true
   oneClick: false
   allowToChangeInstallationDirectory: true
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
   shortcutName: Conxa Build Studio
 
   # Register the conxa-studio:// OAuth callback URI scheme.
   include: build/installer.nsh
 
-  # Registry keys so IT can detect the installed version.
-  customNsis: |
-    !macro customInstall
-      WriteRegStr HKLM "Software\Conxa\BuildStudio" "Version" "${VERSION}"
-      WriteRegStr HKLM "Software\Conxa\BuildStudio" "InstallPath" "$INSTDIR"
-    !macroend
-
-    !macro customUninstall
-      DeleteRegKey HKLM "Software\Conxa\BuildStudio"
-    !macroend

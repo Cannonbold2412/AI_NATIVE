@@ -16,6 +16,7 @@ const { Bridge } = require("./bridge");
 
 const IS_DEV = !app.isPackaged;
 const MAX_BACKEND_RESTARTS = 3;
+const APP_ICON_PATH = path.join(__dirname, "build", "icon.png");
 
 let mainWindow = null;
 let backend = null;
@@ -38,7 +39,8 @@ function backendCommand() {
 function startBackend() {
   const { cmd, args } = backendCommand();
   backend = spawn(cmd, args, {
-    stdio: ["pipe", "pipe", "inherit"], // stderr -> our console; not the event stream
+    stdio: ["pipe", "pipe", "pipe"], // all pipes; windowsHide suppresses the console window
+    windowsHide: true,
     env: { ...process.env },
   });
 
@@ -99,6 +101,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     backgroundColor: "#1a1a1a",
+    icon: APP_ICON_PATH,
     titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -143,6 +146,9 @@ function initAutoUpdate() {
 // ─── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  if (process.platform === "win32") {
+    app.setAppUserModelId("ai.conxa.build-studio");
+  }
   // Custom scheme for the OAuth callback (registered at install on Windows).
   if (!app.isDefaultProtocolClient("conxa-studio")) {
     app.setAsDefaultProtocolClient("conxa-studio");

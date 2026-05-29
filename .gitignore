@@ -12,6 +12,9 @@ __pycache__/
 .coverage.*
 htmlcov/
 build/
+!conxa-builder/electron/build/
+!conxa-builder/electron/build/icon.png
+!conxa-builder/electron/build/icon.ico
 !frontend/app/(protected)/build/
 !frontend/app/(protected)/build/page.tsx
 dist/

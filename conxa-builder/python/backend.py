@@ -24,11 +24,12 @@ import threading
 import traceback
 from typing import Any, Callable
 
-# Make both the repo root (for the shared `app` package) and this `python` dir
-# (for the local `services` package) importable, regardless of launch CWD.
+# Make both the cloud backend dir (for the shared `app` package) and this
+# `python` dir (for the local `services` package) importable, regardless of
+# launch CWD.
 _PY_DIR = os.path.abspath(os.path.dirname(__file__))
-_REPO_ROOT = os.path.abspath(os.path.join(_PY_DIR, "..", ".."))
-for _p in (_REPO_ROOT, _PY_DIR):
+_CLOUD_BACKEND = os.path.abspath(os.path.join(_PY_DIR, "..", "..", "conxa-cloud", "backend"))
+for _p in (_CLOUD_BACKEND, _PY_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -214,6 +215,22 @@ class Backend:
         step_count = len(package.skills[0].steps)
         sink({"phase": "compiler_done", "step_count": step_count})
         return {"skill_id": skill_id, "version": version, "step_count": step_count}
+
+    def cmd_create_plugin(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from app.storage.plugin_store import create_plugin as _create
+
+        name = str(payload.get("name") or "").strip()
+        if not name:
+            raise _CommandError("invalid_input", "name is required")
+        target_url = str(payload.get("target_url") or "about:blank").strip()
+        plugin = _create(name=name, target_url=target_url)
+        return {"plugin": plugin.model_dump(mode="json")}
+
+    def cmd_list_plugins(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from app.storage.plugin_store import list_plugins as _list
+
+        plugins = _list()
+        return {"plugins": [p.model_dump(mode="json") for p in plugins]}
 
     def cmd_list_workflows(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         from app.storage.plugin_store import get_plugin

@@ -6,6 +6,11 @@ import { AppProviders } from './providers'
 export const metadata: Metadata = {
   title: 'CONXA',
   description: 'AI operational runtime — operate software by talking.',
+  icons: {
+    icon: '/conxa-icon.png',
+    shortcut: '/conxa-icon.png',
+    apple: '/conxa-icon.png',
+  },
 }
 
 export default function RootLayout({
