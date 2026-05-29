@@ -54,12 +54,11 @@ def build_installer(
     company_slug: str,
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Compile a plugin into a Windows installer EXE.
+    """Package an already-built plugin into a Windows installer EXE.
 
     Returns dict with keys: installer_path, filename, company, plugin_id, version.
     Raises ValueError / RuntimeError on build failure.
     """
-    from app.services.plugin_builder import build_plugin
     from app.storage.plugin_store import get_plugin, set_installer
 
     plugin = get_plugin(plugin_id)
@@ -81,25 +80,39 @@ def build_installer(
         )
     _log(f"Found makensis at: {makensis}")
 
-    # ── 1. Build skill pack ────────────────────────────────────────────────────
-    _log("Building skill pack…")
-    build_result = build_plugin(plugin_id, version=RUNTIME_VERSION, realtime_sink=realtime_sink)
-    skill_pack_dir = settings.data_dir / "skill-packs" / company_slug
-    skills = build_result.get("skills", [])
-    _log(f"Skill pack built ({len(skills)} skill(s): {', '.join(skills) if skills else 'none'})")
+    # ── 1. Use the existing built skill pack ───────────────────────────────────
+    if plugin.build is None:
+        raise RuntimeError(
+            "Plugin must be built before building the installer. "
+            "Run Build Plugin, then Test Plugin, then Build Installer."
+        )
 
+    skill_pack_dir = settings.data_dir / "skill-packs" / company_slug
     if not skill_pack_dir.is_dir():
         raise RuntimeError(
-            f"skill-packs/{company_slug}/ directory not found after build. "
-            "Check that the plugin has at least one workflow."
+            f"Built skill pack not found: skill-packs/{company_slug}. "
+            "Run Build Plugin before building the installer."
         )
+    pack_json_path = skill_pack_dir / "pack.json"
+    if not pack_json_path.is_file():
+        raise RuntimeError(
+            f"Built skill pack is missing pack.json: skill-packs/{company_slug}/pack.json. "
+            "Run Build Plugin before building the installer."
+        )
+    try:
+        pack = json.loads(pack_json_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"Built skill pack has invalid pack.json: {exc}") from exc
+    skills = [str(skill) for skill in pack.get("skills", []) if skill]
+    version = pack.get("skill_pack_version", plugin.build.version or RUNTIME_VERSION)
+    _log(f"Using existing skill pack ({len(skills)} skill(s): {', '.join(skills) if skills else 'none'})")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         _log(f"Working directory: {tmp}")
 
         # ── 2. Fetch or copy runtime binary ───────────────────────────────────
-        _log(f"Fetching runtime v{RUNTIME_VERSION}…")
+        _log(f"Fetching runtime {RUNTIME_VERSION}…")
         runtime_dir = tmp / "runtime"
         runtime_dir.mkdir()
         _stage_runtime_binary(runtime_dir, _log)
@@ -114,15 +127,6 @@ def build_installer(
 
         # ── 4. Render NSIS script ─────────────────────────────────────────────
         company_name = plugin.name
-        pack_json_path = staged_packs / "pack.json"
-        version = RUNTIME_VERSION
-        if pack_json_path.is_file():
-            try:
-                pack = json.loads(pack_json_path.read_text(encoding="utf-8"))
-                version = pack.get("skill_pack_version", RUNTIME_VERSION)
-            except Exception:
-                pass
-
         _log(f"Rendering NSIS script (company={company_slug!r}, version={version})…")
         nsi_path = _render_nsis_script(tmp, company_slug, company_name, version)
         _log(f"NSIS script written to {nsi_path}")
