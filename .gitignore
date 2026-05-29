@@ -86,3 +86,13 @@ Thumbs.db
 output/
 data/chromium/
 data/installers/
+# Runtime-generated state — KV stores, session data, skill packs, caches
+data/kv/
+data/sessions/
+data/skill-packs/
+data/saas/
+data/cache/
+data/plugins/
+data/skills/
+data/executions/
+data/runs/
