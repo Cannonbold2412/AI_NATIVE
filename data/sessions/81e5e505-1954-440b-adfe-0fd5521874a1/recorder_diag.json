@@ -1,0 +1,1728 @@
+{
+  "binding_errors": [
+    "bridge_frame_install_error: Frame.evaluate: Frame was detached",
+    "event_capture_error:scroll: 1 validation error for RecordedEvent\nselectors.aria\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type",
+    "event_capture_error:scroll: 1 validation error for RecordedEvent\nselectors.aria\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type",
+    "bridge_frame_install_error: Frame.evaluate: Target page, context or browser has been closed",
+    "pump_error: Page.evaluate: Target page, context or browser has been closed"
+  ],
+  "traces": [
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779909275399,
+      "extra": {
+        "isTop": true,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779909275400,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909275725,
+      "extra": {
+        "isTop": true,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909275726,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779909276091,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779909276092,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779909276136,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779909276136,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909276152,
+      "extra": {
+        "src": "",
+        "id": "",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909276152,
+      "extra": {
+        "src": "",
+        "id": "",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909276831,
+      "extra": {
+        "src": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+        "id": "",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+      "ts": 1779909277056,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+      "ts": 1779909277057,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779909277874,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779909277874,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779909277884,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779909277884,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909277886,
+      "extra": {
+        "src": "about:blank",
+        "id": "",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909277886,
+      "extra": {
+        "src": "",
+        "id": "",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909280316,
+      "extra": {
+        "src": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+        "id": "",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+      "ts": 1779909280403,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+      "ts": 1779909280404,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+      "ts": 1779909280478,
+      "extra": {
+        "src": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+        "id": "",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779909280652,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779909280652,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909280658,
+      "extra": {
+        "src": "",
+        "id": "intercom-frame",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+      "ts": 1779909280777,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+      "ts": 1779909280778,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909283260,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909283328,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909284146,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909284352,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909285578,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909285579,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909285791,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909285826,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/",
+      "ts": 1779909285827,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909286966,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909286967,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909290203,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293102,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293104,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293360,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293361,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293625,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293627,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293860,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909293861,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909294078,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909294079,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909294313,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909294314,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909295454,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909295455,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909295776,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909295778,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909296021,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909296022,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909296652,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909296654,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909296887,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909296888,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909297098,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909297100,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909297285,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909297286,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909302273,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909302275,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/select-repo?type=blueprint",
+      "ts": 1779909302499,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909302582,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909303723,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909308407,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909308408,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909308572,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909308573,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909308822,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909308823,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309092,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309093,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309346,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309347,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309575,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309575,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309788,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309790,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309973,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909309974,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909310183,
+      "extra": {
+        "t": "beforeinput"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909310184,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909313562,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909313567,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909313754,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://dashboard.render.com/blueprint/new",
+      "ts": 1779909314105,
+      "extra": {
+        "t": "focusout"
+      }
+    }
+  ],
+  "frame_tree": [],
+  "frame_snapshots": [
+    {
+      "ts": 1779909281587,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/"
+        }
+      ]
+    },
+    {
+      "ts": 1779909282862,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/"
+        }
+      ]
+    },
+    {
+      "ts": 1779909284083,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/"
+        }
+      ]
+    },
+    {
+      "ts": 1779909285969,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909287552,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909288847,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909290099,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909291716,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909292980,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909294262,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909295926,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909297558,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909299130,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909300356,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909301662,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/select-repo?type=blueprint",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/select-repo?type=blueprint"
+        }
+      ]
+    },
+    {
+      "ts": 1779909303179,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909304447,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909305702,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909306955,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909308191,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909309472,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909310842,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909312544,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909313876,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/new",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/new"
+        }
+      ]
+    },
+    {
+      "ts": 1779909315427,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        }
+      ]
+    },
+    {
+      "ts": 1779909316665,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        }
+      ]
+    },
+    {
+      "ts": 1779909318084,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        }
+      ]
+    },
+    {
+      "ts": 1779909319311,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        }
+      ]
+    },
+    {
+      "ts": 1779909320534,
+      "frames": [
+        {
+          "url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/controller-with-preconnect-b1602daa4a944d1822396e01a54df226.html#__shared_params__[version]=v3&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%2224a22448-d9cb-4308-9bc4-8280558e1f83%22%2C%22assignments%22%3A%7B%22habanero_aa_v1%22%3A%22control%22%7D%7D&apiKey=pk_live_Jv30CQQpAQyWO9FMp3i5IPOt&stripeJsId=24a22448-d9cb-4308-9bc4-8280558e1f83&stripeObjId=sobj-0dfe6b03-4578-4f76-9bda-ac5a608d69ce&firstStripeInstanceCreatedLatency=515&controllerCount=1&isCheckout=false&stripeJsLoadTime=1779909276297&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=c8441253-7884-4c75-964f-2fdb74832d7a537a02&mids[sid]=NA&referrer=https%3A%2F%2Fdashboard.render.com%2F&controllerId=__privateStripeController1391",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "parent_url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fdashboard.render.com%2F&title=Render%20Dashboard&referrer=&muid=c8441253-7884-4c75-964f-2fdb74832d7a537a02&sid=NA&version=6&preview=false&__shared_params__[version]=v3"
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://dashboard.render.com/blueprint/exs-d7en8e19rddc73ec0i80/sync/exe-d8bk5el7vvec738s884g"
+        }
+      ]
+    }
+  ]
+}

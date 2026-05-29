@@ -1,0 +1,1048 @@
+{
+  "binding_errors": [
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...ms': 4991, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 10976, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:set_checkbox: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 11065, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 23722, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:set_checkbox: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 23785, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 27777, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:set_checkbox: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 27854, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 28855, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:set_checkbox: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 28922, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 36282, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 36353, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 36503, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 36643, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 36783, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 36937, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 37096, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 37238, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 39440, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:set_checkbox: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 39521, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 39757, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 39953, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:keyboard_shortcut: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 40111, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 41026, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:set_checkbox: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 41096, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 42040, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:set_checkbox: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 42122, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 43688, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "event_capture_error:click: 1 validation error for RecordedEvent\nvisual\n  Value error, VisualFeatures.frames missing required keys: ['after_far', 'after_near', 'before_far', 'before_near'] (have: []) [type=value_error, input_value={'full_screenshot': 'imag...s': 44874, 'frames': {}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "bridge_frame_install_error: Frame.evaluate: Target page, context or browser has been closed",
+    "pump_error: Page.evaluate: Target page, context or browser has been closed"
+  ],
+  "traces": [
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779851237205,
+      "extra": {
+        "isTop": true,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779851237207,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851237539,
+      "extra": {
+        "isTop": true,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851237542,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779851239749,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779851239750,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851239752,
+      "extra": {
+        "src": "",
+        "id": "intercom-frame",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851241770,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851241993,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851247763,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851247990,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851247991,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851247992,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851248079,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851260505,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851260733,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851260734,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851260735,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851260799,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851264562,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851264794,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851264795,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851264795,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851264861,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851265650,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851265871,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851265872,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851265872,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851265937,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851276234,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851276456,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851276456,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851276457,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851276534,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851277803,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851278038,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851278039,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851278039,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851278110,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851278823,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851279051,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851279052,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851279053,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851279131,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851280476,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851280477,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851280700,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851281663,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851281664,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851281890,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851282488,
+      "extra": {
+        "t": "focusout"
+      }
+    }
+  ],
+  "frame_tree": [],
+  "frame_snapshots": [
+    {
+      "ts": 1779851239435,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/setup-guide",
+          "parent_url": null
+        }
+      ]
+    },
+    {
+      "ts": 1779851240738,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/setup-guide",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/setup-guide"
+        }
+      ]
+    },
+    {
+      "ts": 1779851241871,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/setup-guide",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/setup-guide"
+        }
+      ]
+    },
+    {
+      "ts": 1779851244077,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851245193,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851246293,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851247401,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851249833,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851250970,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851252082,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851253208,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851254310,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851255415,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851256514,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851257639,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851258750,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851259847,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851261500,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851262820,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851263962,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851265252,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851267260,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851268383,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851269489,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851270603,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851271702,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851272816,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851274219,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851275838,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851277732,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851279709,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851281812,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851283360,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851284461,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851285560,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851286703,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851287930,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851289042,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851290183,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851291293,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851292382,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851293478,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    }
+  ]
+}
