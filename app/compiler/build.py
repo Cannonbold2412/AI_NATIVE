@@ -50,6 +50,7 @@ from app.models.skill_spec import (
 from app.policy.bundle import PolicyBundle, get_policy_bundle
 from app.policy.intent_ontology import intent_specificity_score, normalize_compiler_intent
 from app.services.jobs import append_current_job_event
+from app.storage import snapshots
 
 
 _RECOVERABLE_VISION_ANCHOR_REASONS = frozenset({
@@ -358,7 +359,7 @@ def _build_structural_fingerprint(steps: list[SkillStep]) -> dict[str, Any]:
     return {"landmarks": landmarks, "landmark_count": len(landmarks)}
 
 
-def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+def _build_target(ev: dict[str, Any], policy: dict[str, Any], session_id: str = "") -> dict[str, Any]:
     raw_selectors = ev.get("selectors") or {}
     selectors = filter_selectors_dict(raw_selectors)
     target = ev.get("target") or {}
@@ -421,7 +422,7 @@ def _build_target(ev: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     if not use_heuristic:
         # Mandatory LLM call. Failure raises and aborts the compile — no silent fallback.
         llm_selector, llm_confidence, llm_breakdown, llm_rationale = _call_llm_native_selector(
-            ev, target, semantic
+            ev, target, semantic, session_id=session_id
         )
         if not llm_selector:
             _action_kind = str((ev.get("action") or {}).get("action") or "").lower()
@@ -476,6 +477,7 @@ def _call_llm_native_selector(
     ev: dict[str, Any],
     target: dict[str, Any],
     semantic: dict[str, Any],
+    session_id: str = "",
 ) -> tuple[str, float, dict[str, float], str]:
     """LLM-native selector generation. Raises on failure — compile must fail loudly."""
     action = ev.get("action") or {}
@@ -485,14 +487,29 @@ def _call_llm_native_selector(
     visual = ev.get("visual") or {}
     bbox = visual.get("bbox") or {}
 
-    # Build a DOM snippet from ancestors + target
-    dom_parts = []
-    for anc in ancestors[:3]:
-        if isinstance(anc, dict):
-            outer = str(anc.get("outer_html") or "")[:2000]
-            if outer:
-                dom_parts.append(outer)
-    dom_snippet = "\n".join(dom_parts) or json.dumps(target, ensure_ascii=False)
+    # Load full-page DOM + a11y when snapshot is available; fall back to ancestor snippet.
+    dom_hash = str((ev.get("snapshot") or {}).get("dom_hash") or "")
+    full_html: str | None = None
+    a11y_node: dict[str, Any] | None = None
+    if session_id and dom_hash:
+        full_html = snapshots.read_dom_snapshot(session_id, dom_hash)
+        a11y_tree = snapshots.read_a11y_snapshot(session_id, dom_hash)
+        if a11y_tree:
+            from app.compiler.llm_selector_generator import _extract_a11y_node  # noqa: PLC0415
+            a11y_node = _extract_a11y_node(a11y_tree, target)
+
+    if full_html:
+        from app.compiler.llm_selector_generator import _dom_snippet_for_llm  # noqa: PLC0415
+        dom_snippet = _dom_snippet_for_llm(full_html)
+    else:
+        # Build a DOM snippet from ancestors + target
+        dom_parts = []
+        for anc in ancestors[:3]:
+            if isinstance(anc, dict):
+                outer = str(anc.get("outer_html") or "")[:2000]
+                if outer:
+                    dom_parts.append(outer)
+        dom_snippet = "\n".join(dom_parts) or json.dumps(target, ensure_ascii=False)
 
     return generate_selector_with_objective_confidence(
         dom_snippet=dom_snippet,
@@ -501,6 +518,8 @@ def _call_llm_native_selector(
         surrounding_text=surrounding,
         action_type=action_type,
         target_dom=target,
+        a11y_node=a11y_node,
+        full_page_html=full_html,
         candidates_wanted=1,
         num_samples=3,  # Reduced from 5 to keep compile times reasonable
     )
@@ -703,7 +722,7 @@ def _build_step(
     else:
         recovery_dict = no_recovery_block(intent)
     recovery = RecoveryBlock(**recovery_dict)
-    target = _build_target(ev, policy)
+    target = _build_target(ev, policy, session_id=session_root.name)
     signals = _build_signals(
         ev,
         resolved_intent=intent,

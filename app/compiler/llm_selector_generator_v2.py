@@ -168,6 +168,7 @@ def generate_selector_with_objective_confidence(
     action_type: str,
     target_dom: dict[str, Any] | None = None,
     a11y_node: dict[str, Any] | None = None,
+    full_page_html: str | None = None,
     candidates_wanted: int = 1,
     num_samples: int = 5,
     error_detail: list[str] | None = None,
@@ -223,8 +224,17 @@ def generate_selector_with_objective_confidence(
             "visual_verification": 0.0,
         }, "LLM returned empty selector"
 
-    # Signal 1: DOM uniqueness
-    dom_signal = compute_dom_uniqueness_signal(primary_selector, target_dom)
+    # Signal 1: DOM uniqueness — use full-page HTML when available for accurate match counting.
+    if full_page_html:
+        from app.compiler.llm_selector_generator import validate_selector  # noqa: PLC0415
+        _, match_count = validate_selector(primary_selector, full_page_html)
+        if match_count < 0:    dom_signal = 0.20   # parse failed → conservative
+        elif match_count == 1: dom_signal = 0.40
+        elif match_count <= 3: dom_signal = 0.15
+        elif match_count > 3:  dom_signal = 0.05
+        else:                  dom_signal = 0.0    # 0 matches → broken selector
+    else:
+        dom_signal = compute_dom_uniqueness_signal(primary_selector, target_dom)
 
     # Signal 2: Self-consistency — call LLM multiple times and compare results
     consistency_selectors = [primary_selector]
