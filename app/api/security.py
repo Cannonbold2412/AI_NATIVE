@@ -24,7 +24,11 @@ PUBLIC_TRACKING_EVENT_PREFIXES = ("/api/tracking/", "/api/v1/tracking/")
 
 # Installer downloads are fetched by end users who have no Clerk account; the
 # plugin_id in the path is the only credential and the file is non-sensitive.
-PUBLIC_PATH_PREFIXES = ("/api/v1/installers/",)
+PUBLIC_PATH_PREFIXES = (
+    "/api/v1/installers/",
+    # Build Studio bootstrap and runtime self-updater fetch these before/without Clerk auth
+    "/api/v1/updates/",
+)
 
 
 def _request_id(request: Request) -> str:
