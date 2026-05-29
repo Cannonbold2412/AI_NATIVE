@@ -1,0 +1,49 @@
+[
+  {
+    "type": "scroll",
+    "delta_y": 201.0
+  },
+  {
+    "type": "focus",
+    "selector": "label:has-text(\"Search services\") + input"
+  },
+  {
+    "type": "type",
+    "selector": "label:has-text(\"Search services\") + input",
+    "value": "{{search_services}}"
+  },
+  {
+    "type": "click",
+    "selector": "label:has-text(\"Select row\") + a"
+  },
+  {
+    "type": "click",
+    "selector": "label:has-text(\"Events\") + a"
+  },
+  {
+    "type": "scroll",
+    "delta_y": 6357.0
+  },
+  {
+    "type": "click",
+    "selector": "label:has-text(\"Networking\") + button"
+  },
+  {
+    "type": "focus",
+    "selector": "input[name=\"sudoCommand\"]"
+  },
+  {
+    "type": "type",
+    "selector": "input[name=\"sudoCommand\"]",
+    "value": "sudo delete web service {{service_name}}"
+  },
+  {
+    "type": "click",
+    "selector": "label:has-text(\"Sudo Command\") + button"
+  },
+  {
+    "type": "check",
+    "kind": "url",
+    "pattern": "https://dashboard.render.com/"
+  }
+]

@@ -6,6 +6,8 @@ the local filesystem when SKILL_DATABASE_URL is not set (local development).
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path as _Path
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -21,6 +23,12 @@ def _get_engine():
         url = settings.database_url.replace("postgres://", "postgresql://", 1)
         _engine = create_engine(url, pool_pre_ping=True)
     return _engine
+
+
+def _fs_path(namespace: str, key: str) -> _Path:
+    """Filesystem path for a (namespace, key) pair used when no DB is configured."""
+    safe_ns = namespace.replace("/", os.sep)
+    return _Path(settings.data_dir) / "kv" / safe_ns / f"{key}.json"
 
 
 def init_db() -> None:
@@ -45,7 +53,8 @@ def init_db() -> None:
 def db_get(namespace: str, key: str) -> Any | None:
     engine = _get_engine()
     if engine is None:
-        return None
+        p = _fs_path(namespace, key)
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT data FROM kv_store WHERE namespace = :ns AND key = :key"),
@@ -57,6 +66,9 @@ def db_get(namespace: str, key: str) -> Any | None:
 def db_set(namespace: str, key: str, data: Any) -> None:
     engine = _get_engine()
     if engine is None:
+        p = _fs_path(namespace, key)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data), encoding="utf-8")
         return
     with engine.connect() as conn:
         conn.execute(
@@ -74,6 +86,8 @@ def db_set(namespace: str, key: str, data: Any) -> None:
 def db_delete(namespace: str, key: str) -> None:
     engine = _get_engine()
     if engine is None:
+        p = _fs_path(namespace, key)
+        p.unlink(missing_ok=True)
         return
     with engine.connect() as conn:
         conn.execute(
@@ -87,7 +101,13 @@ def db_list(namespace: str) -> list[Any]:
     """Return all values in a namespace ordered by created_at."""
     engine = _get_engine()
     if engine is None:
-        return []
+        d = _fs_path(namespace, "__sentinel__").parent
+        if not d.exists():
+            return []
+        return [
+            json.loads(f.read_text(encoding="utf-8"))
+            for f in sorted(d.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        ]
     with engine.connect() as conn:
         rows = conn.execute(
             text("SELECT data FROM kv_store WHERE namespace = :ns ORDER BY created_at"),
@@ -100,7 +120,13 @@ def db_list_kv(namespace: str) -> list[tuple[str, Any]]:
     """Return (key, value) pairs in a namespace ordered by created_at."""
     engine = _get_engine()
     if engine is None:
-        return []
+        d = _fs_path(namespace, "__sentinel__").parent
+        if not d.exists():
+            return []
+        return [
+            (f.stem, json.loads(f.read_text(encoding="utf-8")))
+            for f in sorted(d.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        ]
     with engine.connect() as conn:
         rows = conn.execute(
             text("SELECT key, data FROM kv_store WHERE namespace = :ns ORDER BY created_at"),
@@ -117,6 +143,13 @@ def db_append(namespace: str, key: str, new_items: list) -> None:
     """
     engine = _get_engine()
     if engine is None:
+        p = _fs_path(namespace, key)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        existing = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
+        if not isinstance(existing, list):
+            existing = [existing]
+        existing.extend(new_items)
+        p.write_text(json.dumps(existing), encoding="utf-8")
         return
     with engine.connect() as conn:
         conn.execute(

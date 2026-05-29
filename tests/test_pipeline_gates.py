@@ -335,6 +335,43 @@ class TestStaleBuildGate:
         assert resp.status_code == 400
         assert "edited since the last build" in resp.json().get("detail", "")
 
+    def test_test_stream_endpoint_requires_declared_inputs(self, tmp_path: Path) -> None:
+        """The /test/stream endpoint must reject missing built-skill inputs before execution starts."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        wf = _make_workflow(skill_id="sk-abc", edited_at=1000.0)
+        skill_dir = tmp_path / "skills" / wf.slug
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "input.json").write_text(
+            '{"inputs":[{"name":"database_name","type":"string"}]}',
+            encoding="utf-8",
+        )
+        build = PluginBuild(last_built_at=2000.0, output_path=str(tmp_path), version="0.1.0")
+        plugin = Plugin(
+            id="p-1",
+            slug="test",
+            name="Test",
+            workspace_id="ws-1",
+            target_url="https://example.com",
+            status="ready",
+            created_at=0.0,
+            updated_at=0.0,
+            workflows=[wf],
+            build=build,
+        )
+
+        with patch("app.config.settings.auth_required", False), \
+             patch("app.api.plugin_routes.get_plugin", return_value=plugin):
+            client = TestClient(app)
+            resp = client.post(
+                f"/api/v1/plugins/{plugin.id}/workflows/{wf.id}/test/stream",
+                json={"inputs": {}, "headless": True},
+            )
+
+        assert resp.status_code == 400
+        assert "database_name" in resp.json().get("detail", "")
+
 
 # ─── Build Installer gate ───────────────────────────────────────────────────────
 

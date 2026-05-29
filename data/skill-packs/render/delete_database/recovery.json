@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "step_id": 2,
+      "intent": "type_textbox",
+      "target": {
+        "text": "",
+        "role": "textbox"
+      },
+      "anchors": [],
+      "fallback": {
+        "text_variants": [],
+        "role": "textbox"
+      },
+      "selector_context": {
+        "primary": "input[placeholder=\"Search\"]",
+        "alternatives": []
+      }
+    }
+  ]
+}

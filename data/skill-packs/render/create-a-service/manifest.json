@@ -1,0 +1,15 @@
+{
+  "slug": "create-a-service",
+  "name": "Create-A-Service",
+  "description": "Create a Service",
+  "version": "0.1.0",
+  "required_runtime": ">=1.0.0",
+  "company": "render",
+  "target_url": "https://dashboard.render.com/login",
+  "inputs_required": [],
+  "checksum": {
+    "execution.json": "6b055823c8871c51b0aac66daf7acfbb054609ece5a19fd0c1a67b8fa69ff06f",
+    "recovery.json": "3b60bc080ff91078dcfa9a0333e646601fd5a33e4127a1c2858c2e36226c5d9c",
+    "inputs.json": "29a0775701f835f07add30462d0aa4c855d1e695a4125d46bf7454f40e058f46"
+  }
+}

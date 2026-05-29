@@ -1,0 +1,17 @@
+{
+  "slug": "delete_database",
+  "name": "Delete Database",
+  "description": "Delete Database",
+  "version": "0.1.0",
+  "required_runtime": ">=1.0.0",
+  "company": "render",
+  "target_url": "https://dashboard.render.com",
+  "inputs_required": [
+    "service_name"
+  ],
+  "checksum": {
+    "execution.json": "a4280e63f59c6ab14c7313679e7d8720d2c46ae1fea454d06244490c0f298d8e",
+    "recovery.json": "7e6b01b483a63b1bc98d2b7a03bf5218cf20e366826b837d3fbf8a2b9ab5549e",
+    "inputs.json": "fe014a412e0c58b6ce580af0a0ab4bedd1b3e8fbf497dcb69056331a2010b18a"
+  }
+}

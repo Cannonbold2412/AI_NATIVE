@@ -546,6 +546,67 @@ def get_compiled_skill(plugin_id: str, skill_slug: str) -> dict[str, Any]:
     return {"plugin_id": plugin_id, "skill_slug": skill_slug, "files": result}
 
 
+def _compiled_skill_input_specs(plugin: Plugin, skill_slug: str) -> list[dict[str, Any]]:
+    """Read the built skill input schema used by Test Plugin execution."""
+    if plugin.build is None:
+        return []
+    try:
+        skill_dir = _skill_dir(plugin)(skill_slug)
+    except HTTPException:
+        return []
+
+    payload: Any = None
+    for fname in ("input.json", "inputs.json"):
+        path = skill_dir / fname
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            break
+        except (json.JSONDecodeError, OSError):
+            return []
+
+    raw_items: list[Any] = []
+    if isinstance(payload, list):
+        raw_items = payload
+    elif isinstance(payload, dict):
+        if isinstance(payload.get("inputs"), list):
+            raw_items = list(payload["inputs"])
+        elif isinstance(payload.get("required"), list):
+            raw_items = list(payload["required"])
+
+    specs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in raw_items:
+        if isinstance(raw, str):
+            name = raw.strip()
+            required = True
+        elif isinstance(raw, dict):
+            name = str(raw.get("name") or raw.get("id") or "").strip()
+            required = raw.get("required") is not False
+        else:
+            continue
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        specs.append({"name": name, "required": required})
+    return specs
+
+
+def _missing_required_inputs(input_specs: list[dict[str, Any]], provided: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    for spec in input_specs:
+        if spec.get("required") is False:
+            continue
+        name = str(spec.get("name") or "").strip()
+        if not name:
+            continue
+        value = provided.get(name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing.append(name)
+    return missing
+
+
 class ExecuteSkillBody(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     headless: bool = Field(default=True)
@@ -586,6 +647,12 @@ async def post_test_workflow_stream(plugin_id: str, workflow_id: str, body: Work
         raise HTTPException(
             status_code=400,
             detail="Workflow was edited since the last build. Rebuild the plugin before retesting.",
+        )
+    missing_inputs = _missing_required_inputs(_compiled_skill_input_specs(plugin, wf.slug), body.inputs)
+    if missing_inputs:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Enter required workflow inputs before testing: {', '.join(missing_inputs)}",
         )
 
     from app.services.plugin_executor import execute_skill

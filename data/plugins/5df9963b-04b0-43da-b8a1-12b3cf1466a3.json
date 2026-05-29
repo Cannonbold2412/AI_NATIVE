@@ -1,0 +1,21 @@
+{
+  "id": "5df9963b-04b0-43da-b8a1-12b3cf1466a3",
+  "slug": "pipedrive-5df9963b",
+  "name": "PipeDrive",
+  "owner_user_id": "local",
+  "workspace_id": "personal_user_3DE80U9Aq3ZkvrBAGraGZp1o7cH",
+  "target_url": "https://app.pipedrive.com/auth/login",
+  "protected_url": "https://conxa.pipedrive.com/setup-guide",
+  "protected_url_marker_text": "",
+  "status": "ready",
+  "auth": {
+    "session_id": "72b7e410-2a6f-4584-b1ba-64e33d8c98dd",
+    "captured_at": 1779851226.1288843,
+    "storage_state_path": "C:\\Users\\Lenovo\\Desktop\\AI_NATIVE\\data\\plugins\\5df9963b-04b0-43da-b8a1-12b3cf1466a3\\auth\\auth.json"
+  },
+  "workflows": [],
+  "build": null,
+  "installer": null,
+  "created_at": 1779851158.9079027,
+  "updated_at": 1779904661.1575975
+}

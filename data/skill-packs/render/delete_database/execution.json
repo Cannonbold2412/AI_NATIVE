@@ -1,0 +1,11 @@
+[
+  {
+    "type": "navigate",
+    "url": "https://dashboard.render.com/"
+  },
+  {
+    "type": "type",
+    "selector": "input[placeholder=\"Search\"]",
+    "value": "{{service_name}}"
+  }
+]
