@@ -10,7 +10,7 @@
   {
     "type": "type",
     "selector": "label:has-text(\"Search services\") + input",
-    "value": "{{search_services}}"
+    "value": "{{service_name}}"
   },
   {
     "type": "click",

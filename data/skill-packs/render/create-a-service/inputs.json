@@ -1,3 +1,14 @@
 {
-  "inputs": []
+  "inputs": [
+    {
+      "name": "blueprint_name",
+      "type": "string",
+      "description": "Blueprint Name"
+    },
+    {
+      "name": "repository_name",
+      "type": "string",
+      "description": "Repository Name"
+    }
+  ]
 }

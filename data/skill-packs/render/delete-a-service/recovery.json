@@ -2,7 +2,7 @@
   "steps": [
     {
       "step_id": 2,
-      "intent": "focus_search_services",
+      "intent": "focus_{{service_name}}",
       "target": {
         "text": "",
         "role": "input"
@@ -42,7 +42,7 @@
     },
     {
       "step_id": 3,
-      "intent": "search_services",
+      "intent": "interact_service_name",
       "target": {
         "text": "",
         "role": "textbox"

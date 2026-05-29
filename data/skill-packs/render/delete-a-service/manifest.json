@@ -6,10 +6,12 @@
   "required_runtime": ">=1.0.0",
   "company": "render",
   "target_url": "https://dashboard.render.com/login",
-  "inputs_required": [],
+  "inputs_required": [
+    "service_name"
+  ],
   "checksum": {
-    "execution.json": "247abab4cf9f31484866cf6ac0cbd5cb5bb1fd05853fc5813ca6a1e67ed190ec",
-    "recovery.json": "22189553d2319e4b2c8aef861dadf6c9a82cb3a8c83ad56035dc309b9e3866a9",
-    "inputs.json": "29a0775701f835f07add30462d0aa4c855d1e695a4125d46bf7454f40e058f46"
+    "execution.json": "1d4760ada6220ace99842d33b45b5e902c7d19e28afd9d0d806ac0e21d10b5da",
+    "recovery.json": "9005d820d29f379a53061d8508c1dced44187ec2791327e0a29fd05481b6039f",
+    "inputs.json": "fe014a412e0c58b6ce580af0a0ab4bedd1b3e8fbf497dcb69056331a2010b18a"
   }
 }

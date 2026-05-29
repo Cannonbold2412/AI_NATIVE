@@ -14,7 +14,7 @@
   {
     "type": "type",
     "selector": "label:has-text(\"Search repositories\") + input",
-    "value": "{{search_repositories}}"
+    "value": "{{repository_name}}"
   },
   {
     "type": "click",

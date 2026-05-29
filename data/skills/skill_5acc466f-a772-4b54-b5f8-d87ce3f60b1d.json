@@ -1,7 +1,7 @@
 {
   "meta": {
     "id": "skill_5acc466f-a772-4b54-b5f8-d87ce3f60b1d",
-    "version": 19,
+    "version": 25,
     "title": "Delete a Service",
     "created_at": "2026-05-27T18:19:12.307460+00:00",
     "source_session_id": "5acc466f-a772-4b54-b5f8-d87ce3f60b1d",
@@ -10,7 +10,7 @@
     "structural_fingerprint": {
       "landmarks": [
         {
-          "intent": "focus_search_services",
+          "intent": "focus_{{service_name}}",
           "primary_selector": "label:has-text(\"Search services\") + input",
           "data_testid": "",
           "aria_label": "",
@@ -18,7 +18,7 @@
           "tag": "input"
         },
         {
-          "intent": "search_services",
+          "intent": "{{service_name}}",
           "primary_selector": "label:has-text(\"Search services\") + input",
           "data_testid": "",
           "aria_label": "",
@@ -37,7 +37,15 @@
       "landmark_count": 3
     }
   },
-  "inputs": [],
+  "inputs": [
+    {
+      "id": "service_name",
+      "label": "Service Name",
+      "type": "text",
+      "default": null,
+      "options": []
+    }
+  ],
   "skills": [
     {
       "name": "recorded",
@@ -103,7 +111,7 @@
           "action": {
             "action": "focus"
           },
-          "intent": "focus_search_services",
+          "intent": "focus_{{service_name}}",
           "url": "",
           "frame": {},
           "target": {
@@ -195,8 +203,8 @@
               "normalized_text": "",
               "role": "input",
               "input_type": "text",
-              "llm_intent": "focus_search_services",
-              "final_intent": "focus_search_services"
+              "llm_intent": "focus_{{service_name}}",
+              "final_intent": "focus_{{service_name}}"
             },
             "context": {
               "parent": "div",
@@ -294,14 +302,14 @@
               ],
               "state_diff_strength": 0.0,
               "state_diff_as_hint": true,
-              "final_intent": "focus_search_services",
+              "final_intent": "focus_{{service_name}}",
               "intent_validation_primary": true
             },
             "assertions": []
           },
           "recovery": {
-            "intent": "focus_search_services",
-            "final_intent": "focus_search_services",
+            "intent": "focus_{{service_name}}",
+            "final_intent": "focus_{{service_name}}",
             "anchors": [
               {
                 "element": "search bar for services",
@@ -389,9 +397,9 @@
         {
           "action": {
             "action": "type",
-            "value": "{{search_services}}"
+            "value": "{{service_name}}"
           },
-          "intent": "search_services",
+          "intent": "interact_service_name",
           "url": "",
           "frame": {},
           "target": {
@@ -483,8 +491,8 @@
               "normalized_text": "",
               "role": "input",
               "input_type": "text",
-              "llm_intent": "search_services",
-              "final_intent": "search_services"
+              "llm_intent": "interact_service_name",
+              "final_intent": "interact_service_name"
             },
             "context": {
               "parent": "div",
@@ -564,8 +572,8 @@
               "dom_fingerprint": "703020a4a8e1c4b5f1a038eeca076ca77df90bb018c7c7453162aecd4ce191f9"
             }
           },
-          "value": "{{search_services}}",
-          "input_binding": "search_services",
+          "value": "{{service_name}}",
+          "input_binding": "{{service_name}}",
           "validation": {
             "wait_for": {
               "type": "none",
@@ -582,14 +590,14 @@
               ],
               "state_diff_strength": 0.0,
               "state_diff_as_hint": true,
-              "final_intent": "search_services",
+              "final_intent": "{{service_name}}",
               "intent_validation_primary": true
             },
             "assertions": []
           },
           "recovery": {
-            "intent": "search_services",
-            "final_intent": "search_services",
+            "intent": "interact_service_name",
+            "final_intent": "interact_service_name",
             "anchors": [
               {
                 "element": "service search bar",
@@ -2666,7 +2674,7 @@
       },
       {
         "index": 1,
-        "intent": "focus_search_services",
+        "intent": "focus_{{service_name}}",
         "selector": "label:has-text(\"Search services\") + input",
         "confidence": 1.0,
         "confidence_breakdown": {},
@@ -2677,13 +2685,13 @@
       },
       {
         "index": 2,
-        "intent": "search_services",
+        "intent": "{{service_name}}",
         "selector": "label:has-text(\"Search services\") + input",
         "confidence": 1.0,
         "confidence_breakdown": {},
         "source": "heuristic",
         "reasoning": "",
-        "input_binding": "search_services",
+        "input_binding": "{{service_name}}",
         "warnings": []
       },
       {

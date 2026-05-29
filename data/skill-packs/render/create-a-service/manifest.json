@@ -6,10 +6,13 @@
   "required_runtime": ">=1.0.0",
   "company": "render",
   "target_url": "https://dashboard.render.com/login",
-  "inputs_required": [],
+  "inputs_required": [
+    "blueprint_name",
+    "repository_name"
+  ],
   "checksum": {
-    "execution.json": "6b055823c8871c51b0aac66daf7acfbb054609ece5a19fd0c1a67b8fa69ff06f",
+    "execution.json": "1cbfce5b2511388f538d1f25d2aadeff18293355b0e125bc3e00527840b75074",
     "recovery.json": "3b60bc080ff91078dcfa9a0333e646601fd5a33e4127a1c2858c2e36226c5d9c",
-    "inputs.json": "29a0775701f835f07add30462d0aa4c855d1e695a4125d46bf7454f40e058f46"
+    "inputs.json": "4d1f35acb45967a23459aca042c563064c1c3023ca59394ded79b014f9992f6e"
   }
 }

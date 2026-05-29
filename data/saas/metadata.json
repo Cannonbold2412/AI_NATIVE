@@ -11,7 +11,7 @@
       "email": null,
       "name": null,
       "auth_provider": "clerk",
-      "updated_at": 1779907652.0308776
+      "updated_at": 1780046905.871776
     }
   },
   "workspaces": {
@@ -26,7 +26,7 @@
       "id": "personal_user_3DE80U9Aq3ZkvrBAGraGZp1o7cH",
       "slug": "personal-user-3de80u9aq3zkvrbagragzp1o7ch",
       "name": "http://localhost:3000",
-      "updated_at": 1779907652.0308776,
+      "updated_at": 1780046905.871776,
       "legacy_imported_at": 1779851158.9043024
     }
   },
