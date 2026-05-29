@@ -50,6 +50,7 @@ _LOGIN_MARKERS = frozenset(
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 _PLACEHOLDER_RE = re.compile(r"^\{\{[a-zA-Z][a-zA-Z0-9_]*\}\}$")
+_PLACEHOLDER_NAME_RE = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
 _TEXT_SELECTOR_RE = re.compile(r"^text=(?P<quote>['\"]?)(?P<text>.+?)(?P=quote)$")
 
 
@@ -407,6 +408,50 @@ def _normalize_saved_skill_inputs(inputs: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _placeholder_names_from_payload(payload: Any) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def visit(value: Any) -> None:
+        if isinstance(value, str):
+            for match in _PLACEHOLDER_NAME_RE.finditer(value):
+                name = match.group(1)
+                if name not in seen:
+                    seen.add(name)
+                    names.append(name)
+            return
+        if isinstance(value, list):
+            for item in value:
+                visit(item)
+            return
+        if isinstance(value, dict):
+            for item in value.values():
+                visit(item)
+
+    visit(payload)
+    return names
+
+
+def _merge_saved_inputs_with_execution_placeholders(
+    declared_inputs: list[Any],
+    execution_steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    inputs = _normalize_saved_skill_inputs(declared_inputs)
+    seen = {str(item.get("name") or "") for item in inputs}
+    for name in _placeholder_names_from_payload(execution_steps):
+        if name in seen:
+            continue
+        seen.add(name)
+        inputs.append(
+            {
+                "name": name,
+                "type": "string",
+                "description": f"Enter {name.replace('_', ' ')}",
+            }
+        )
+    return inputs
+
+
 def _render_saved_skill_markdown(title: str, inputs: list[dict[str, Any]], execution_steps: list[dict[str, Any]]) -> str:
     lines = [f"# {title}", "", "## Inputs"]
     if inputs:
@@ -717,7 +762,10 @@ def _build_workflow_from_saved_skill(
     if not execution_steps:
         raise ValueError(f"Saved skill {meta.get('id') or workflow_slug!r} has no executable steps.")
 
-    inputs = _normalize_saved_skill_inputs(list(saved_skill.get("inputs") or []))
+    inputs = _merge_saved_inputs_with_execution_placeholders(
+        list(saved_skill.get("inputs") or []),
+        execution_steps,
+    )
     skill_dir = bundle_root / "skills" / workflow_slug
     if skill_dir.exists():
         shutil.rmtree(skill_dir)
@@ -873,8 +921,15 @@ def _write_skill_packs_format(
         from app.db import db_set
         db_set("tracking_tokens", company, {"token": _tracking_token, "version": version})
 
+    # In local dev (no secret, no explicit URL overrides), point to the local API server
+    # so the dashboard at localhost receives run data immediately.
+    _explicit_url  = os.environ.get("CONXA_TRACKING_EVENTS_URL", "").strip()
+    _explicit_base = os.environ.get("CONXA_API_URL", "").strip()
+    if not _tracking_secret and not _explicit_url and not _explicit_base:
+        tracking_events_url = f"http://127.0.0.1:{settings.port}/api/tracking/{company}/events"
+
     pack["tracking"] = {
-        "enabled":          bool(_tracking_secret),
+        "enabled":          True,
         "tracking_url":     tracking_events_url,
         "tracking_token":   _tracking_token,
         "company_id":       company,

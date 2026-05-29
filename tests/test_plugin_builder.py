@@ -341,6 +341,45 @@ class TestSavedSkillJsonBuild:
         assert recovery["steps"][1]["selector_context"]["primary"] == "text={{service_name}}"
         assert recovery["steps"][2]["selector_context"]["primary"] == 'input[name="sudoCommand"]'
 
+    def test_saved_skill_export_infers_missing_inputs_from_execution_placeholders(self, tmp_path):
+        saved_skill = {
+            "meta": {"id": "skill_123", "title": "Create Service"},
+            "inputs": [],
+            "skills": [
+                {
+                    "steps": [
+                        {
+                            "action": "type",
+                            "target": {"primary_selector": 'label:has-text("Search repositories") + input'},
+                            "value": "{{search_repositories}}",
+                        },
+                        {
+                            "action": "click",
+                            "target": {"primary_selector": 'label:has-text("{{repository_name}}") + button'},
+                        },
+                        {
+                            "action": "type",
+                            "target": {"primary_selector": 'input[name="name"]'},
+                            "value": "{{blueprint_name}}",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        _build_workflow_from_saved_skill(
+            bundle_root=tmp_path,
+            workflow_slug="create_service",
+            saved_skill=saved_skill,
+        )
+
+        input_json = json.loads((tmp_path / "skills" / "create_service" / "input.json").read_text(encoding="utf-8"))
+        assert [item["name"] for item in input_json["inputs"]] == [
+            "search_repositories",
+            "repository_name",
+            "blueprint_name",
+        ]
+
     def test_saved_skill_recovery_repairs_hardcoded_search_result_click(self, tmp_path):
         saved_skill = {
             "meta": {"id": "skill_123", "title": "Delete Database"},
