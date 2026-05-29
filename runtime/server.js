@@ -81,7 +81,7 @@ const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontext
 const skillLoader  = require("./skill_loader");
 const sync         = require("./sync");
 const authManager  = require("./auth_manager");
-const { runPlan, enrichStepsWithRecovery, appendRecoveryEvent, clearRetryBudget, checkRetryBudget } = require("./run");
+const { runPlan, enrichStepsWithRecovery, appendRecoveryEvent, clearRetryBudget, checkRetryBudget, isAuthFailure } = require("./run");
 const { getCachedBrowser, gracefulShutdown } = require("./browser");
 const { createTracker, mapErrorToCode } = require("./tracker");
 
@@ -323,12 +323,15 @@ async function _buildFailureResponse(page, err, resolvedEntry) {
     });
   } catch (_) {}
 
-  const resumeHint = failedAt !== null
+  const sessionExpiredHint = err.session_expired
+    ? `\nSession expired — the workflow was redirected to: ${err.login_url || url}\nAsk the user to re-authenticate, then call execute_skill with resume_from: ${failedAt ?? 0}.`
+    : "";
+  const resumeHint = !err.session_expired && failedAt !== null
     ? `\nFix the selector, then call execute_skill with resume_from: ${failedAt}.`
     : "";
 
   const content = [
-    { type: "text", text: `Execution failed at step ${failedAt !== null ? failedAt + 1 : "?"}: ${err.message}\nPage URL: ${url}${resumeHint}` },
+    { type: "text", text: `Execution failed at step ${failedAt !== null ? failedAt + 1 : "?"}: ${err.message}\nPage URL: ${url}${sessionExpiredHint}${resumeHint}` },
     { type: "text", text: "\nLayer 4 — vision recovery" },
   ];
 
@@ -557,18 +560,45 @@ async function _handleTool(name, args) {
 
       for (let si = 0; si < resolved.length; si++) {
         const { entry, steps, inputs, resumeFrom } = resolved[si];
-        const startAt = si === 0 ? resumeFrom : 0;
-        try {
-          const result = await runPlan(page, steps, inputs, startAt, entry.slug, {
-            onStep:      (i) => { if (activeExecution) activeExecution.step = i; },
-            cancelCheck: () => activeExecution?.cancelRequested,
-            tracker:     _runTracker,
-            observerMs:  _observerMs,
-          });
-          _totalRecovered += (result && result.recoveredSteps) ? result.recoveredSteps : 0;
-        } catch (runErr) {
-          runErr.fromEntry = entry;
-          throw runErr;
+        let startAt = si === 0 ? resumeFrom : 0;
+        let authRetried = false;
+
+        while (true) { // eslint-disable-line no-constant-condition
+          try {
+            const result = await runPlan(page, steps, inputs, startAt, entry.slug, {
+              onStep:      (i) => { if (activeExecution) activeExecution.step = i; },
+              cancelCheck: () => activeExecution?.cancelRequested,
+              tracker:     _runTracker,
+              observerMs:  _observerMs,
+            });
+            _totalRecovered += (result && result.recoveredSteps) ? result.recoveredSteps : 0;
+            break;
+          } catch (runErr) {
+            // Auth-failure recovery (Phase 5): detect login redirect, refresh session, resume.
+            const failedStep = runErr.failedAt ?? null;
+            if (!authRetried && failedStep !== null && await isAuthFailure(page)) {
+              authRetried = true;
+              appendRecoveryEvent({ event: "auth_failure_detected", slug: entry.slug, step_index: failedStep });
+              const loginUrl = entry.manifest?.login_url || entry.manifest?.target_url || entry.manifest?.entry_url || page.url();
+              const refreshResult = await authManager.refreshSession(
+                entry.company, loginUrl, _context, SESSIONS_DIR
+              );
+              if (refreshResult.ok) {
+                appendRecoveryEvent({ event: "auth_refreshed", slug: entry.slug });
+                startAt = failedStep; // resume from the step that failed
+                continue;
+              }
+              // Headless or retry limit — surface to Claude as session_expired.
+              const authErr = Object.assign(
+                new Error(refreshResult.message),
+                { session_expired: true, login_url: refreshResult.login_url, failedAt: failedStep }
+              );
+              authErr.fromEntry = entry;
+              throw authErr;
+            }
+            runErr.fromEntry = entry;
+            throw runErr;
+          }
         }
       }
 

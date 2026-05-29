@@ -165,6 +165,56 @@ function loadRawSession(company, sessionsDir) {
   try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : null; } catch (_) { return null; }
 }
 
+// Max attempts before escalating to Tier 5 (human review).
+const AUTH_REFRESH_MAX_ATTEMPTS = 3;
+const _authRefreshAttempts = new Map();
+
+/**
+ * Attempt to re-authenticate an expired session.
+ *
+ * - Headed mode (DISPLAY set or Windows): opens Playwright to loginUrl, waits
+ *   for the user to complete login (up to 3 min), saves fresh storageState.
+ * - Headless (no DISPLAY on Linux): returns immediately with an error payload
+ *   so Claude can surface "Re-login required" to the user — never hangs.
+ *
+ * Returns { ok: true } on success, { ok: false, session_expired: true, login_url, message } on failure.
+ */
+async function refreshSession(company, loginUrl, context, sessionsDir) {
+  const attempts = (_authRefreshAttempts.get(company) || 0) + 1;
+  _authRefreshAttempts.set(company, attempts);
+  if (attempts > AUTH_REFRESH_MAX_ATTEMPTS) {
+    return { ok: false, session_expired: true, login_url: loginUrl, message: "Auth refresh failed 3 times — escalating to human review." };
+  }
+
+  const headless = process.platform !== "win32" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
+  if (headless) {
+    return { ok: false, session_expired: true, login_url: loginUrl, message: "Re-login required (headless mode — no browser available)." };
+  }
+
+  // Open a new page in the existing context so cookies / storage are fresh.
+  let authPage = null;
+  try {
+    authPage = await context.newPage();
+    await authPage.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // Wait for the user to land on a non-login URL (up to 3 minutes).
+    await authPage.waitForURL(
+      (url) => !AUTH_FAILURE_URL_RE.test(url.pathname),
+      { timeout: 180_000 }
+    );
+    const state = await context.storageState();
+    saveRawSession(company, state, sessionsDir);
+    _authRefreshAttempts.delete(company);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, session_expired: true, login_url: loginUrl, message: `Re-login timed out or failed: ${e.message}` };
+  } finally {
+    if (authPage) await authPage.close().catch(() => {});
+  }
+}
+
+// Regex re-export so run.js can share the same pattern without duplicating it.
+const AUTH_FAILURE_URL_RE = /\/(login|signin|sign-in|auth|logout|session-expired)(\/|$|\?)/i;
+
 module.exports = {
   getToken,
   setToken,
@@ -174,4 +224,5 @@ module.exports = {
   loadDecryptedSession,
   saveRawSession,
   loadRawSession,
+  refreshSession,
 };

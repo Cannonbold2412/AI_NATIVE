@@ -732,6 +732,20 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
   return { recoveredSteps };
 }
 
+// Auth-failure detection — login redirect or session-expired page heuristics.
+const AUTH_FAILURE_URL_RE = /\/(login|signin|sign-in|auth|logout|session-expired)(\/|$|\?)/i;
+const AUTH_FAILURE_TITLE_RE = /sign\s*in|log\s*in|session\s*expired|authentication\s*required/i;
+
+async function isAuthFailure(page) {
+  const url = page.url();
+  if (AUTH_FAILURE_URL_RE.test(url)) return true;
+  try {
+    const title = await page.title();
+    if (AUTH_FAILURE_TITLE_RE.test(title)) return true;
+  } catch (_) {}
+  return false;
+}
+
 module.exports = {
   appendRecoveryEvent,
   interpolate,
@@ -742,4 +756,5 @@ module.exports = {
   checkRetryBudget,
   clearRetryBudget,
   mapErrorToCode,
+  isAuthFailure,
 };
