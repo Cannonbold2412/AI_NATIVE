@@ -52,6 +52,7 @@ async def execute_skill_via_runtime(
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        limit=64 * 1024 * 1024,
     )
 
     try:
@@ -83,16 +84,28 @@ def _write(proc: asyncio.subprocess.Process, msg: dict) -> None:
     proc.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode())
 
 
-async def _read(proc: asyncio.subprocess.Process) -> dict | None:
+async def _read(
+    proc: asyncio.subprocess.Process,
+    log_sink: Callable[[str], None] | None = None,
+) -> dict | None:
     try:
         line = await proc.stdout.readline()
-    except Exception:
+    except ValueError as exc:
+        if log_sink:
+            log_sink(f"Runtime returned an oversized stdout frame: {exc}")
+        return None
+    except Exception as exc:
+        if log_sink:
+            log_sink(f"Runtime stdout read failed: {exc}")
         return None
     if not line:
         return None
     try:
         return json.loads(line.decode())
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        if log_sink:
+            preview = line[:200].decode(errors="replace").strip()
+            log_sink(f"Runtime returned non-JSON stdout: {preview} ({exc})")
         return None
 
 
@@ -155,7 +168,7 @@ async def _drive_mcp(
         })
         await proc.stdin.drain()
 
-        init_resp = await _read(proc)
+        init_resp = await _read(proc, log_sink)
         if init_resp is None or init_resp.get("id") != 0:
             raise RuntimeError("MCP handshake failed — runtime did not respond to initialize.")
         if "error" in init_resp:
@@ -182,7 +195,7 @@ async def _drive_mcp(
 
         # Read until we get the id=1 response (skip any unsolicited notifications)
         while True:
-            resp = await _read(proc)
+            resp = await _read(proc, log_sink)
             if resp is None:
                 raise RuntimeError("Runtime closed the connection before returning a result.")
             if resp.get("id") == 1:
