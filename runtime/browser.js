@@ -114,11 +114,17 @@ function _resolveProtectedUrl(company, pack = {}) {
   return String((pack.protected_url || "")).trim();
 }
 
-function _isAuthenticated(page, protectedUrl) {
-  try {
-    const u = new URL(page.url());
-    return u.hostname === new URL(protectedUrl).hostname && !u.pathname.startsWith("/login");
-  } catch (_) { return false; }
+async function _isAuthenticated(page, protectedUrl) {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    try {
+      const u = new URL(page.url());
+      if (u.hostname === new URL(protectedUrl).hostname && !u.pathname.startsWith("/login"))
+        return true;
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return false;
 }
 
 async function _captureInteractiveAuth(company, targetUrl) {
@@ -195,6 +201,7 @@ async function _captureInteractiveAuth(company, targetUrl) {
 
 async function getAuthContext(company, authManager, opts = {}) {
   const headless = opts.headless !== false; // default true
+  let _hadEncryptedSession = false; // set true if encrypted path ran; raw session is then stale
   // Resolve pack config for this company
   const packPath = path.join(CONXA_DIR, "skill-packs", company, "pack.json");
   let pack = {};
@@ -214,16 +221,17 @@ async function getAuthContext(company, authManager, opts = {}) {
           if (protectedUrl) {
             const page = await context.newPage();
             await page.goto(protectedUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-            await page.waitForTimeout(1500);
-            if (_isAuthenticated(page, protectedUrl)) {
+            if (await _isAuthenticated(page, protectedUrl)) {
               _writeAuthMeta(company, { protected_url: protectedUrl });
               await page.close();
               return { browser, context, protectedUrl, sessionSource: "encrypted" };
             }
             await browser.close();
-            // Session expired — fall through to raw session check
+            // Session expired — skip raw session (encrypted takes precedence), go to interactive auth
+            _hadEncryptedSession = true;
           } else {
             await browser.close();
+            _hadEncryptedSession = true;
           }
         }
       }
@@ -231,8 +239,9 @@ async function getAuthContext(company, authManager, opts = {}) {
   }
 
   // Try raw session (installer-included initial session, not yet encrypted)
+  // Skip if encrypted path already ran — raw session is then stale and should not override
   const rawSessionPath = path.join(SESSIONS_DIR, `${company}_raw_state.json`);
-  if (fs.existsSync(rawSessionPath)) {
+  if (!_hadEncryptedSession && fs.existsSync(rawSessionPath)) {
     let stored;
     try { stored = JSON.parse(fs.readFileSync(rawSessionPath, "utf8")); } catch (_) {}
     if (stored) {
@@ -241,8 +250,7 @@ async function getAuthContext(company, authManager, opts = {}) {
       if (protectedUrl) {
         const page = await context.newPage();
         await page.goto(protectedUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-        await page.waitForTimeout(1500);
-        if (_isAuthenticated(page, protectedUrl)) {
+        if (await _isAuthenticated(page, protectedUrl)) {
           _writeAuthMeta(company, { protected_url: protectedUrl });
           await page.close();
           return { browser, context, protectedUrl, sessionSource: "raw" };
@@ -281,8 +289,7 @@ async function getAuthContext(company, authManager, opts = {}) {
   const context  = await browser.newContext({ storageState: state, acceptDownloads: true });
   const page = await context.newPage();
   await page.goto(capturedProtectedUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-  await page.waitForTimeout(1500);
-  if (!_isAuthenticated(page, capturedProtectedUrl)) {
+  if (!await _isAuthenticated(page, capturedProtectedUrl)) {
     await browser.close();
     throw new Error("Authenticated navigation failed after login — unexpected error.");
   }
