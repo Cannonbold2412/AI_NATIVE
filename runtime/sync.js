@@ -88,21 +88,32 @@ async function _doSync(skillPacksDir, authManager, log) {
 
     const token = await authManager.getToken(company);
     if (!token) {
-      log(`[sync] ${company}: no auth token — skipping`);
+      log(`[sync:error] ${company} no auth token — skipping`);
       continue;
     }
 
     let delta;
-    try {
+    {
       const url = `${syncEndpoint}?since=${encodeURIComponent(pack.skill_pack_version || "0")}`;
-      delta = await _fetchJSON(url, token, 8000);
-    } catch (e) {
-      log(`[sync] ${company}: delta fetch failed — ${e.message}`);
-      continue;
+      let lastErr;
+      for (const waitMs of [0, 2000, 4000]) {
+        if (waitMs) await new Promise((r) => setTimeout(r, waitMs));
+        try {
+          delta = await _fetchJSON(url, token, 10000);
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      if (lastErr) {
+        log(`[sync:error] ${company} delta fetch failed — ${lastErr.message}`);
+        continue;
+      }
     }
 
     if (!delta.files || delta.files.length === 0) {
-      log(`[sync] ${company}: up to date`);
+      log(`[sync:status] ${company} up-to-date`);
       continue;
     }
 
@@ -124,7 +135,7 @@ async function _doSync(skillPacksDir, authManager, log) {
         }
         atomicWrite(targetPath, content, fileEntry.sha256);
       } catch (e) {
-        log(`[sync] ${company}/${fileEntry.path}: failed — ${e.message}`);
+        log(`[sync:error] ${company}/${fileEntry.path}: file write failed — ${e.message}`);
         for (const slug of updatedSlugs)
           restoreSkillBackup(path.join(skillPacksDir, company, slug));
         allOk = false;
@@ -147,12 +158,14 @@ async function _doSync(skillPacksDir, authManager, log) {
       try { if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true }); } catch (_) {}
     }
 
-    log(`[sync] ${company}: updated to ${delta.current_version} (${delta.files.length} files)`);
+    log(`[sync:status] ${company} updated v${pack.skill_pack_version || "0"}→${delta.current_version} (${delta.files.length} file${delta.files.length !== 1 ? "s" : ""})`);
   }
 }
 
-// Public: run sync with a hard timeout
-async function syncSkillPacks(skillPacksDir, authManager, { timeoutMs = 3000, log = console.error } = {}) {
+// Public: run sync with a hard timeout.
+// Default 15s — increased from 3s to accommodate corporate networks with higher latency.
+// Server.js callers that specified timeoutMs:3000 should migrate to timeoutMs:15000.
+async function syncSkillPacks(skillPacksDir, authManager, { timeoutMs = 15000, log = console.error } = {}) {
   await Promise.race([
     _doSync(skillPacksDir, authManager, log),
     new Promise((_, reject) => setTimeout(() => reject(new Error("sync timeout")), timeoutMs)),

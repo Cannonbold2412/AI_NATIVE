@@ -1,0 +1,64 @@
+name: Build Studio
+
+# Builds the Conxa Build Studio Electron app (NSIS installer for Windows).
+# Publishes to a private GitHub Release on the stable or beta channel.
+# Tags: studio-v1.2.3 → stable, studio-v1.2.3-beta.1 → beta
+
+on:
+  push:
+    tags:
+      - "studio-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. studio-v1.2.0)"
+        required: true
+
+jobs:
+  build-studio:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    env:
+      STUDIO_VERSION: ${{ github.ref_name || inputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # used by electron-builder publish
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: conxa-builder/electron/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt pyinstaller
+        working-directory: .
+
+      - name: Bundle Python backend with PyInstaller
+        run: pyinstaller conxa-builder/pyinstaller.spec --noconfirm
+        working-directory: .
+
+      - name: Install Electron dependencies
+        working-directory: conxa-builder/electron
+        run: npm ci
+
+      - name: Build renderer
+        working-directory: conxa-builder/electron
+        run: npm run build:renderer
+
+      - name: Build Studio installer (electron-builder)
+        working-directory: conxa-builder/electron
+        run: npx electron-builder --config electron-builder.yml --win
+        env:
+          # electron-builder reads GH_TOKEN to publish the release
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

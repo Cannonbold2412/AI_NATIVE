@@ -1,0 +1,100 @@
+name: Build Runtime
+
+# Builds runtime-win.exe and keytar.node, publishes to a private GitHub Release.
+# Also posts a runtime-manifest.json to the cloud API so the self-updater can
+# pick up the new version on the next cold start.
+
+on:
+  push:
+    tags:
+      - "runtime-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. runtime-v1.2.0)"
+        required: true
+
+jobs:
+  build-runtime:
+    runs-on: windows-latest
+    permissions:
+      contents: write  # needed to create GitHub Releases
+
+    env:
+      RUNTIME_VERSION: ${{ github.ref_name || inputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: runtime/package-lock.json
+
+      - name: Install build tools (NASM + VS Build Tools for keytar)
+        run: |
+          choco install nasm --no-progress -y
+          choco install visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools" --no-progress -y
+        shell: pwsh
+
+      - name: Install runtime dependencies
+        working-directory: runtime
+        run: npm ci
+
+      - name: Build runtime-win.exe
+        working-directory: runtime
+        run: npm run build:win
+
+      - name: Compute SHA-256 checksums
+        working-directory: runtime
+        run: |
+          $winHash = (Get-FileHash dist/runtime-win.exe -Algorithm SHA256).Hash.ToLower()
+          $keytarHash = (Get-FileHash keytar.node -Algorithm SHA256).Hash.ToLower()
+          Write-Output "RUNTIME_WIN_SHA256=$winHash"   | Out-File -Append $env:GITHUB_ENV
+          Write-Output "KEYTAR_SHA256=$keytarHash"      | Out-File -Append $env:GITHUB_ENV
+          Write-Output "runtime-win.exe: $winHash"
+          Write-Output "keytar.node:     $keytarHash"
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RUNTIME_VERSION }}
+          name: Runtime ${{ env.RUNTIME_VERSION }}
+          body: |
+            ## Runtime ${{ env.RUNTIME_VERSION }}
+
+            ### SHA-256 checksums
+            ```
+            runtime-win.exe  ${{ env.RUNTIME_WIN_SHA256 }}
+            keytar.node      ${{ env.KEYTAR_SHA256 }}
+            ```
+          files: |
+            runtime/dist/runtime-win.exe
+            runtime/keytar.node
+          prerelease: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish runtime-manifest to cloud API
+        if: vars.CLOUD_API_URL != ''
+        run: |
+          $body = @{
+            version               = "$env:RUNTIME_VERSION"
+            url                   = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RUNTIME_VERSION/runtime-win.exe"
+            sha256                = "$env:RUNTIME_WIN_SHA256"
+            min_skill_pack_version = "0.3.0"
+            playwright_version    = "1.49.0"
+            chromium_revision     = "1148460"
+          } | ConvertTo-Json
+          Invoke-RestMethod -Uri "$env:CLOUD_API_URL/api/v1/updates/runtime-manifest-admin" `
+            -Method POST -Body $body -ContentType "application/json" `
+            -Headers @{ Authorization = "Bearer $env:CLOUD_ADMIN_TOKEN" }
+        shell: pwsh
+        env:
+          CLOUD_API_URL: ${{ vars.CLOUD_API_URL }}
+          CLOUD_ADMIN_TOKEN: ${{ secrets.CLOUD_ADMIN_TOKEN }}

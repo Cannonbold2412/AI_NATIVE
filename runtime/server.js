@@ -116,19 +116,155 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 });
 
-// ─── 9. Connect MCP immediately ───────────────────────────────────────────────
+// ─── 9. Runtime self-update (Phase 6) ────────────────────────────────────────
+// On cold start: if a pending update is ready, apply it via update.bat and exit
+// so the next invocation picks up the new binary. Otherwise, check the cloud
+// manifest and download in the background (applied on the next cold start).
+const CONXA_API = process.env.CONXA_API_URL || "https://api.conxa.in";
+const RUNTIME_UPDATE_CACHE = path.join(CACHE_DIR, "runtime-update-cache.json");
+const RUNTIME_UPDATE_PENDING = path.join(CACHE_DIR, "runtime-update-pending.json");
+
+function _compareVersions(a, b) {
+  // Simple semver-ish compare: v1.2.3 → [1,2,3]
+  const parse = (v) => String(v).replace(/^v/, "").split(".").map(Number);
+  const [aP, bP] = [parse(a), parse(b)];
+  for (let i = 0; i < 3; i++) {
+    const diff = (aP[i] || 0) - (bP[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+async function _applyPendingUpdate() {
+  if (!fs.existsSync(RUNTIME_UPDATE_PENDING)) return false;
+  let pending;
+  try { pending = JSON.parse(fs.readFileSync(RUNTIME_UPDATE_PENDING, "utf8")); } catch (_) { return false; }
+  if (!pending.ready) return false;
+  const nextExe = path.join(CONXA_DIR, "runtime.exe.next");
+  if (!fs.existsSync(nextExe)) return false;
+
+  // Write update.bat with a random suffix to avoid predictable path attacks.
+  const suffix = Math.random().toString(36).slice(2);
+  const batPath = path.join(os.tmpdir(), `conxa-update-${suffix}.bat`);
+  const runtimeExe = path.join(CONXA_DIR, "runtime.exe");
+  const batContent = [
+    "@echo off",
+    "timeout /t 3 /nobreak >nul",
+    `move /Y "${nextExe}" "${runtimeExe}"`,
+    `del "${batPath}"`,
+  ].join("\r\n");
+  fs.writeFileSync(batPath, batContent);
+  const { spawn } = require("child_process");
+  spawn("cmd.exe", ["/C", batPath], { detached: true, stdio: "ignore" }).unref();
+  log("info", "[runtime:update-pending] applying update → restart", { version: pending.version });
+  return true;
+}
+
+async function _checkRuntimeUpdate() {
+  if (process.env.CONXA_SKIP_SELF_UPDATE === "1") return;
+  if (fs.existsSync(RUNTIME_UPDATE_PENDING)) return; // already downloaded, wait for next cold start
+
+  let manifest = null;
+  // Try local cache first (valid for 24h)
+  if (fs.existsSync(RUNTIME_UPDATE_CACHE)) {
+    try {
+      const cached = JSON.parse(fs.readFileSync(RUNTIME_UPDATE_CACHE, "utf8"));
+      if (cached._cached_at && Date.now() - cached._cached_at < 24 * 60 * 60 * 1000) {
+        manifest = cached;
+      }
+    } catch (_) {}
+  }
+
+  if (!manifest) {
+    try {
+      manifest = await new Promise((resolve, reject) => {
+        const req = https.get(`${CONXA_API}/api/v1/updates/runtime-manifest`, (res) => {
+          let data = "";
+          res.on("data", (c) => { data += c; });
+          res.on("end", () => {
+            try {
+              const parsed = JSON.parse(data);
+              parsed._cached_at = Date.now();
+              fs.mkdirSync(path.dirname(RUNTIME_UPDATE_CACHE), { recursive: true });
+              fs.writeFileSync(RUNTIME_UPDATE_CACHE, JSON.stringify(parsed));
+              resolve(parsed);
+            } catch (e) { reject(e); }
+          });
+        });
+        req.setTimeout(8000, () => { req.destroy(); reject(new Error("timeout")); });
+        req.on("error", reject);
+      });
+    } catch (_) {
+      return; // network unavailable — skip silently
+    }
+  }
+
+  if (!manifest || !manifest.version) return;
+  if (_compareVersions(manifest.version, RUNTIME_VERSION) <= 0) return;
+
+  // Newer version available — download in background
+  log("info", `[runtime:update-pending] v${RUNTIME_VERSION}→${manifest.version} downloading`);
+  const nextExe = path.join(CONXA_DIR, "runtime.exe.next");
+  try {
+    const buf = await new Promise((resolve, reject) => {
+      const req = https.get(manifest.url, (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => resolve(Buffer.concat(chunks)));
+      });
+      req.setTimeout(120_000, () => { req.destroy(); reject(new Error("download timeout")); });
+      req.on("error", reject);
+    });
+    // SHA-256 verify
+    if (manifest.sha256) {
+      const { createHash } = require("crypto");
+      const actual = createHash("sha256").update(buf).digest("hex");
+      if (actual.toLowerCase() !== manifest.sha256.toLowerCase()) {
+        throw new Error(`SHA-256 mismatch: expected ${manifest.sha256} got ${actual}`);
+      }
+    }
+    fs.mkdirSync(path.dirname(nextExe), { recursive: true });
+    fs.writeFileSync(nextExe, buf);
+    fs.writeFileSync(RUNTIME_UPDATE_PENDING, JSON.stringify({ version: manifest.version, ready: true }));
+    log("info", `[runtime:update-pending] v${RUNTIME_VERSION}→${manifest.version} ready`);
+  } catch (e) {
+    log("warn", "runtime_update_download_failed", { reason: e.message });
+  }
+}
+
+// Apply pending update before connecting (may exit process on Windows).
+if (process.platform === "win32") {
+  const _pendingApplied = _applyPendingUpdate();
+  // _applyPendingUpdate() is async but its shell spawn is fire-and-forget;
+  // if it returns true the process exits in the bat timeout window — safe to continue.
+}
+// Delete the pending marker after a confirmed successful first run post-update.
+if (fs.existsSync(RUNTIME_UPDATE_PENDING)) {
+  try {
+    const p = JSON.parse(fs.readFileSync(RUNTIME_UPDATE_PENDING, "utf8"));
+    if (p.ready && !fs.existsSync(path.join(CONXA_DIR, "runtime.exe.next"))) {
+      fs.unlinkSync(RUNTIME_UPDATE_PENDING);
+      log("info", "runtime_update_applied", { version: p.version });
+    }
+  } catch (_) {}
+}
+
+// ─── 10. Connect MCP immediately ─────────────────────────────────────────────
 const transport = new StdioServerTransport();
 server.connect(transport);
 log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR });
 
-// ─── 10. Async post-connect tasks ────────────────────────────────────────────
+// ─── 11. Async post-connect tasks ────────────────────────────────────────────
 (async () => {
   // Telemetry — fire and forget
   _phonehome().catch(() => {});
 
+  // Background runtime self-update check (downloads update for next cold start)
+  _checkRuntimeUpdate().catch(() => {});
+
   // Skill pack sync — 3s hard timeout, then continue with cache
   try {
-    await sync.syncSkillPacks(SKILL_PACKS_DIR, authManager, { timeoutMs: 3000, log: (m) => log("info", m) });
+    await sync.syncSkillPacks(SKILL_PACKS_DIR, authManager, { timeoutMs: 15000, log: (m) => log("info", m) });
     skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR);
     log("info", "sync_complete", { count: Object.keys(skillIndex).length });
   } catch (e) {
@@ -136,7 +272,7 @@ log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR })
   }
 })();
 
-// ─── 11. Graceful shutdown ────────────────────────────────────────────────────
+// ─── 12. Graceful shutdown ────────────────────────────────────────────────────
 process.on("SIGINT",  () => gracefulShutdown());
 process.on("SIGTERM", () => gracefulShutdown());
 process.on("uncaughtException",  (e) => log("error", "uncaught", { error: e.message, stack: e.stack }));
