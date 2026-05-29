@@ -158,7 +158,7 @@ function _toolDefinitions() {
     },
     {
       name: "execute_skill",
-      description: "Execute a workflow skill. ALWAYS ask the user 'Do you want to watch while I work?' before calling this tool — pass watch: true if they say yes, watch: false if no. Returns result + screenshot on success, or failure data for recovery.",
+      description: "Execute a workflow skill. Default watch: true (visible browser). Pass watch: false only if the user explicitly asks to run in the background. Returns result on success, or failure data for recovery.",
       inputSchema: {
         type: "object",
         properties: {
@@ -173,7 +173,7 @@ function _toolDefinitions() {
     },
     {
       name: "execute_sequence",
-      description: "Execute an ordered list of skills in one shared browser session. ALWAYS ask the user 'Do you want to watch while I work?' before calling — pass watch: true if yes, false if no.",
+      description: "Execute an ordered list of skills in one shared browser session. Default watch: true (visible browser). Pass watch: false only if the user explicitly asks to run in the background.",
       inputSchema: {
         type: "object",
         properties: {
@@ -275,10 +275,16 @@ async function _buildFailureResponse(page, err, resolvedEntry) {
   const url      = page.url();
   const failedAt = typeof err.failedAt === "number" ? err.failedAt : null;
 
-  const failShot = await page.screenshot({ type: "png" }).catch(() => null);
+  // P7: capture as JPEG (lossless PNG is 3-8× larger; Claude token cost is dimension-based either way)
+  const failShot = await page.screenshot({ type: "jpeg", quality: 80 }).catch(() => null);
+
+  // P5: skip visual reference if already sent for this (slug, step) in this execution
+  const sentRefs    = activeExecution?.sentVisualRefs;
+  const visualRefKey = resolvedEntry && failedAt !== null ? `${resolvedEntry.slug}:${failedAt}` : null;
+  const alreadySentRef = sentRefs && visualRefKey ? sentRefs.has(visualRefKey) : false;
 
   let visualRefData = null, visualRefMime = null;
-  if (resolvedEntry && failedAt !== null) {
+  if (resolvedEntry && failedAt !== null && !alreadySentRef) {
     const visualDir = path.join(resolvedEntry.skillDir, "visuals");
     const stepNum   = failedAt + 1;
     for (const ext of [".jpg", ".jpeg", ".png"]) {
@@ -286,12 +292,14 @@ async function _buildFailureResponse(page, err, resolvedEntry) {
       if (fs.existsSync(candidate)) {
         visualRefData = fs.readFileSync(candidate).toString("base64");
         visualRefMime = ext === ".png" ? "image/png" : "image/jpeg";
+        if (sentRefs && visualRefKey) sentRefs.add(visualRefKey);
         break;
       }
     }
   }
 
-  let pageStructure = null, viewport = null, scrollY = null, consoleErrors = [];
+  // P2: cap at 50 elements (was 250) — dominant text payload; nearby elements suffice for recovery
+  let pageStructure = null, viewport = null, scrollY = null;
   try {
     viewport = page.viewportSize();
     scrollY  = await page.evaluate(() => window.scrollY).catch(() => null);
@@ -311,7 +319,7 @@ async function _buildFailureResponse(page, err, resolvedEntry) {
         if (seen.has(key)) return null;
         seen.add(key);
         return { tag, type: type || undefined, role: role || undefined, text: text || undefined, id, "data-testid": dt };
-      }).filter(Boolean).slice(0, 250);
+      }).filter(Boolean).slice(0, 50);
     });
   } catch (_) {}
 
@@ -326,11 +334,13 @@ async function _buildFailureResponse(page, err, resolvedEntry) {
 
   if (err.preShot)    content.push({ type: "text", text: "Pre-step screenshot:" }, { type: "image", data: err.preShot.toString("base64"), mimeType: "image/png" });
   if (visualRefData)  content.push({ type: "text", text: `Reference image for step ${failedAt + 1}:` }, { type: "image", data: visualRefData, mimeType: visualRefMime });
-  if (failShot)       content.push({ type: "text", text: "Current page at failure:" }, { type: "image", data: failShot.toString("base64"), mimeType: "image/png" });
+  // P7: mimeType updated to match JPEG capture above
+  if (failShot)       content.push({ type: "text", text: "Current page at failure:" }, { type: "image", data: failShot.toString("base64"), mimeType: "image/jpeg" });
 
+  // P4: compact JSON (no null,2 indentation)
   const l5 = ["\nLayer 5 — intent recovery"];
   if (viewport)    l5.push(`viewport: ${JSON.stringify(viewport)}, scrollY: ${scrollY}`);
-  if (pageStructure && pageStructure.length > 0) l5.push(`Interactive elements (${pageStructure.length}):\n${JSON.stringify(pageStructure, null, 2)}`);
+  if (pageStructure && pageStructure.length > 0) l5.push(`Interactive elements (${pageStructure.length}):\n${JSON.stringify(pageStructure)}`);
   content.push({ type: "text", text: l5.join("\n") });
 
   return { content };
@@ -355,7 +365,7 @@ async function _handleTool(name, args) {
         sync_status:     _syncStatus(s.pack),
         version:         s.manifest.version || "1.0.0",
       }));
-    return text(JSON.stringify({ skills, total: skills.length }, null, 2));
+    return text(JSON.stringify({ skills, total: skills.length }));
   }
 
   // ── get_skill_inputs ─────────────────────────────────────────────────────────
@@ -368,7 +378,7 @@ async function _handleTool(name, args) {
     const schema = fs.existsSync(inputsPath)
       ? JSON.parse(fs.readFileSync(inputsPath, "utf8"))
       : (fs.existsSync(legacyPath) ? JSON.parse(fs.readFileSync(legacyPath, "utf8")) : {});
-    return text(JSON.stringify(schema, null, 2));
+    return text(JSON.stringify(schema));
   }
 
   // ── get_execution_status ─────────────────────────────────────────────────────
@@ -422,12 +432,12 @@ async function _handleTool(name, args) {
       input_schema: inputSchema,
       execution: enrichStepsWithRecovery(rawSteps, rawRec),
       recovery: rawRec,
-    }, null, 2));
+    }));
   }
 
   // ── execute_skill / execute_sequence ─────────────────────────────────────────
   if (name === "execute_skill" || name === "execute_sequence") {
-    const watch = args.watch === true;
+    const watch = args.watch !== false;
     const runs = name === "execute_sequence"
       ? (Array.isArray(args.skills) ? args.skills : [])
       : [{ skill: args.skill, company: args.company, inputs: args.inputs, resume_from: args.resume_from }];
@@ -487,7 +497,11 @@ async function _handleTool(name, args) {
       total:           resolved.reduce((n, r) => n + r.steps.length, 0),
       startedAt:       new Date().toISOString(),
       cancelRequested: false,
+      sentVisualRefs:  new Set(), // P5: tracks which (slug:stepIndex) visual refs were sent this execution
     };
+
+    // Per-company observer pace (ms of minimum viewing time per page transition)
+    const _observerMs = primary.entry.pack?.pacing?.observer_ms ?? 600;
 
     // Set up lightweight tracker for this execution
     const _tracker    = createTracker(primary.entry.pack?.tracking || {}, {
@@ -549,6 +563,7 @@ async function _handleTool(name, args) {
             onStep:      (i) => { if (activeExecution) activeExecution.step = i; },
             cancelCheck: () => activeExecution?.cancelRequested,
             tracker:     _runTracker,
+            observerMs:  _observerMs,
           });
           _totalRecovered += (result && result.recoveredSteps) ? result.recoveredSteps : 0;
         } catch (runErr) {
@@ -562,9 +577,15 @@ async function _handleTool(name, args) {
       authManager.saveRawSession(primary.entry.company, state, SESSIONS_DIR);
 
       const url  = page.url();
-      const shot = await page.screenshot({ type: "png" }).catch(() => null);
+      const shot = process.env.CONXA_CAPTURE_SUCCESS_SCREENSHOT === "1"
+        ? await page.screenshot({ type: "png" }).catch(() => null)
+        : null;
       await Promise.allSettled(_downloadSaves);
       await page.close().catch(() => {});
+      if (watch) {
+        await _context.close().catch(() => {});
+        await _browser.close().catch(() => {});
+      }
 
       for (const r of resolved) {
         clearRetryBudget(r.entry.slug);
@@ -600,6 +621,10 @@ async function _handleTool(name, args) {
       _tracker.destroy();
       const failResp = page ? await _buildFailureResponse(page, runErr, runErr.fromEntry || primary.entry) : err(runErr.message);
       if (page) await page.close().catch(() => {});
+      if (watch) {
+        await _context?.close().catch(() => {});
+        await _browser?.close().catch(() => {});
+      }
       return failResp;
 
     } finally {
