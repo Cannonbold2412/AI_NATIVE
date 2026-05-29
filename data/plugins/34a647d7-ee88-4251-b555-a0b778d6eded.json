@@ -1,0 +1,65 @@
+{
+  "id": "34a647d7-ee88-4251-b555-a0b778d6eded",
+  "slug": "render-34a647d7",
+  "name": "Render",
+  "owner_user_id": "local",
+  "workspace_id": "personal_user_3DE80U9Aq3ZkvrBAGraGZp1o7cH",
+  "target_url": "https://dashboard.render.com/login",
+  "protected_url": "https://dashboard.render.com/",
+  "protected_url_marker_text": "",
+  "status": "ready",
+  "auth": {
+    "session_id": "b943a368-5d10-41db-aa80-9939997b2820",
+    "captured_at": 1779904778.5812104,
+    "storage_state_path": "C:\\Users\\Lenovo\\Desktop\\AI_NATIVE\\data\\plugins\\34a647d7-ee88-4251-b555-a0b778d6eded\\auth\\auth.json"
+  },
+  "workflows": [
+    {
+      "id": "cf8e4585-7dab-4513-a024-b03c4c19dcb7",
+      "slug": "delete-a-service",
+      "name": "Delete a Service",
+      "session_id": "5acc466f-a772-4b54-b5f8-d87ce3f60b1d",
+      "recorded_at": 1779904795.7998774,
+      "status": "compiled",
+      "skill_id": "skill_5acc466f-a772-4b54-b5f8-d87ce3f60b1d",
+      "edited_at": 1779984782.2961335,
+      "last_test_at": 1779985167.5519686,
+      "last_test_status": "passed",
+      "last_test_error": null,
+      "last_test_inputs": {
+        "service_name": "conxa-api"
+      }
+    },
+    {
+      "id": "7b253a2a-e619-4d36-9767-52ec9b6fc53b",
+      "slug": "create-a-service",
+      "name": "Create a Service",
+      "session_id": "81e5e505-1954-440b-adfe-0fd5521874a1",
+      "recorded_at": 1779909280.4486365,
+      "status": "compiled",
+      "skill_id": "skill_81e5e505-1954-440b-adfe-0fd5521874a1",
+      "edited_at": 1779984903.0304263,
+      "last_test_at": 1779985062.9515245,
+      "last_test_status": "passed",
+      "last_test_error": null,
+      "last_test_inputs": {
+        "blueprint_name": "AXEXEM",
+        "repository_name": "SEARCH_ENGINE"
+      }
+    }
+  ],
+  "build": {
+    "last_built_at": 1780009912.95072,
+    "output_path": "C:\\Users\\Lenovo\\Desktop\\AI_NATIVE\\output\\skill_package\\render-plugin",
+    "version": "0.1.0"
+  },
+  "installer": {
+    "built_at": 1780009110.9567978,
+    "installer_path": "C:\\Users\\Lenovo\\Desktop\\AI_NATIVE\\data\\installers\\Render-Claude-Setup.exe",
+    "filename": "Render-Claude-Setup.exe",
+    "version": "0.1.0",
+    "runtime_version": "v1.0.0"
+  },
+  "created_at": 1779904708.096218,
+  "updated_at": 1780009912.9507484
+}

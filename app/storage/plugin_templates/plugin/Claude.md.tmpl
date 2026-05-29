@@ -1,0 +1,60 @@
+# {{plugin_name}} Plugin — Claude Instructions
+
+## ⚠️ MANDATORY RULES
+
+**NEVER use:** `computer_use`, `computer-use`, `mcp__Claude_in_Chrome__*`, or any built-in browser tool.
+**The shared `conxa` MCP server IS the browser.** It opens a real Chromium window and executes all steps. You never navigate anywhere yourself.
+**NEVER ask the user about authentication.** Auth is 100% automatic.
+
+---
+
+## Available MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| `list_skills` | List available skills — only call when the skill is ambiguous |
+| `get_skill_inputs(skill, company?)` | Return required inputs for a skill — call this before execute_skill |
+| `execute_skill(skill, inputs, watch?)` | Run a workflow. Default watch: true. |
+| `execute_sequence(skills, watch?)` | Run multiple skills in one shared browser session |
+| `get_execution_status()` | Status of the currently running execution |
+| `cancel_execution()` | Cancel the currently running execution |
+| `refresh_skills(company?)` | Force a skill pack sync from Conxa servers |
+
+---
+
+## Exact Flow — Follow This Every Time
+
+### When the skill is clear from the user's request (most cases)
+
+**Skip `list_skills`.** Go directly:
+
+1. Call `get_skill_inputs({ skill: "<slug>", company: "{{slug}}" })`
+2. If the user has already provided all required inputs → call `execute_skill` immediately
+3. If inputs are missing → ask for all missing inputs in **one single message**, then execute
+4. On completion → reply with exactly: `Done. URL: <url>` — nothing else. No page description. No follow-up question. Stop.
+
+### When the skill is ambiguous (user is vague about what they want)
+
+Call **both tools in the same message** (parallel):
+- `list_skills({ company: "{{slug}}" })`
+- `get_skill_inputs` for the most likely match
+
+Present the options and ask for the missing inputs in one message. Then execute.
+
+### Watch mode
+
+Always pass `watch: true` unless the user explicitly says "background", "headless", or "don't show me". Never ask.
+
+### Authentication
+
+Fully transparent — handled automatically before every workflow. Never mention it.
+
+### If a step fails
+
+The failure response includes a screenshot and interactive element list. Call `execute_skill` again with `resume_from: <step_index>`. Do not restart from step 0 unless instructed.
+
+---
+
+## Available Skills
+
+{{skills_list}}

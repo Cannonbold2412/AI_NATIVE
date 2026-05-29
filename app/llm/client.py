@@ -1,0 +1,520 @@
+"""Shared LLM HTTP client for OpenAI-compatible endpoints."""
+
+from __future__ import annotations
+
+import itertools
+import json
+import re
+import threading
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from datetime import datetime, timezone
+from typing import Any
+from urllib import error, request
+from urllib.parse import urlparse, urlunparse
+
+from app.config import settings
+
+_REQUEST_COUNTER = itertools.count(1)
+
+
+def _debug_log(message: str) -> None:
+    if not settings.llm_debug:
+        return
+    ts = datetime.now(timezone.utc).isoformat()
+    print(f"[LLM DEBUG] {ts} | {message}")
+
+
+def _is_vision_task(task: str) -> bool:
+    """True for multimodal vision tasks."""
+    return task in {"anchor_vision", "vision_reasoning"}
+
+
+def _selected_endpoint_and_keys(task: str) -> tuple[str, list[str]]:
+    """Select endpoint and API keys derived from the first enabled provider.
+
+    Kept as an adapter for legacy callers (e.g. supports_multimodal_chat). All
+    real LLM calls go through the router via call_llm().
+    """
+    if _is_vision_task(task):
+        endpoint = settings.llm_vision_endpoint
+        api_key_single = settings.llm_vision_api_key
+    else:
+        endpoint = settings.llm_text_endpoint
+        api_key_single = settings.llm_text_api_key
+    keys = [api_key_single] if api_key_single else []
+    return endpoint, keys
+
+
+def _safe_error_snippet(text: str, limit: int = 280) -> str:
+    t = " ".join(str(text).split())
+    if len(t) > limit:
+        return t[: limit - 3] + "..."
+    return t
+
+
+def _append_llm_detail(sink: list[str] | None, msg: str, *, sink_lock: threading.Lock | None = None) -> None:
+    _debug_log(msg)
+    if sink is None:
+        return
+    if sink_lock is not None:
+        with sink_lock:
+            sink.append(msg)
+    else:
+        sink.append(msg)
+
+
+def _is_openai_compatible_endpoint(endpoint: str) -> bool:
+    parsed = urlparse(endpoint)
+    # Local/custom adapters may still accept the legacy payload shape.
+    if "integrate.api.nvidia.com" in (parsed.netloc or ""):
+        return True
+    return (parsed.path or "").rstrip("/") == "/v1"
+
+
+def supports_multimodal_chat(task: str | None = None, endpoint: str | None = None) -> bool:
+    """True when the configured endpoint uses OpenAI-style chat (vision images supported)."""
+    if endpoint:
+        ep = str(endpoint).strip()
+    elif task:
+        ep, _ = _selected_endpoint_and_keys(task)
+    else:
+        ep = str(settings.llm_vision_endpoint or "").strip()
+    return bool(ep) and _is_openai_compatible_endpoint(ep)
+
+
+def _chat_completions_url(endpoint: str) -> str:
+    parsed = urlparse(endpoint)
+    path = (parsed.path or "").rstrip("/")
+    if path.endswith("/chat/completions"):
+        return endpoint
+    if path.endswith("/v1"):
+        path = f"{path}/chat/completions"
+    elif not path:
+        path = "/v1/chat/completions"
+    else:
+        path = f"{path}/chat/completions"
+    return urlunparse((parsed.scheme, parsed.netloc, path, parsed.params, parsed.query, parsed.fragment))
+
+
+def _legacy_payload(task: str, payload: dict[str, Any]) -> bytes:
+    body = dict(payload)
+    body.setdefault("task", task)
+    return json.dumps(body).encode("utf-8")
+
+
+def _resolved_model(task: str, payload: dict[str, Any]) -> Any:
+    if _is_vision_task(task):
+        return payload.get("model") or settings.llm_vision_model
+    return payload.get("model") or settings.llm_text_model
+
+
+def _openai_messages_for_task(task: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = payload.get("input")
+    prompt = payload.get("prompt")
+
+    if task == "semantic_enrichment":
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "Return strict JSON with keys: intent (snake_case string), normalized_text (string), "
+                    "confidence (0 to 1 number)."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or {}, ensure_ascii=False)},
+        ]
+    if task == "recovery_assist":
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "Return strict JSON with keys: selected (candidate id string), confidence (0 to 1 number), "
+                    "reason (short string)."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or {}, ensure_ascii=False)},
+        ]
+    if task == "vision_reasoning":
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "Return strict JSON with keys: best_candidate (candidate id string), confidence (0 to 1 number), "
+                    "reason (short string)."
+                ),
+            },
+            {"role": "user", "content": json.dumps({"prompt": prompt, "input": data}, ensure_ascii=False)},
+        ]
+    if task == "intent_generation":
+        intent_prompt = ""
+        if isinstance(data, dict):
+            intent_prompt = str(data.get("prompt") or "")
+        return [
+            {
+                "role": "system",
+                "content": "Return strict JSON with key: intent (single snake_case string).",
+            },
+            {"role": "user", "content": intent_prompt or json.dumps(data or {}, ensure_ascii=False)},
+        ]
+    if task == "selector_generation":
+        # Compile-time: generate N selector candidates for one element.
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You generate Playwright CSS selectors. Return strict JSON with key "
+                    "'candidates' (array of objects with keys: selector (CSS string), rank (1=best), "
+                    "rationale (short string), intent (snake_case action description)). "
+                    "Prioritize: data-testid > [role][aria-label] > aria-label > name > placeholder > text content > position. "
+                    "When 'a11y_node' is provided in the input, use its 'role' and 'name' fields to generate "
+                    "an attribute selector like [role=\"button\"][aria-label=\"Submit\"] as your rank-1 candidate — "
+                    "this is layout-change tolerant and preferred over CSS structure selectors. "
+                    "Avoid: hashed classes, auto-IDs, fragile nth-of-type chains, XPath. "
+                    "Each selector MUST be valid Playwright CSS. No markdown, no extra keys."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or payload, ensure_ascii=False)},
+        ]
+    if task == "recovery_resolve":
+        # Runtime tier 3: locate one element on current DOM given semantic description.
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You locate one element on a current DOM given a semantic description "
+                    "and the original element's bbox/ancestors. Return strict JSON with keys: "
+                    "selector (Playwright CSS string, single best match), "
+                    "confidence (0 to 1 number), reason (short string)."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or payload, ensure_ascii=False)},
+        ]
+    if task == "workflow_intent":
+        # Compile-time: single call to infer high-level workflow goal + per-step intents.
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You build a workflow intent graph from a sequence of recorded actions. "
+                    "Return strict JSON with keys: goal (one sentence), steps (array of "
+                    "{index, intent, verification_anchor}), decision_points (array of "
+                    "{step_index, description}), expected_end_state (object with brief description)."
+                ),
+            },
+            {"role": "user", "content": json.dumps(data or payload, ensure_ascii=False)},
+        ]
+    if task == "anchor_vision":
+        image_b64 = str(payload.get("image_base64") or "")
+        mime = str(payload.get("image_mime") or "image/jpeg")
+        user_text = str(payload.get("user_text") or "")
+        # NVIDIA Gemma 4 VLMs: put image before text for best multimodal behavior (NIM docs).
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "Return strict JSON with keys: "
+                    "primary_phrase (short string describing the highlighted control), "
+                    "secondary (array of objects with keys element and relation only). "
+                    "relation must be one of: inside, above, below, near. "
+                    "For above/below, relation is the highlighted target's position relative to the anchor. "
+                    "No markdown, no extra keys."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{image_b64}"},
+                    },
+                    {"type": "text", "text": user_text},
+                ],
+            },
+        ]
+    return [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
+
+
+def _openai_body_dict(task: str, payload: dict[str, Any], *, json_mode: bool) -> dict[str, Any]:
+    resolved_model = _resolved_model(task, payload)
+    messages = _openai_messages_for_task(task, payload)
+    body: dict[str, Any] = {
+        "model": resolved_model,
+        "messages": messages,
+        "temperature": 0.0,
+    }
+    if task == "anchor_vision":
+        # Short JSON anchors; VLMs often expect an explicit ceiling (see NVIDIA Gemma chat examples).
+        body["max_tokens"] = 1024
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
+    return body
+
+
+def _extract_json_object_substring(raw: str) -> str | None:
+    lb = raw.find("{")
+    if lb < 0:
+        return None
+    depth = 0
+    for i in range(lb, len(raw)):
+        if raw[i] == "{":
+            depth += 1
+        elif raw[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return raw[lb : i + 1]
+    return None
+
+
+def _parse_json_object_content(content: str) -> dict[str, Any] | None:
+    s = content.strip()
+    try:
+        p = json.loads(s)
+        if isinstance(p, dict):
+            return p
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    fence = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", s, re.I)
+    if fence:
+        try:
+            p = json.loads(fence.group(1))
+            if isinstance(p, dict):
+                return p
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    sub = _extract_json_object_substring(s)
+    if sub:
+        try:
+            p = json.loads(sub)
+            if isinstance(p, dict):
+                return p
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return None
+
+
+def _provider_top_level_error(data: dict[str, Any]) -> str | None:
+    err = data.get("error")
+    if err is None:
+        return None
+    if isinstance(err, dict):
+        msg = err.get("message")
+        typ = err.get("type") or err.get("code")
+        parts = [str(p) for p in (msg, typ) if p]
+        return ": ".join(parts) if parts else json.dumps(err, ensure_ascii=False)[:280]
+    if isinstance(err, str):
+        return err
+    return json.dumps(err, ensure_ascii=False)[:280]
+
+
+def _normalize_openai_response(data: dict[str, Any]) -> dict[str, Any]:
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return data
+    first = choices[0]
+    if not isinstance(first, dict):
+        return data
+    message = first.get("message")
+    content = ""
+    if isinstance(message, dict):
+        raw_content = message.get("content")
+        if isinstance(raw_content, list):
+            # Some providers emit content as multimodal fragments.
+            chunks: list[str] = []
+            for part in raw_content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    chunks.append(str(part.get("text") or ""))
+            content = "".join(chunks).strip()
+        else:
+            content = str(raw_content or "").strip()
+    if not content:
+        content = str(first.get("text") or "").strip()
+    if not content:
+        return data
+    parsed = _parse_json_object_content(content)
+    if parsed is not None:
+        return parsed
+    try:
+        p = json.loads(content)
+        if isinstance(p, dict):
+            return p
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return {"text": content, "output": content}
+
+
+def _next_api_key(keys: list[str]) -> tuple[str, int, int]:
+    """Get first available API key from the provided list."""
+    if not keys:
+        return "", 0, 0
+    return keys[0], 1, len(keys)
+
+
+def _decode_http_error_body(exc: error.HTTPError) -> str:
+    try:
+        return exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _openai_complete_request(
+    ep: str,
+    raw_body: bytes,
+    headers: dict[str, str],
+    timeout_s: float,
+    *,
+    attempt_tag: str,
+    req_id: int,
+    task: str,
+    error_detail: list[str] | None,
+    sink_lock: threading.Lock | None,
+) -> dict[str, Any] | None:
+    req = request.Request(ep, data=raw_body, headers=headers, method="POST")
+    try:
+        with request.urlopen(req, timeout=timeout_s) as res:
+            raw = res.read().decode("utf-8")
+    except error.HTTPError as exc:
+        bod = _decode_http_error_body(exc)
+        snippet = _safe_error_snippet(bod or str(exc.reason or exc))
+        _append_llm_detail(
+            error_detail,
+            f"HTTPError {exc.code} ({attempt_tag}): {snippet}",
+            sink_lock=sink_lock,
+        )
+        return None
+    except (error.URLError, TimeoutError, OSError) as exc:
+        _append_llm_detail(
+            error_detail,
+            f"{type(exc).__name__} ({attempt_tag}): {exc}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    try:
+        data_raw = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        snippet = _safe_error_snippet(raw)
+        pos = getattr(exc, "pos", None)
+        loc = f"@{pos}" if pos is not None else ""
+        _append_llm_detail(
+            error_detail,
+            f"JSONDecodeError ({attempt_tag}) body{loc}: {snippet}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    if not isinstance(data_raw, dict):
+        _append_llm_detail(
+            error_detail,
+            f"unexpected_json_root ({attempt_tag}): {type(data_raw).__name__}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    prov_msg = _provider_top_level_error(data_raw)
+    if prov_msg:
+        _append_llm_detail(
+            error_detail,
+            f"provider_error ({attempt_tag}): {prov_msg}",
+            sink_lock=sink_lock,
+        )
+        return None
+
+    data = _normalize_openai_response(data_raw)
+
+    _debug_log(
+        "response_received "
+        f"req_id={req_id} task={task} attempt={attempt_tag} status_ok"
+    )
+    return data if isinstance(data, dict) else None
+
+
+def _parallel_anchor_vision_first_success(
+    *,
+    keys: list[str],
+    ep: str,
+    raw_body: bytes,
+    timeout_s: float,
+    attempt_tag: str,
+    req_id: int,
+    task: str,
+    error_detail: list[str] | None,
+) -> dict[str, Any] | None:
+    """One HTTP POST per API key; return the first successful parsed body."""
+    if len(keys) < 2:
+        return None
+    detail_lock = threading.Lock()
+    max_workers = min(32, len(keys))
+    ex = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        futs = []
+        for i, api_key in enumerate(keys):
+            slot = i + 1
+            hdrs: dict[str, str] = {"Content-Type": "application/json"}
+            if api_key:
+                hdrs["Authorization"] = f"Bearer {api_key}"
+            label = f"key{slot}/{len(keys)} {attempt_tag}"
+            futs.append(
+                ex.submit(
+                    _openai_complete_request,
+                    ep,
+                    raw_body,
+                    hdrs,
+                    timeout_s,
+                    attempt_tag=label,
+                    req_id=req_id,
+                    task=task,
+                    error_detail=error_detail,
+                    sink_lock=detail_lock,
+                )
+            )
+        pending = set(futs)
+        # Wall clock: allow all in-flight urllib timeouts to resolve, plus small slack.
+        wall_deadline = time.monotonic() + timeout_s + 15.0
+        while pending:
+            now = time.monotonic()
+            wait_timeout = min(1.0, max(0.05, wall_deadline - now))
+            if wait_timeout <= 0:
+                break
+            done, pending = wait(pending, timeout=wait_timeout, return_when=FIRST_COMPLETED)
+            for fut in done:
+                try:
+                    out = fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    _append_llm_detail(
+                        error_detail,
+                        f"worker_error ({attempt_tag}): {type(exc).__name__}: {exc}",
+                        sink_lock=detail_lock,
+                    )
+                    continue
+                if out is not None:
+                    try:
+                        ex.shutdown(wait=False, cancel_futures=True)
+                    except TypeError:
+                        ex.shutdown(wait=False)
+                    return out
+        return None
+    finally:
+        try:
+            ex.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            ex.shutdown(wait=False)
+
+
+def call_llm(
+    task: str,
+    payload: dict[str, Any],
+    timeout_ms: int,
+    *,
+    error_detail: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Route all LLM calls through the multi-provider router. No legacy fallback.
+
+    Raises RuntimeError if no providers are configured (via router).
+    """
+    from app.llm.router import get_router
+    router = get_router()
+    is_vision = task in {"anchor_vision", "vision_reasoning"}
+    if is_vision:
+        return router.route_vision(task, payload, timeout_ms, error_detail=error_detail)
+    return router.route_text(task, payload, timeout_ms, error_detail=error_detail)

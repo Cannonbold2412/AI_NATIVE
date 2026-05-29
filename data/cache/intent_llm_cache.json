@@ -1,0 +1,22 @@
+{
+  "6ade77b12d9bf33a5d47ff849f8586fd1a9717d96ab57a30cca7bff6b92e6d47": "navigate_to_contacts",
+  "474f9d45d21b52dc51106d3ad177b60b78b8a20fac89af01fb9eb91010857dca": "enter_value",
+  "fadc4867f88cfac5acd1e60bd80a7c14d6c0c8090a47c6f9550b87f0890adf6b": "click_button_person",
+  "1fd6aa463b88456c003c58046f415fc1d59da750f0687dac12ce84067f01bab4": "enter_input_value",
+  "75b7e5ac2fc93c5f16d7fea575f003eca697a36ed7de50bcc9c9ca9ec6bd3e2d": "focus_input",
+  "61075934c14ecf5d79de7becddf04892ee4c7f8b14f95ba7673524675b56a447": "search_services",
+  "ca0c18435912c276861d30b82744bd7f78ba13902caa02e6b5166f1a74d2380c": "click_link",
+  "067c36d1388a6ab49c25a18cb50efc12298310bbe66058f24cb1e5991192a491": "click_link",
+  "c9cc2baa71da179338c6fab226dcbbfbdf5649b99d70a07b770c79fec056ade9": "click_button",
+  "7b52fca23f94794c43bc42d2630e5a2233814802c7648a88af56edb559bd3e5b": "focus_sudocommand",
+  "3946ab15e992ac3bcb47a7955381e97d20adb35d30d0a076fa8f8384cbf13d8d": "enter_sudocommand_value",
+  "558bc351b492d6f1babc574bbaebc931d84a7593b860488fd7da32b00e1112cf": "click_button",
+  "de824d65cc2197c9fd4aa1870290feac5d7c6fd9855f3981f499fca4051103b2": "click_new_button",
+  "f23a648f395274361e32c119e31cdade073f6770d7ee6e0ced5f5dea09ad62a6": "navigate_to_blueprint",
+  "f7c10ac8fb4f5fcb89159e620a007bb2d1a6882850f5fd6072e9a96957fddf2d": "click_button",
+  "6b0b166546ce4868982f0a030e24d3d461b96af3cd6ebcf3af8ff6e7a85e486b": "focus_name",
+  "4f2021712c44a6c2052205b0c2f97117ed5d2766f6ffa10bfeaee3640dc7e0f8": "enter_name_value",
+  "19865093960c132e6149989487496d10adc36d2f20e2274085597f98c3573284": "submit_form",
+  "2caebd5fc9b5c6df50f45f274df40caa7e31ac553f403f47397b7917ace7835a": "focus_input",
+  "7fa0f8ffceeb20ebfc3342491d8982c340490444b0d71b839c2d94bb99531ce8": "enter_search_value"
+}

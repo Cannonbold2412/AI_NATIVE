@@ -1,0 +1,2704 @@
+{
+  "meta": {
+    "id": "skill_81e5e505-1954-440b-adfe-0fd5521874a1",
+    "version": 19,
+    "title": "Create a Service",
+    "created_at": "2026-05-27T19:27:14.096414+00:00",
+    "source_session_id": "81e5e505-1954-440b-adfe-0fd5521874a1",
+    "compiler_policy_version": "1.0.0",
+    "compiler_policy_hash": "7d35d298fe6b78b6",
+    "structural_fingerprint": {
+      "landmarks": [
+        {
+          "intent": "click_new_button",
+          "primary_selector": "label:has-text(\"Projects Search CTRL + K K\") + button",
+          "data_testid": "",
+          "aria_label": "",
+          "inner_text": "New",
+          "tag": "button"
+        },
+        {
+          "intent": "navigate_to_blueprint",
+          "primary_selector": "label:has-text(\"Project\") + a",
+          "data_testid": "",
+          "aria_label": "",
+          "inner_text": "Blueprint",
+          "tag": "a"
+        },
+        {
+          "intent": "focus_search",
+          "primary_selector": "label:has-text(\"Search repositories\") + input",
+          "data_testid": "select-git-repo-url-input",
+          "aria_label": "",
+          "inner_text": "",
+          "tag": "input"
+        }
+      ],
+      "landmark_count": 3
+    }
+  },
+  "inputs": [
+    {
+      "id": "blueprint_name",
+      "label": "Blueprint Name",
+      "type": "text",
+      "default": null,
+      "options": []
+    },
+    {
+      "id": "repository_name",
+      "label": "Repository Name",
+      "type": "text",
+      "default": null,
+      "options": []
+    }
+  ],
+  "skills": [
+    {
+      "name": "recorded",
+      "steps": [
+        {
+          "action": {
+            "action": "click"
+          },
+          "intent": "click_new_button",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Projects Search CTRL + K K\") + button",
+            "fallback_selectors": [
+              "label:has-text(\"Projects Search CTRL + K K\") ~ button",
+              "text=\"New\"",
+              "input[type=\"button\"]",
+              "[role=\"button\"][name=\"New\"]",
+              "/html[1]/body[1]/div[2]/div[1]/header[1]/div[3]/div[1]/button[1]"
+            ],
+            "role": "button",
+            "type": "button",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "button",
+            "tag": "button",
+            "inner_text": "New",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Projects Search CTRL + K K",
+            "data_testid": "",
+            "input_type": "button",
+            "css_class_tokens": [
+              "active:button-secondary-background--active",
+              "active:button-secondary-text--hover--active",
+              "border",
+              "border-solid",
+              "button-secondary-border",
+              "button-secondary-text",
+              "flex",
+              "focus-visible:outline"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace Projects Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.784,
+              "y_pct": 0.015
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "button",
+              "id": "menu-_r_4_",
+              "classes": [
+                "active:button-secondary-background--active",
+                "active:button-secondary-text--hover--active",
+                "border",
+                "border-solid",
+                "button-secondary-border",
+                "button-secondary-text",
+                "flex",
+                "focus-visible:outline",
+                "focus-visible:outline-focus-action",
+                "focus:outline-focus-action",
+                "h-8",
+                "hover:button-secondary-background--hover",
+                "hover:button-secondary-text--hover",
+                "items-center",
+                "outline-2",
+                "outline-offset-2",
+                "px-2",
+                "py-1.5",
+                "type-interface-00"
+              ],
+              "inner_text": "New",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Projects Search CTRL + K K"
+            },
+            "selectors": {
+              "aria": "[role=\"button\"][name=\"New\"]",
+              "text_based": "text=\"New\"",
+              "css": "label:has-text(\"Projects Search CTRL + K K\") + button",
+              "xpath": "/html[1]/body[1]/div[2]/div[1]/header[1]/div[3]/div[1]/button[1]"
+            },
+            "semantic": {
+              "normalized_text": "new",
+              "role": "button",
+              "input_type": "button",
+              "llm_intent": "click_new_button",
+              "final_intent": "click_new_button"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://dashboard.render.com/",
+              "page_title": "Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "+ new button",
+                "relation": "target"
+              },
+              {
+                "element": "upgrade button",
+                "relation": "near"
+              },
+              {
+                "element": "search input",
+                "relation": "below"
+              },
+              {
+                "element": "team dropdown",
+                "relation": "near"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 996,
+                "y": 3,
+                "w": 78,
+                "h": 48
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0001_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0001_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/",
+              "page_title": "Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"New\"]",
+                "text=\"New\"",
+                "#menu-_r_4_",
+                "button"
+              ],
+              "important_text_blocks": [
+                "New",
+                "https://dashboard.render.com/|Render Dashboard|996c3419"
+              ],
+              "dom_fingerprint": "4f16dbb1fda103c45d6f958c9865c811ab94916611fb91242b5688ddb3cb886f"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/",
+              "page_title": "Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"New\"]",
+                "text=\"New\"",
+                "#menu-_r_4_",
+                "button"
+              ],
+              "important_text_blocks": [
+                "New",
+                "https://dashboard.render.com/|Render Dashboard|996c3419"
+              ],
+              "dom_fingerprint": "4f16dbb1fda103c45d6f958c9865c811ab94916611fb91242b5688ddb3cb886f"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "new",
+                "button"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "click_new_button",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "new",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "button",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "click_new_button",
+            "final_intent": "click_new_button",
+            "anchors": [
+              {
+                "element": "+ new button",
+                "relation": "target"
+              },
+              {
+                "element": "upgrade button",
+                "relation": "near"
+              },
+              {
+                "element": "search input",
+                "relation": "below"
+              },
+              {
+                "element": "team dropdown",
+                "relation": "near"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6",
+            "compile_warnings": {
+              "vision_anchor_fallback": {
+                "reason": "vision_llm_empty_response",
+                "step_index": 0,
+                "fallback": "deterministic_anchors"
+              }
+            }
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [
+            "button[data-test-id=\"top-nav-creation-button\"]",
+            "button#menu-_r_4_"
+          ],
+          "semantic_description": "click_new_button",
+          "snapshot_ref": "d75df0fcfab747cdbfc20eaed95a4515",
+          "snapshot_dom_hash": "600a2043cdd2fbfc589a86c81f798dad68530dd19361eee0f20c5271cf1b5fce"
+        },
+        {
+          "action": "click",
+          "intent": "navigate_to_blueprint",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Project\") + a",
+            "fallback_selectors": [
+              "label:has-text(\"Project\") ~ a",
+              "text=\"Blueprint\"",
+              "[role=\"link\"][name=\"Blueprint\"]",
+              "/html[1]/body[1]/div[6]/div[1]/div[1]/div[1]/ul[1]/li[10]/a[1]"
+            ],
+            "role": "link",
+            "type": "a",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "link",
+            "tag": "a",
+            "inner_text": "Blueprint",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "Project",
+            "data_testid": "",
+            "input_type": "",
+            "css_class_tokens": [
+              "cursor-pointer",
+              "flex",
+              "focus-visible:outline",
+              "focus:outline-focus-action",
+              "hover:menu-item-background--hover",
+              "hover:menu-item-text--hover",
+              "menu-item-text",
+              "outline-2"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace Projects Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.688,
+              "y_pct": 0.526
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "a",
+              "id": null,
+              "classes": [
+                "cursor-pointer",
+                "flex",
+                "focus-visible:outline",
+                "focus:outline-focus-action",
+                "hover:menu-item-background--hover",
+                "hover:menu-item-text--hover",
+                "menu-item-text",
+                "outline-2",
+                "px-3",
+                "py-2",
+                "relative",
+                "type-interface-01",
+                "w-full",
+                "whitespace-nowrap"
+              ],
+              "inner_text": "Blueprint",
+              "role": "link",
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "Project"
+            },
+            "selectors": {
+              "aria": "[role=\"link\"][name=\"Blueprint\"]",
+              "text_based": "text=\"Blueprint\"",
+              "css": "",
+              "xpath": "/html[1]/body[1]/div[6]/div[1]/div[1]/div[1]/ul[1]/li[10]/a[1]"
+            },
+            "semantic": {
+              "normalized_text": "blueprint",
+              "role": "link",
+              "input_type": null,
+              "llm_intent": "navigate_to_blueprint",
+              "final_intent": "navigate_to_blueprint"
+            },
+            "context": {
+              "parent": "li[role=option]",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": null,
+              "page_url": "https://dashboard.render.com/",
+              "page_title": "Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "loading bar",
+                "relation": "target"
+              },
+              {
+                "element": "search bar",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 880,
+                "y": 421,
+                "w": 172,
+                "h": 36
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0002_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0002_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/",
+              "page_title": "Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"link\"][name=\"Blueprint\"]",
+                "text=\"Blueprint\"",
+                "#button-_r_4_ > div > ul > li:nth-of-type(10) > a.w-full.flex",
+                "a"
+              ],
+              "important_text_blocks": [
+                "Blueprint",
+                "https://dashboard.render.com/|Render Dashboard|b80ad3c4"
+              ],
+              "dom_fingerprint": "8e2d3526e6490dffdb9e06f08bc33b0118cab19f0fee06d0df11690c0fefcacb"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/",
+              "page_title": "Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"link\"][name=\"Blueprint\"]",
+                "text=\"Blueprint\"",
+                "#button-_r_4_ > div > ul > li:nth-of-type(10) > a.w-full.flex",
+                "a"
+              ],
+              "important_text_blocks": [
+                "Blueprint",
+                "https://dashboard.render.com/|Render Dashboard|b80ad3c4"
+              ],
+              "dom_fingerprint": "8e2d3526e6490dffdb9e06f08bc33b0118cab19f0fee06d0df11690c0fefcacb"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "url_change",
+              "target": "",
+              "timeout": 8000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "navigate",
+                "blueprint"
+              ],
+              "page_url_hint": "https://dashboard.render.com/",
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "navigate_to_blueprint",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "url_changed",
+                "target": "https://dashboard.render.com/",
+                "timeout_ms": 8000,
+                "required": true
+              },
+              {
+                "type": "text_present",
+                "target": "navigate",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "blueprint",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "navigate_to_blueprint",
+            "final_intent": "navigate_to_blueprint",
+            "anchors": [
+              {
+                "element": "loading bar",
+                "relation": "target"
+              },
+              {
+                "element": "search bar",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "2fb74d8d942b4b7684d3a453e072c67b",
+          "snapshot_dom_hash": "a16e71ec840c232a51550bc5104be5eaae9d4abb703bcfe05f4d1535b04763a6"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_search",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Search repositories\") + input",
+            "fallback_selectors": [
+              "label:has-text(\"Search repositories\") ~ input",
+              "[placeholder=\"Search\"]",
+              "input[type=\"text\"]",
+              "[data-testid=\"select-git-repo-url-input\"]",
+              "/main[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "Search",
+            "label_text": "Search repositories",
+            "data_testid": "select-git-repo-url-input",
+            "input_type": "text",
+            "css_class_tokens": [
+              "appearance-none",
+              "border",
+              "border-solid",
+              "focus-visible:outline",
+              "focus:outline-focus-action",
+              "h-10",
+              "hover:input-border--hover",
+              "input-background"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace New Blueprint Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.063,
+              "y_pct": 0.411
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": "_r_1g_",
+              "classes": [
+                "appearance-none",
+                "border",
+                "border-solid",
+                "focus-visible:outline",
+                "focus:outline-focus-action",
+                "h-10",
+                "hover:input-border--hover",
+                "input-background",
+                "input-border",
+                "input-text",
+                "m-0",
+                "outline-2",
+                "pl-9",
+                "placeholder:input-text--placeholder",
+                "pr-12",
+                "px-3",
+                "py-2.5",
+                "rounded-none",
+                "truncate",
+                "type-interface-01",
+                "w-full"
+              ],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": "Search",
+              "label_text": "Search repositories"
+            },
+            "selectors": {
+              "aria": "[data-testid=\"select-git-repo-url-input\"]",
+              "text_based": "",
+              "css": "",
+              "xpath": "/main[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_search",
+              "final_intent": "focus_search"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:",
+                "button:"
+              ],
+              "index_in_parent": 1,
+              "form_context": null,
+              "page_url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "search bar",
+                "relation": "target"
+              },
+              {
+                "element": "search",
+                "relation": "inside"
+              },
+              {
+                "element": "connect a repository",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 81,
+                "y": 329,
+                "w": 754,
+                "h": 40
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0003_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0003_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "visible_key_elements": [
+                "[data-testid=\"select-git-repo-url-input\"]",
+                "#_r_1g_",
+                "input",
+                "svg:",
+                "button:"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/select-repo?type=blueprint|New Blueprint Instance ・ Render Dashboard|ecd12cc7"
+              ],
+              "dom_fingerprint": "a5c234a539639a4b596244f86de6dd1290ec49966a9ad35e66399074e623c647"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "visible_key_elements": [
+                "[data-testid=\"select-git-repo-url-input\"]",
+                "#_r_1g_",
+                "input",
+                "svg:",
+                "button:"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/select-repo?type=blueprint|New Blueprint Instance ・ Render Dashboard|ecd12cc7"
+              ],
+              "dom_fingerprint": "a5c234a539639a4b596244f86de6dd1290ec49966a9ad35e66399074e623c647"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "search"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_search",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_search",
+            "final_intent": "focus_search",
+            "anchors": [
+              {
+                "element": "search bar",
+                "relation": "target"
+              },
+              {
+                "element": "search",
+                "relation": "inside"
+              },
+              {
+                "element": "connect a repository",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [
+            "[data-testid=\"select-git-repo-url-input\"]",
+            "input[placeholder=\"Search\"]",
+            "#_r_1g_"
+          ],
+          "semantic_description": "focus_search_input",
+          "snapshot_ref": "af45d34d27c24c22956d4febabdab205",
+          "snapshot_dom_hash": "ddef17f04f51c20c34bb3c917dee0ad90fe9b26922fe0f75831599f24cd163b2"
+        },
+        {
+          "action": {
+            "action": "type",
+            "value": "{{repository_name}}"
+          },
+          "intent": "enter_search_value",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"Search repositories\") + input",
+            "fallback_selectors": [
+              "label:has-text(\"Search repositories\") ~ input",
+              "[placeholder=\"Search\"]",
+              "input[type=\"text\"]",
+              "[data-testid=\"select-git-repo-url-input\"]",
+              "/main[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "Search",
+            "label_text": "Search repositories",
+            "data_testid": "select-git-repo-url-input",
+            "input_type": "text",
+            "css_class_tokens": [
+              "appearance-none",
+              "border",
+              "border-solid",
+              "focus-visible:outline",
+              "focus:outline-focus-action",
+              "h-10",
+              "hover:input-border--hover",
+              "input-background"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace New Blueprint Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.063,
+              "y_pct": 0.411
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": "_r_1g_",
+              "classes": [
+                "appearance-none",
+                "border",
+                "border-solid",
+                "focus-visible:outline",
+                "focus:outline-focus-action",
+                "h-10",
+                "hover:input-border--hover",
+                "input-background",
+                "input-border",
+                "input-text",
+                "m-0",
+                "outline-2",
+                "pl-9",
+                "placeholder:input-text--placeholder",
+                "pr-12",
+                "px-3",
+                "py-2.5",
+                "rounded-none",
+                "truncate",
+                "type-interface-01",
+                "w-full"
+              ],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": "Search",
+              "label_text": "Search repositories"
+            },
+            "selectors": {
+              "aria": "[data-testid=\"select-git-repo-url-input\"]",
+              "text_based": "",
+              "css": "label:has-text(\"Search repositories\") + input",
+              "xpath": "/main[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "enter_search_value",
+              "final_intent": "enter_search_value"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "svg:",
+                "button:"
+              ],
+              "index_in_parent": 1,
+              "form_context": null,
+              "page_url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "search bar",
+                "relation": "target"
+              },
+              {
+                "element": "search engine",
+                "relation": "inside"
+              },
+              {
+                "element": "connect a repository",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 81,
+                "y": 329,
+                "w": 754,
+                "h": 40
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0006_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0006_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "visible_key_elements": [
+                "[data-testid=\"select-git-repo-url-input\"]",
+                "#_r_1g_",
+                "input",
+                "svg:",
+                "button:"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/select-repo?type=blueprint|New Blueprint Instance ・ Render Dashboard|ecd12cc7"
+              ],
+              "dom_fingerprint": "a5c234a539639a4b596244f86de6dd1290ec49966a9ad35e66399074e623c647"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "visible_key_elements": [
+                "[data-testid=\"select-git-repo-url-input\"]",
+                "#_r_1g_",
+                "input",
+                "svg:",
+                "button:"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/select-repo?type=blueprint|New Blueprint Instance ・ Render Dashboard|ecd12cc7"
+              ],
+              "dom_fingerprint": "a5c234a539639a4b596244f86de6dd1290ec49966a9ad35e66399074e623c647"
+            }
+          },
+          "value": "{{repository_name}}",
+          "input_binding": "{{repository_name}}",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "search",
+                "value"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "enter_search_value",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "enter_search_value",
+            "final_intent": "enter_search_value",
+            "anchors": [
+              {
+                "element": "search bar",
+                "relation": "target"
+              },
+              {
+                "element": "search engine",
+                "relation": "inside"
+              },
+              {
+                "element": "connect a repository",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [
+            "[data-testid=\"select-git-repo-url-input\"]",
+            "input[placeholder=\"Search\"]",
+            "#_r_1g_"
+          ],
+          "semantic_description": "type_search_query",
+          "snapshot_ref": "af45d34d27c24c22956d4febabdab205",
+          "snapshot_dom_hash": "ddef17f04f51c20c34bb3c917dee0ad90fe9b26922fe0f75831599f24cd163b2"
+        },
+        {
+          "action": {
+            "action": "click"
+          },
+          "intent": "activate_control_connect",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"{{repository_name}}\") + button",
+            "fallback_selectors": [
+              "label:has-text(\"{{repository_name}}) ~ button",
+              "text=\"Connect\"",
+              "input[type=\"button\"]",
+              "[role=\"button\"][name=\"Connect\"]",
+              "/main[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[2]/ul[1]/li[1]/button[1]"
+            ],
+            "role": "button",
+            "type": "button",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "button",
+            "tag": "button",
+            "inner_text": "Connect",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "cannonboldoff-hue / SEARCH_ENGINE •3 months ago",
+            "data_testid": "",
+            "input_type": "button",
+            "css_class_tokens": [
+              "active:button-primary-background--active",
+              "active:button-primary-text--active",
+              "button-primary-background",
+              "button-primary-text",
+              "flex",
+              "focus-visible:outline",
+              "focus-visible:outline-focus-action",
+              "group/button"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace New Blueprint Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.58,
+              "y_pct": 0.497
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "button",
+              "id": null,
+              "classes": [
+                "active:button-primary-background--active",
+                "active:button-primary-text--active",
+                "button-primary-background",
+                "button-primary-text",
+                "flex",
+                "focus-visible:outline",
+                "focus-visible:outline-focus-action",
+                "group/button",
+                "h-8",
+                "hover:button-primary-background--hover",
+                "hover:button-primary-text--hover",
+                "items-center",
+                "outline-2",
+                "outline-offset-2",
+                "px-2",
+                "py-1.5",
+                "type-interface-00"
+              ],
+              "inner_text": "Connect",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "cannonboldoff-hue / SEARCH_ENGINE •3 months ago"
+            },
+            "selectors": {
+              "aria": "[role=\"button\"][name=\"Connect\"]",
+              "text_based": "text=\"Connect\"",
+              "css": "label:has-text(\"{{repository_name}}\") + button",
+              "xpath": "/main[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[2]/ul[1]/li[1]/button[1]"
+            },
+            "semantic": {
+              "normalized_text": "connect",
+              "role": "button",
+              "input_type": "button",
+              "llm_intent": "activate_control_connect",
+              "final_intent": "activate_control_connect"
+            },
+            "context": {
+              "parent": "li",
+              "siblings": [
+                "span:cannonboldoff-hue / SEARCH_ENGINE •3 mon"
+              ],
+              "index_in_parent": 1,
+              "form_context": null,
+              "page_url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "loading",
+                "relation": "target"
+              },
+              {
+                "element": "search",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 742,
+                "y": 398,
+                "w": 65,
+                "h": 32
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0007_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0007_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"Connect\"]",
+                "text=\"Connect\"",
+                "#connect-a-repository > div.type-body-02.text-primary:nth-of-type(2) > div.type-body-01.text-primary:nth-of-type(2) > ul.h-full.w-full > li.flex.items-center > button.type-interface-00.button-primary-background",
+                "button",
+                "span:cannonboldoff-hue / SEARCH_ENGINE •3 mon"
+              ],
+              "important_text_blocks": [
+                "Connect",
+                "https://dashboard.render.com/select-repo?type=blueprint|New Blueprint Instance ・ Render Dashboard|ecd12cc7"
+              ],
+              "dom_fingerprint": "64b448ebcd88388c40e268983d6905930d068f3a04f9a03326ecc650bbb0a23b"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/select-repo?type=blueprint",
+              "page_title": "New Blueprint Instance ・ Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"Connect\"]",
+                "text=\"Connect\"",
+                "#connect-a-repository > div.type-body-02.text-primary:nth-of-type(2) > div.type-body-01.text-primary:nth-of-type(2) > ul.h-full.w-full > li.flex.items-center > button.type-interface-00.button-primary-background",
+                "button",
+                "span:cannonboldoff-hue / SEARCH_ENGINE •3 mon"
+              ],
+              "important_text_blocks": [
+                "Connect",
+                "https://dashboard.render.com/select-repo?type=blueprint|New Blueprint Instance ・ Render Dashboard|ecd12cc7"
+              ],
+              "dom_fingerprint": "64b448ebcd88388c40e268983d6905930d068f3a04f9a03326ecc650bbb0a23b"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "activate",
+                "control",
+                "connect"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "activate_control_connect",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "activate",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "control",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "connect",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "activate_control_connect",
+            "final_intent": "activate_control_connect",
+            "anchors": [
+              {
+                "element": "loading",
+                "relation": "target"
+              },
+              {
+                "element": "search",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [
+            "[data-testid=\"repo-result\"] button[type=\"button\"]",
+            "li[data-testid=\"repo-result\"] button",
+            "button:has-text(\"Connect\")"
+          ],
+          "semantic_description": "click_connect_button",
+          "snapshot_ref": "af45d34d27c24c22956d4febabdab205",
+          "snapshot_dom_hash": "ddef17f04f51c20c34bb3c917dee0ad90fe9b26922fe0f75831599f24cd163b2"
+        },
+        {
+          "action": "focus",
+          "intent": "focus_name",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[name=\"name\"]",
+            "fallback_selectors": [
+              "label:has-text(\"Blueprint Name\") + input",
+              "label:has-text(\"Blueprint Name\") ~ input",
+              "input[type=\"text\"]",
+              "#name",
+              "/div[1]/main[1]/form[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "name",
+            "placeholder": "",
+            "label_text": "Blueprint Name",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [
+              "appearance-none",
+              "border",
+              "border-solid",
+              "focus-visible:outline",
+              "focus:outline-focus-action",
+              "h-10",
+              "hover:input-border--hover",
+              "input-background"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace New Blueprint Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.352,
+              "y_pct": 0.245
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": "name",
+              "classes": [
+                "appearance-none",
+                "border",
+                "border-solid",
+                "focus-visible:outline",
+                "focus:outline-focus-action",
+                "h-10",
+                "hover:input-border--hover",
+                "input-background",
+                "input-border",
+                "input-text",
+                "m-0",
+                "outline-2",
+                "placeholder:input-text--placeholder",
+                "px-3",
+                "py-2.5",
+                "rounded-none",
+                "truncate",
+                "type-interface-01",
+                "w-full"
+              ],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": "name",
+              "placeholder": null,
+              "label_text": "Blueprint Name"
+            },
+            "selectors": {
+              "aria": "input[name=\"name\"]",
+              "text_based": "",
+              "css": "#name",
+              "xpath": "/div[1]/main[1]/form[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "focus_name",
+              "final_intent": "focus_name"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": "form",
+              "page_url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "blueprint name input",
+                "relation": "target"
+              },
+              {
+                "element": "blueprint name label",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 451,
+                "y": 196,
+                "w": 766,
+                "h": 40
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0008_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0008_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "visible_key_elements": [
+                "input[name=\"name\"]",
+                "#name",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/blueprint/new|New Blueprint ・ Render Dashboard|bc1cf23a"
+              ],
+              "dom_fingerprint": "bd5e077060fa4436d2bcf63eaae80c9d65d1cc580a330739c093583985a99d8c"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "visible_key_elements": [
+                "input[name=\"name\"]",
+                "#name",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/blueprint/new|New Blueprint ・ Render Dashboard|bc1cf23a"
+              ],
+              "dom_fingerprint": "bd5e077060fa4436d2bcf63eaae80c9d65d1cc580a330739c093583985a99d8c"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "name"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "focus_name",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "focus_name",
+            "final_intent": "focus_name",
+            "anchors": [
+              {
+                "element": "blueprint name input",
+                "relation": "target"
+              },
+              {
+                "element": "blueprint name label",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "6acd0c3aae114e1c9914442179349b1d",
+          "snapshot_dom_hash": "3569099de27766070bba1a96e2fb06d0839bfced14297e89be821572b8d0f77d"
+        },
+        {
+          "action": "type",
+          "intent": "enter_name_value",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "input[name=\"name\"]",
+            "fallback_selectors": [
+              "label:has-text(\"Blueprint Name\") + input",
+              "label:has-text(\"Blueprint Name\") ~ input",
+              "input[type=\"text\"]",
+              "#name",
+              "/div[1]/main[1]/form[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            ],
+            "role": "input",
+            "type": "input",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "input",
+            "tag": "input",
+            "inner_text": "",
+            "aria_label": "",
+            "name": "name",
+            "placeholder": "",
+            "label_text": "Blueprint Name",
+            "data_testid": "",
+            "input_type": "text",
+            "css_class_tokens": [
+              "appearance-none",
+              "border",
+              "border-solid",
+              "focus-visible:outline",
+              "focus:outline-focus-action",
+              "h-10",
+              "hover:input-border--hover",
+              "input-background"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace New Blueprint Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.352,
+              "y_pct": 0.245
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "input",
+              "id": "name",
+              "classes": [
+                "appearance-none",
+                "border",
+                "border-solid",
+                "focus-visible:outline",
+                "focus:outline-focus-action",
+                "h-10",
+                "hover:input-border--hover",
+                "input-background",
+                "input-border",
+                "input-text",
+                "m-0",
+                "outline-2",
+                "placeholder:input-text--placeholder",
+                "px-3",
+                "py-2.5",
+                "rounded-none",
+                "truncate",
+                "type-interface-01",
+                "w-full"
+              ],
+              "inner_text": "",
+              "role": null,
+              "aria_label": null,
+              "name": "name",
+              "placeholder": null,
+              "label_text": "Blueprint Name"
+            },
+            "selectors": {
+              "aria": "input[name=\"name\"]",
+              "text_based": "",
+              "css": "#name",
+              "xpath": "/div[1]/main[1]/form[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/input[1]"
+            },
+            "semantic": {
+              "normalized_text": "",
+              "role": "input",
+              "input_type": "text",
+              "llm_intent": "enter_name_value",
+              "final_intent": "enter_name_value"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [],
+              "index_in_parent": 0,
+              "form_context": "form",
+              "page_url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "blueprint",
+                "relation": "target"
+              },
+              {
+                "element": "blueprint name",
+                "relation": "inside"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 451,
+                "y": 196,
+                "w": 766,
+                "h": 40
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,0",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0008_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0008_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "visible_key_elements": [
+                "input[name=\"name\"]",
+                "#name",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/blueprint/new|New Blueprint ・ Render Dashboard|bc1cf23a"
+              ],
+              "dom_fingerprint": "bd5e077060fa4436d2bcf63eaae80c9d65d1cc580a330739c093583985a99d8c"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "visible_key_elements": [
+                "input[name=\"name\"]",
+                "#name",
+                "input"
+              ],
+              "important_text_blocks": [
+                "https://dashboard.render.com/blueprint/new|New Blueprint ・ Render Dashboard|bc1cf23a"
+              ],
+              "dom_fingerprint": "bd5e077060fa4436d2bcf63eaae80c9d65d1cc580a330739c093583985a99d8c"
+            }
+          },
+          "value": "{{blueprint_name}}",
+          "input_binding": "blueprint_name",
+          "validation": {
+            "wait_for": {
+              "type": "none",
+              "target": "",
+              "timeout": 5000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "name",
+                "value"
+              ],
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "enter_name_value",
+              "intent_validation_primary": true
+            },
+            "assertions": []
+          },
+          "recovery": {
+            "intent": "enter_name_value",
+            "final_intent": "enter_name_value",
+            "anchors": [
+              {
+                "element": "blueprint",
+                "relation": "target"
+              },
+              {
+                "element": "blueprint name",
+                "relation": "inside"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [],
+          "semantic_description": "",
+          "snapshot_ref": "6acd0c3aae114e1c9914442179349b1d",
+          "snapshot_dom_hash": "3569099de27766070bba1a96e2fb06d0839bfced14297e89be821572b8d0f77d"
+        },
+        {
+          "action": {
+            "action": "click"
+          },
+          "intent": "submit_form",
+          "url": "",
+          "frame": {},
+          "target": {
+            "primary_selector": "label:has-text(\"M My Workspace New Blueprint Search CTRL + K K New Upgrade K\") + button",
+            "fallback_selectors": [
+              "label:has-text(\"M My Workspace New Blueprint Search CTRL + K K New Upgrade K\") ~ button",
+              "text=\"Deploy Blueprint\"",
+              "input[type=\"submit\"]",
+              "[role=\"button\"][name=\"Deploy Blueprint\"]",
+              "/body[1]/div[2]/div[1]/div[2]/div[1]/main[1]/form[1]/div[2]/div[1]/button[1]"
+            ],
+            "role": "button",
+            "type": "button",
+            "selector_confidence": 1.0,
+            "selector_source": "heuristic"
+          },
+          "element_fingerprint": {
+            "role": "button",
+            "tag": "button",
+            "inner_text": "Deploy Blueprint",
+            "aria_label": "",
+            "name": "",
+            "placeholder": "",
+            "label_text": "M My Workspace New Blueprint Search CTRL + K K New Upgrade K",
+            "data_testid": "",
+            "input_type": "submit",
+            "css_class_tokens": [
+              "active:button-primary-background--active",
+              "active:button-primary-text--active",
+              "button-primary-background",
+              "button-primary-text",
+              "flex",
+              "focus-visible:outline",
+              "focus-visible:outline-focus-action",
+              "group/button"
+            ],
+            "anchor_phrases": [
+              "Cookie Consent Banner",
+              "div",
+              "M My Workspace New Blueprint Search CTRL + K K New Upgrade K",
+              "M My Workspace"
+            ],
+            "position_hint": {
+              "x_pct": 0.037,
+              "y_pct": 0.75
+            }
+          },
+          "signals": {
+            "dom": {
+              "tag": "button",
+              "id": null,
+              "classes": [
+                "active:button-primary-background--active",
+                "active:button-primary-text--active",
+                "button-primary-background",
+                "button-primary-text",
+                "flex",
+                "focus-visible:outline",
+                "focus-visible:outline-focus-action",
+                "group/button",
+                "h-10",
+                "hover:button-primary-background--hover",
+                "hover:button-primary-text--hover",
+                "items-center",
+                "outline-2",
+                "outline-offset-2",
+                "px-3",
+                "py-2.5",
+                "type-interface-01"
+              ],
+              "inner_text": "Deploy Blueprint",
+              "role": null,
+              "aria_label": null,
+              "name": null,
+              "placeholder": null,
+              "label_text": "M My Workspace New Blueprint Search CTRL + K K New Upgrade K"
+            },
+            "selectors": {
+              "aria": "[role=\"button\"][name=\"Deploy Blueprint\"]",
+              "text_based": "text=\"Deploy Blueprint\"",
+              "css": "label:has-text(\"M My Workspace New Blueprint Search CTRL + K K New Upgrade K\") + button",
+              "xpath": "/body[1]/div[2]/div[1]/div[2]/div[1]/main[1]/form[1]/div[2]/div[1]/button[1]"
+            },
+            "semantic": {
+              "normalized_text": "deploy blueprint",
+              "role": "button",
+              "input_type": "submit",
+              "llm_intent": "submit_form",
+              "final_intent": "submit_form"
+            },
+            "context": {
+              "parent": "div",
+              "siblings": [
+                "button:Cancel"
+              ],
+              "index_in_parent": 0,
+              "form_context": "form",
+              "page_url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "timing": {
+                "wait_for": "load",
+                "timeout": 5000
+              }
+            },
+            "anchors": [
+              {
+                "element": "deploy blueprint",
+                "relation": "target"
+              },
+              {
+                "element": "blueprint path",
+                "relation": "above"
+              },
+              {
+                "element": "specified configurations",
+                "relation": "above"
+              }
+            ],
+            "visual": {
+              "bbox": {
+                "x": 48,
+                "y": 600,
+                "w": 125,
+                "h": 40
+              },
+              "viewport": "1280x720",
+              "scroll_position": "0,267",
+              "full_screenshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0010_full.jpg",
+              "element_snapshot": "sessions/81e5e505-1954-440b-adfe-0fd5521874a1/images/evt_0010_element.jpg"
+            }
+          },
+          "state": {
+            "before": {
+              "url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"Deploy Blueprint\"]",
+                "text=\"Deploy Blueprint\"",
+                "div.min-h-screen.flex:nth-of-type(1) > div.flex.flex-grow:nth-of-type(2) > div.w-full > main.w-full.max-w-\\[1920px\\] > form > div.mt-10:nth-of-type(2) > div.inline-flex.flex-wrap > button.type-interface-01.button-primary-background:nth-of-type(1)",
+                "button",
+                "button:Cancel"
+              ],
+              "important_text_blocks": [
+                "Deploy Blueprint",
+                "https://dashboard.render.com/blueprint/new|New Blueprint ・ Render Dashboard|bc1cf23a"
+              ],
+              "dom_fingerprint": "7b4eac4cc446759bb41446edc1297ca3ad2dd86eb43a9ecc09def3f7c8fd09c7"
+            },
+            "after": {
+              "url": "https://dashboard.render.com/blueprint/new",
+              "page_title": "New Blueprint ・ Render Dashboard",
+              "visible_key_elements": [
+                "[role=\"button\"][name=\"Deploy Blueprint\"]",
+                "text=\"Deploy Blueprint\"",
+                "div.min-h-screen.flex:nth-of-type(1) > div.flex.flex-grow:nth-of-type(2) > div.w-full > main.w-full.max-w-\\[1920px\\] > form > div.mt-10:nth-of-type(2) > div.inline-flex.flex-wrap > button.type-interface-01.button-primary-background:nth-of-type(1)",
+                "button",
+                "button:Cancel"
+              ],
+              "important_text_blocks": [
+                "Deploy Blueprint",
+                "https://dashboard.render.com/blueprint/new|New Blueprint ・ Render Dashboard|bc1cf23a"
+              ],
+              "dom_fingerprint": "7b4eac4cc446759bb41446edc1297ca3ad2dd86eb43a9ecc09def3f7c8fd09c7"
+            }
+          },
+          "value": null,
+          "input_binding": null,
+          "validation": {
+            "wait_for": {
+              "type": "intent_outcome",
+              "target": "",
+              "timeout": 8000
+            },
+            "success_conditions": {
+              "url_not_contains": "",
+              "required_elements": [],
+              "forbidden_elements": [],
+              "expected_text_tokens": [
+                "submit",
+                "form"
+              ],
+              "page_url_hint": "https://dashboard.render.com/blueprint/new",
+              "state_diff_strength": 0.0,
+              "state_diff_as_hint": true,
+              "final_intent": "submit_form",
+              "intent_validation_primary": true
+            },
+            "assertions": [
+              {
+                "type": "text_present",
+                "target": "submit",
+                "timeout_ms": 5000,
+                "required": false
+              },
+              {
+                "type": "text_present",
+                "target": "form",
+                "timeout_ms": 5000,
+                "required": false
+              }
+            ]
+          },
+          "recovery": {
+            "intent": "submit_form",
+            "final_intent": "submit_form",
+            "anchors": [
+              {
+                "element": "deploy blueprint",
+                "relation": "target"
+              },
+              {
+                "element": "blueprint path",
+                "relation": "above"
+              },
+              {
+                "element": "specified configurations",
+                "relation": "above"
+              }
+            ],
+            "strategies": [
+              "semantic match",
+              "position match",
+              "visual match",
+              "intent_outcome_probe"
+            ],
+            "confidence_threshold": 0.85,
+            "max_attempts": 2,
+            "require_diverse_attempts": true
+          },
+          "confidence_protocol": {
+            "layer_thresholds": {
+              "dom_execute": 0.9,
+              "semantic_execute": 0.85,
+              "visual_execute": 0.8
+            },
+            "recovery_global_weights": {
+              "dom": 0.3,
+              "semantic": 0.35,
+              "visual": 0.15,
+              "context": 0.2
+            },
+            "layer_scorers": {
+              "dom": {
+                "id": 0.35,
+                "tag": 0.15,
+                "class": 0.25,
+                "xpath": 0.25
+              },
+              "semantic": {
+                "text": 0.35,
+                "role": 0.25,
+                "intent": 0.2,
+                "context": 0.2,
+                "parent_mix": 0.5,
+                "form_mix": 0.5
+              },
+              "visual": {
+                "viewport_mismatch_penalty": 0.85,
+                "iou_weight": 0.65,
+                "pos_weight": 0.35
+              },
+              "context": {
+                "url": 0.6,
+                "title": 0.4
+              }
+            },
+            "uncertainty_policy": {
+              "candidate_ambiguity_margin": 0.03,
+              "min_anchors_warn": 1,
+              "failure_first": true,
+              "assist_min_confidence": 0.75,
+              "recovery_candidate_budget": 5
+            },
+            "policy_version": "1.0.0",
+            "policy_hash": "7d35d298fe6b78b6"
+          },
+          "decision_policy": {
+            "ask_if_ambiguous": true,
+            "stop_if_low_confidence": true,
+            "max_retries": 2
+          },
+          "compiled_selectors": [
+            "[type='submit']:has-text(\"Deploy Blueprint\")",
+            "button:has-text(\"Deploy Blueprint\"):visible",
+            "div.mt-10 button:first-child"
+          ],
+          "semantic_description": "click_deploy_blueprint_button",
+          "snapshot_ref": "6acd0c3aae114e1c9914442179349b1d",
+          "snapshot_dom_hash": "3569099de27766070bba1a96e2fb06d0839bfced14297e89be821572b8d0f77d"
+        }
+      ]
+    }
+  ],
+  "policies": {
+    "failure_first": true,
+    "stop_on_low_confidence": true
+  },
+  "llm": {
+    "max_calls_per_step": 1,
+    "timeout_ms": 600000
+  },
+  "intent_graph": {
+    "goal": "Deploy a new infrastructure blueprint on Render by connecting a repository and configuring deployment settings.",
+    "steps": [
+      {
+        "index": 0,
+        "intent": "Initiate the creation of a new resource by selecting the 'New' option.",
+        "verification_anchor": "Presence of 'New' button on the dashboard homepage."
+      },
+      {
+        "index": 1,
+        "intent": "Navigate to the 'Blueprint' section to start configuring a new infrastructure blueprint.",
+        "verification_anchor": "Confirmation of navigation to the Blueprint selection page."
+      },
+      {
+        "index": 2,
+        "intent": "Prepare to input repository details by focusing on the relevant input field.",
+        "verification_anchor": "Focus state on the repository input field."
+      },
+      {
+        "index": 3,
+        "intent": "Provide the repository URL or identifier to link the blueprint to the correct source.",
+        "verification_anchor": "Text input appears in the repository field."
+      },
+      {
+        "index": 4,
+        "intent": "Confirm the repository selection by clicking the 'Connect' button.",
+        "verification_anchor": "Navigation to the blueprint configuration page."
+      },
+      {
+        "index": 5,
+        "intent": "Prepare to input blueprint configuration details by focusing on the relevant input field.",
+        "verification_anchor": "Focus state on the configuration input field."
+      },
+      {
+        "index": 6,
+        "intent": "Enter the required configuration details for the blueprint (e.g., environment variables, services).",
+        "verification_anchor": "Text input appears in the configuration fields."
+      },
+      {
+        "index": 7,
+        "intent": "Finalize and submit the blueprint configuration for deployment by clicking 'Deploy Blueprint'.",
+        "verification_anchor": "Confirmation of deployment initiation or navigation to deployment status page."
+      }
+    ],
+    "decision_points": [
+      {
+        "step_index": 1,
+        "description": "User must select the correct type of resource (Blueprint) from available options."
+      },
+      {
+        "step_index": 3,
+        "description": "User must input a valid repository URL or identifier to proceed."
+      },
+      {
+        "step_index": 6,
+        "description": "User must provide valid and complete configuration details for the blueprint."
+      }
+    ],
+    "expected_end_state": {
+      "description": "The blueprint is successfully submitted for deployment, and the user is redirected to a status page showing the deployment progress or confirmation of the initiated deployment."
+    }
+  },
+  "compile_report": {
+    "status": "ok",
+    "steps_total": 8,
+    "steps_with_warnings": 0,
+    "min_confidence": 1.0,
+    "steps": [
+      {
+        "index": 0,
+        "intent": "click_new_button",
+        "selector": "label:has-text(\"Projects Search CTRL + K K\") + button",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": null,
+        "warnings": []
+      },
+      {
+        "index": 1,
+        "intent": "navigate_to_blueprint",
+        "selector": "label:has-text(\"Project\") + a",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": null,
+        "warnings": []
+      },
+      {
+        "index": 2,
+        "intent": "focus_search",
+        "selector": "label:has-text(\"Search repositories\") + input",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": null,
+        "warnings": []
+      },
+      {
+        "index": 3,
+        "intent": "enter_search_value",
+        "selector": "label:has-text(\"Search repositories\") + input",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": "{{repository_name}}",
+        "warnings": []
+      },
+      {
+        "index": 4,
+        "intent": "activate_control_connect",
+        "selector": "label:has-text(\"cannonboldoff-hue / SEARCH_ENGINE •3 months ago\") + button",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": null,
+        "warnings": []
+      },
+      {
+        "index": 5,
+        "intent": "focus_name",
+        "selector": "input[name=\"name\"]",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": null,
+        "warnings": []
+      },
+      {
+        "index": 6,
+        "intent": "enter_name_value",
+        "selector": "input[name=\"name\"]",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": "blueprint_name",
+        "warnings": []
+      },
+      {
+        "index": 7,
+        "intent": "submit_form",
+        "selector": "label:has-text(\"M My Workspace New Blueprint Search CTRL + K K New Upgrade K\") + button",
+        "confidence": 1.0,
+        "confidence_breakdown": {},
+        "source": "heuristic",
+        "reasoning": "",
+        "input_binding": null,
+        "warnings": []
+      }
+    ],
+    "llm_router_stats": {
+      "pool_size": 31,
+      "entries": [
+        {
+          "provider": "groq",
+          "endpoint": "https://api.groq.com/openai/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "groq",
+          "endpoint": "https://api.groq.com/openai/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "groq",
+          "endpoint": "https://api.groq.com/openai/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "groq",
+          "endpoint": "https://api.groq.com/openai/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "google_ai_studio",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "google_ai_studio",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "google_ai_studio",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "google_ai_studio",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "google_ai_studio",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "google_ai_studio",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "google_ai_studio",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "nvidia_nim",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "nvidia_nim",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "nvidia_nim",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "nvidia_nim",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "nvidia_nim",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "nvidia_nim",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "requests_sent": 2,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "nvidia_nim",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "cerebras",
+          "endpoint": "https://api.cerebras.ai/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "openrouter",
+          "endpoint": "https://openrouter.ai/api/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "openrouter",
+          "endpoint": "https://openrouter.ai/api/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "openrouter",
+          "endpoint": "https://openrouter.ai/api/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "openrouter",
+          "endpoint": "https://openrouter.ai/api/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "openrouter",
+          "endpoint": "https://openrouter.ai/api/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "openrouter",
+          "endpoint": "https://openrouter.ai/api/v1",
+          "requests_sent": 0,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "mistral",
+          "endpoint": "https://api.mistral.ai/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "mistral",
+          "endpoint": "https://api.mistral.ai/v1",
+          "requests_sent": 3,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "mistral",
+          "endpoint": "https://api.mistral.ai/v1",
+          "requests_sent": 2,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "mistral",
+          "endpoint": "https://api.mistral.ai/v1",
+          "requests_sent": 1,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "mistral",
+          "endpoint": "https://api.mistral.ai/v1",
+          "requests_sent": 1,
+          "requests_429": 0,
+          "cooled": false
+        },
+        {
+          "provider": "mistral",
+          "endpoint": "https://api.mistral.ai/v1",
+          "requests_sent": 1,
+          "requests_429": 0,
+          "cooled": false
+        }
+      ]
+    }
+  }
+}

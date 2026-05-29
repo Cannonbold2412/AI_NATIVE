@@ -1,0 +1,22 @@
+{
+  "company": "render",
+  "company_display": "Render",
+  "skill_pack_version": "0.1.0",
+  "required_runtime": ">=1.0.0",
+  "target_url": "https://dashboard.render.com/login",
+  "protected_url": "https://dashboard.render.com/",
+  "skills": [
+    "delete-a-service",
+    "create-a-service"
+  ],
+  "sync_endpoint": "https://api.conxa.io/skill-packs/render/delta",
+  "built_at": "2026-05-28T23:11:52.947139+00:00",
+  "tracking": {
+    "enabled": true,
+    "tracking_url": "http://127.0.0.1:8000/api/tracking/render/events",
+    "tracking_token": "",
+    "company_id": "render",
+    "schema_version": 1,
+    "protocol_version": 1
+  }
+}

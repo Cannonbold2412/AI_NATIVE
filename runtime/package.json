@@ -1,0 +1,37 @@
+{
+  "name": "conxa-runtime",
+  "version": "1.0.0",
+  "description": "Conxa local AI runtime — MCP server for company workflow skills",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build:win": "set \"PATH=C:\\Program Files\\Git\\usr\\bin;%USERPROFILE%\\tools\\nasm-3.01;%PATH%\" && npx @yao-pkg/pkg server.js --targets node22-win-x64 --output dist/runtime-win.exe --no-bytecode --public",
+    "build:mac": "npx @yao-pkg/pkg server.js --targets node22-mac-x64 --output dist/runtime-mac --no-bytecode --public",
+    "build:all": "npm run build:win && npm run build:mac"
+  },
+  "pkg": {
+    "targets": ["node22-win-x64", "node22-mac-x64"],
+    "outputPath": "dist/",
+    "assets": [
+      "node_modules/playwright-core/browsers.json"
+    ],
+    "scripts": [
+      "server.js",
+      "skill_loader.js",
+      "sync.js",
+      "auth_manager.js",
+      "run.js",
+      "browser.js",
+      "tracker.js"
+    ]
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "playwright": "^1.45.0",
+    "keytar": "^7.9.0",
+    "semver": "^7.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,444 @@
+"""HTTP surface — recorder, compile pipeline, skill retrieval, 1-click fix, metrics."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, HttpUrl
+
+from app.compiler.build import compile_skill_package
+from app.compiler.patch import apply_step_patch, revalidate_step
+from app.compiler.wait_for_shape import leaf_wait_for_conditions, leaf_wait_type
+from app.confidence.uncertainty import audit_reference
+from app.llm.anchor_vision_llm import VisionAnchorGenerationError
+from app.metrics.store import metrics
+from app.pipeline.run import run_pipeline
+from app.services.jobs import append_current_job_event
+from app.recorder.session import registry
+from app.storage.json_store import read_skill, write_skill
+from app.storage.session_events import read_session_events
+
+router = APIRouter()
+HARD_AUDIT_ISSUES = {
+    "missing_selectors",
+    "empty_primary_css",
+    "anchors_empty",
+    "anchors_empty_required",
+    "weak_visual_bbox",
+}
+GENERIC_INTENTS = {"interact", "provide_input", "perform_action"}
+
+
+class StartRecordBody(BaseModel):
+    start_url: HttpUrl | None = Field(None, description="Optional initial navigation target for the headed recorder. If omitted, browser opens to a blank page.")
+    capture_hover: bool = Field(False, description="Capture hover events for workflows that depend on hover-revealed elements.")
+
+
+class CompileBody(BaseModel):
+    session_id: str
+    skill_title: str = ""
+
+
+class UpdateStepBody(BaseModel):
+    skill_id: str
+    step_index: int
+    patch: dict[str, Any] = Field(default_factory=dict)
+    assist_llm: bool = True
+
+
+def _load_events_for_compile(session_id: str) -> list[dict[str, Any]]:
+    sess = registry.get(session_id)
+    mem_events = sess.snapshot_events() if sess else []
+    disk_events = read_session_events(session_id)
+    if mem_events:
+        return mem_events
+    return disk_events
+
+
+def _build_audit_report(steps: list[Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    audit_report: list[dict[str, Any]] = []
+    for idx, step in enumerate(steps):
+        issues = audit_reference(
+            {
+                "action_kind": step.action["action"] if isinstance(step.action, dict) else step.action,
+                "target": step.signals.get("dom") or {},
+                "selectors": step.signals.get("selectors") or {},
+                "semantic": step.signals.get("semantic") or {},
+                "context": step.signals.get("context") or {},
+                "anchors": step.signals.get("anchors") or [],
+                "visual": step.signals.get("visual") or {},
+                "state_after": (step.signals.get("context") or {}).get("state_after") or "",
+                "page_url": (step.signals.get("context") or {}).get("page_url") or "",
+                "page_title": (step.signals.get("context") or {}).get("page_title") or "",
+            }
+        )
+        if issues:
+            audit_report.append({"step_index": idx, "issues": issues})
+    hard_failures = [
+        item for item in audit_report if any(issue in HARD_AUDIT_ISSUES for issue in item["issues"])
+    ]
+    return audit_report, hard_failures
+
+
+def _build_preview_diff(raw: list[dict[str, Any]], normalized: list[dict[str, Any]], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    wait_types: dict[str, int] = {}
+    generic_intent_count = 0
+    for step in steps:
+        wait_for = (step.get("validation") or {}).get("wait_for") or {}
+        wf_d = dict(wait_for) if isinstance(wait_for, dict) else {}
+        for leaf in leaf_wait_for_conditions(wf_d):
+            wait_type = leaf_wait_type(leaf)
+            wait_types[wait_type] = wait_types.get(wait_type, 0) + 1
+        if str(step.get("intent") or "").strip().lower() in GENERIC_INTENTS:
+            generic_intent_count += 1
+    return {
+        "event_counts": {
+            "raw": len(raw),
+            "normalized": len(normalized),
+            "compiled": len(steps),
+            "removed_during_compile": max(0, len(normalized) - len(steps)),
+        },
+        "validation_summary": {"wait_types": wait_types},
+        "intent_summary": {"generic_intents": generic_intent_count, "specific_intents": len(steps) - generic_intent_count},
+    }
+
+
+@router.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@router.post("/record")
+async def start_record(body: StartRecordBody) -> dict[str, Any]:
+    """Start a headed Chromium session with in-page multi-signal capture."""
+    start_url = str(body.start_url) if body.start_url else "about:blank"
+    sess = registry.create(start_url, capture_hover=body.capture_hover)
+    metrics.inc("recordings_started")
+    try:
+        await sess.start()
+    except NotImplementedError as exc:
+        registry.pop(sess.session_id)
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Playwright could not launch on this event loop. "
+                "Restart uvicorn after latest code changes so Windows uses a Proactor event loop."
+            ),
+        ) from exc
+    except RuntimeError as exc:
+        registry.pop(sess.session_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception:
+        registry.pop(sess.session_id)
+        raise
+    return {"session_id": sess.session_id}
+
+
+@router.get("/record/{session_id}/events")
+def list_record_events(session_id: str) -> dict[str, Any]:
+    sess = registry.get(session_id)
+    if sess:
+        return {"session_id": session_id, "events": sess.snapshot_events(), "errors": sess.binding_errors}
+    # Session no longer in memory — read from disk (post-finalize)
+    from app.storage.session_events import session_events_path
+    if not session_events_path(session_id).is_file():
+        raise HTTPException(status_code=404, detail="Unknown session_id")
+    return {"session_id": session_id, "events": read_session_events(session_id), "errors": []}
+
+
+@router.get("/record/{session_id}/status")
+def record_status(session_id: str) -> dict[str, Any]:
+    sess = registry.get(session_id)
+    if not sess:
+        stored_events = read_session_events(session_id)
+        if not stored_events:
+            raise HTTPException(status_code=404, detail="Unknown session_id")
+        current_url = ""
+        try:
+            current_url = str((stored_events[-1].get("page") or {}).get("url") or "")
+        except Exception:
+            current_url = ""
+        return {
+            "session_id": session_id,
+            "browser_open": False,
+            "event_count": len(stored_events),
+            "ended_by_user": True,
+            "binding_errors": [],
+            "current_url": current_url,
+        }
+    return sess.status()
+
+
+@router.post("/record/{session_id}/stop")
+async def stop_record(session_id: str) -> dict[str, str]:
+    stopped = await registry.remove(session_id)
+    if not stopped:
+        raise HTTPException(status_code=404, detail="Unknown session_id")
+    metrics.inc("recordings_stopped")
+    return {"session_id": session_id, "status": "stopped"}
+
+
+@router.post("/compile")
+async def compile_skill(body: CompileBody) -> dict[str, Any]:
+    """Run Phase 2 pipeline + Phase 3 compiler; persist JSON skill package."""
+    metrics.inc("compile_attempts")
+    append_current_job_event(
+        "compile_phase",
+        "Compile requested.",
+        {"phase": "start", "session_id": body.session_id, "skill_title": body.skill_title.strip()},
+    )
+    raw = _load_events_for_compile(body.session_id)
+    append_current_job_event(
+        "compile_phase",
+        "Loaded recorded events.",
+        {"phase": "load_events", "session_id": body.session_id, "event_count": len(raw)},
+    )
+    if not raw:
+        metrics.inc("compile_failures")
+        append_current_job_event(
+            "compile_error",
+            "No events available for this session.",
+            {"phase": "load_events", "session_id": body.session_id},
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="No events for this session. Poll GET /record/{id}/events or use a stopped session with events.jsonl.",
+        )
+    skill_title = body.skill_title.strip()
+    if not skill_title:
+        metrics.inc("compile_failures")
+        append_current_job_event("compile_error", "Skill Name is required.", {"phase": "validate_request"})
+        raise HTTPException(status_code=400, detail="Skill Name is required.")
+    skill_id = f"skill_{body.session_id}"
+    try:
+        append_current_job_event(
+            "compile_phase",
+            "Normalizing recorded events.",
+            {"phase": "pipeline_start", "input_event_count": len(raw)},
+        )
+        normalized = run_pipeline(raw)
+        append_current_job_event(
+            "compile_phase",
+            "Pipeline normalization finished.",
+            {"phase": "pipeline_done", "output_event_count": len(normalized)},
+        )
+        existing = read_skill(skill_id)
+        if existing:
+            version = int((existing.get("meta") or {}).get("version") or 0) + 1
+        else:
+            version = 1
+        append_current_job_event(
+            "compile_phase",
+            "Compiling skill package.",
+            {"phase": "compiler_start", "skill_id": skill_id, "version": version},
+        )
+        package = compile_skill_package(
+            normalized,
+            skill_id=skill_id,
+            source_session_id=body.session_id,
+            title=skill_title,
+            version=version,
+        )
+        step_count = len(package.skills[0].steps)
+        append_current_job_event(
+            "compile_phase",
+            "Skill package compiled.",
+            {"phase": "compiler_done", "skill_id": skill_id, "version": version, "step_count": step_count},
+        )
+        append_current_job_event(
+            "compile_phase",
+            "Running static audit.",
+            {"phase": "static_audit_start", "step_count": step_count},
+        )
+        audit_report, hard_failures = _build_audit_report(package.skills[0].steps)
+        if hard_failures:
+            metrics.inc("compile_failures")
+            append_current_job_event(
+                "compile_error",
+                "Static audit failed.",
+                {"phase": "static_audit_failed", "hard_failures": hard_failures},
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "compile_failed_static_audit",
+                    "hard_failures": hard_failures,
+                },
+            )
+        append_current_job_event(
+            "compile_phase",
+            "Static audit passed.",
+            {"phase": "static_audit_done", "audit_status": "passed"},
+        )
+        write_skill(skill_id, package.model_dump(mode="json"))
+        append_current_job_event(
+            "compile_phase",
+            "Compiled skill written to storage.",
+            {"phase": "write_skill_done", "skill_id": skill_id, "version": version},
+        )
+        metrics.inc("compile_successes")
+        metrics.inc("fallback_usage", step_count)
+    except HTTPException:
+        raise
+    except VisionAnchorGenerationError as exc:
+        metrics.inc("compile_failures")
+        append_current_job_event(
+            "compile_error",
+            "Vision anchor generation failed.",
+            {"phase": "vision_anchor_failed", "detail": exc.api_detail()},
+        )
+        raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
+    except Exception as exc:
+        metrics.inc("compile_failures")
+        append_current_job_event(
+            "compile_error",
+            "Compile failed.",
+            {"phase": "compile_failed", "error": str(exc), "error_type": exc.__class__.__name__},
+        )
+        raise HTTPException(status_code=500, detail=f"compile_failed: {exc!s}") from exc
+
+    return {
+        "skill_id": skill_id,
+        "version": version,
+        "step_count": step_count,
+        "audit_status": "passed",
+    }
+
+
+@router.get("/compile-preview/{session_id}")
+async def compile_preview(session_id: str) -> dict[str, Any]:
+    """Build a non-persistent V3 preview + before/after compile diff."""
+    raw = _load_events_for_compile(session_id)
+    if not raw:
+        raise HTTPException(status_code=400, detail="No events for this session.")
+    skill_id = f"skill_{session_id}"
+    normalized = run_pipeline(raw)
+    try:
+        package = compile_skill_package(
+            normalized,
+            skill_id=skill_id,
+            source_session_id=session_id,
+            title=skill_id,
+            version=1,
+        )
+    except VisionAnchorGenerationError as exc:
+        raise HTTPException(status_code=422, detail=exc.api_detail()) from exc
+    package_json = package.model_dump(mode="json")
+    steps = ((package_json.get("skills") or [{}])[0].get("steps") or [])
+    _, hard_failures = _build_audit_report(package.skills[0].steps)
+    diff_report = _build_preview_diff(raw, normalized, steps)
+    return {
+        "session_id": session_id,
+        "skill_id": skill_id,
+        "compiled_json": package_json,
+        "diff_report": diff_report,
+        "static_audit": {
+            "status": "failed" if hard_failures else "passed",
+            "hard_failures": hard_failures,
+        },
+    }
+
+
+@router.get("/skill/{skill_id}")
+def get_skill(skill_id: str) -> dict[str, Any]:
+    doc = read_skill(skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    return doc
+
+
+@router.post("/update-step")
+def update_step(body: UpdateStepBody) -> dict[str, Any]:
+    """Merge a deterministic patch into one step; bump version; run structural revalidation."""
+    metrics.inc("update_step_attempts")
+    doc = read_skill(body.skill_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Unknown skill_id")
+    try:
+        new_doc = apply_step_patch(doc, body.step_index, body.patch, assist_llm=body.assist_llm)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    steps = (new_doc.get("skills") or [{}])[0].get("steps") or []
+    if body.step_index < 0 or body.step_index >= len(steps):
+        raise HTTPException(status_code=400, detail="step_index_out_of_range")
+    reval = revalidate_step(dict(steps[body.step_index]))
+    write_skill(body.skill_id, new_doc)
+    metrics.inc("update_step_successes")
+    return {
+        "skill_id": body.skill_id,
+        "meta": new_doc.get("meta"),
+        "revalidation": reval,
+    }
+
+
+@router.get("/metrics")
+def get_metrics() -> dict[str, Any]:
+    snap = metrics.snapshot()
+    alerts: list[dict[str, str]] = []
+    if snap["compile_attempts"] > 5 and snap["compile_ok_rate"] < 0.5:
+        alerts.append(
+            {
+                "type": "compile_regression",
+                "detail": "Compile success rate dropped; consider re-recording or 1-click fixes.",
+            }
+        )
+
+    # Phase 4: tiered resolution metrics for the redesign dashboard.
+    try:
+        from app.execution.element_resolver import (  # noqa: PLC0415
+            escalation_queue,
+            promotion_state,
+            tier_metrics,
+        )
+        snap["tier_metrics"] = tier_metrics.snapshot()
+        snap["selector_promotion"] = promotion_state.snapshot()
+        snap["escalations_pending"] = len(escalation_queue.pending())
+        # Alert when recovery rate (tier 3 + 4) exceeds 5%: signal to recompile workflows.
+        rr = snap["tier_metrics"].get("recovery_rate", 0.0)
+        if rr > 0.05 and snap["tier_metrics"].get("total", 0) > 20:
+            alerts.append({
+                "type": "recovery_rate_high",
+                "detail": f"Recovery rate {rr:.1%} exceeds 5% — consider recompiling workflows.",
+            })
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Phase 1: selector cache stats.
+    try:
+        from app.storage import selector_cache  # noqa: PLC0415
+        snap["selector_cache"] = selector_cache.hit_rate()
+    except Exception:  # noqa: BLE001
+        pass
+
+    snap["alerts"] = alerts
+    return snap
+
+
+@router.post("/admin/cache/invalidate/{skill_id}")
+def invalidate_selector_cache(skill_id: str) -> dict[str, Any]:
+    """Admin: Invalidate selector cache for all snapshots in a skill."""
+    try:
+        doc = read_skill(skill_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="skill_not_found")
+
+    from app.storage import selector_cache  # noqa: PLC0415
+
+    dom_hashes = set()
+    for skill in (doc.get("skills") or []):
+        for step in (skill.get("steps") or []):
+            snapshot = ((step.get("signals") or {}).get("snapshot") or {})
+            dom_hash = snapshot.get("dom_hash")
+            if dom_hash:
+                dom_hashes.add(dom_hash)
+
+    deleted = 0
+    for dom_hash in dom_hashes:
+        deleted += selector_cache.invalidate(dom_hash)
+
+    return {
+        "skill_id": skill_id,
+        "dom_hashes_invalidated": len(dom_hashes),
+        "cache_entries_deleted": deleted,
+    }

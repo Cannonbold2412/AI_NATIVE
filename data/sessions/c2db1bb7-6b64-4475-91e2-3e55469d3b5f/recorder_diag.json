@@ -1,0 +1,416 @@
+{
+  "binding_errors": [
+    "bridge_frame_install_error: Frame.evaluate: Target page, context or browser has been closed",
+    "pump_error: Page.evaluate: Target page, context or browser has been closed"
+  ],
+  "traces": [
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779851794491,
+      "extra": {
+        "isTop": true,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779851794492,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851795104,
+      "extra": {
+        "isTop": true,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851795108,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "bridge_init",
+      "url": "about:blank",
+      "ts": 1779851796995,
+      "extra": {
+        "isTop": false,
+        "hasBinding": true
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframes_at_init",
+      "url": "about:blank",
+      "ts": 1779851796995,
+      "extra": {
+        "count": 0,
+        "items": []
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "iframe_added",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851796999,
+      "extra": {
+        "src": "",
+        "id": "intercom-frame",
+        "testId": ""
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851800581,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/setup-guide",
+      "ts": 1779851800809,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851803897,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851804122,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851804123,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851804124,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851804202,
+      "extra": {
+        "t": "input"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851808407,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851808408,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851808627,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851809844,
+      "extra": {
+        "t": "focusout"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851809844,
+      "extra": {
+        "t": "focusin"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851810071,
+      "extra": {
+        "t": "click"
+      }
+    },
+    {
+      "_trace": true,
+      "kind": "event",
+      "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+      "ts": 1779851810580,
+      "extra": {
+        "t": "focusout"
+      }
+    }
+  ],
+  "frame_tree": [],
+  "frame_snapshots": [
+    {
+      "ts": 1779851797008,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/setup-guide",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/setup-guide"
+        }
+      ]
+    },
+    {
+      "ts": 1779851798380,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/setup-guide",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/setup-guide"
+        }
+      ]
+    },
+    {
+      "ts": 1779851799499,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/setup-guide",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/setup-guide"
+        }
+      ]
+    },
+    {
+      "ts": 1779851800601,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/setup-guide",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/setup-guide"
+        }
+      ]
+    },
+    {
+      "ts": 1779851803022,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851804250,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851806306,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851807407,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851808528,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851810142,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851811748,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851812864,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851813961,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851815050,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851816152,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    },
+    {
+      "ts": 1779851817328,
+      "frames": [
+        {
+          "url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none",
+          "parent_url": null
+        },
+        {
+          "url": "about:blank",
+          "parent_url": "https://conxa.pipedrive.com/persons/list/user/everyone?quickFilter=none"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "2fce1e04f6d9253a5fdbef17c6d6962df22202d530f72cfd2d2645d97920723c": {
+    "intent": "interact_contacts",
+    "normalized_text": "contacts",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "8fa845fab69358195443af0c670060bea2232685d656542267a1c51312956730": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "7758893ad61766ee0e8a28b07854b860527acb649ec7e692d74350d5d78c0f6e": {
+    "intent": "interact",
+    "normalized_text": "interact",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "3ea046cc7ae6f10d91f8db5796e2bbc7098296b8cf72a06a96ee530c66cd658a": {
+    "intent": "activate_control_delete",
+    "normalized_text": "delete",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "0ce51ceacba7ec4dd753e02b13a545ee83086d4bc05312ef0fce60894bb3fa6b": {
+    "intent": "activate_control_person",
+    "normalized_text": "person",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "7564e0a49fd075ff210d54609c5c9fb3adf55b7e16072cf64e112787d154bd06": {
+    "intent": "interact_add_labels",
+    "normalized_text": "add labels",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "75c08f6ffbf23f21e546d247f93e8cb4ae2ac0876632645ed42f9c5944da6b7a": {
+    "intent": "interact_setup_guide_3_contacts_activities_deals_leads_in",
+    "normalized_text": "setup guide 3 contacts activities deals leads insights sales inbox hi, karishma nagar! you have 9 days left in your premium trial. view billing plans contacts / people kn person 2 people filter add condition name organization email phone cl",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "c465eb717d3fcd0c7bbb4fb5eb074569b4a16a9612f951a4566b53a5a3da5ad3": {
+    "intent": "activate_control_item_owner_s_visibility_group",
+    "normalized_text": "item owner’s visibility group",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "0354c65230c94e9d767aff672c75e4c685fbdd8ce1069a364a9bcbc685724375": {
+    "intent": "interact_item_owner_visible_to_the_owner__global_admins__",
+    "normalized_text": "item owner visible to the owner, global admins, followers, parent visibility groups",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "e1a5eda1c33763c010b5f32873f68959428255ce5bc0905fbbdbd6aee230d174": {
+    "intent": "activate_control_save",
+    "normalized_text": "save",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "c9aa91d98a5e57b638be633777cb0009e8ef42936d4ccc099bf460c60ed14094": {
+    "intent": "interact_m_my_workspace_projects_search_ctrl___k_k_new_up",
+    "normalized_text": "m my workspace projects search ctrl + k k new upgrade k projects blueprints environment groups integrations observability webhooks notifications networking private links dedicated ips new workspace billing settings new plans, zero seat fees",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "32f2d39db1b464193d19995fec5a7e7f7241e21b89ff585d77301859a9a8cdbc": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "755e043c3736de3d3d1d4dbb71fe7f52e4c17efd3f1b0be64a6b5190ed5016b7": {
+    "intent": "interact_conxa_web",
+    "normalized_text": "conxa-web",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "855aff8f2a92348f1080f8226e0b23d884b284f2eeecfd3bd5f14aa8e1ff45d8": {
+    "intent": "interact_m_my_workspace_conxa_web_search_ctrl___k_k_new_u",
+    "normalized_text": "m my workspace conxa-web search ctrl + k k new upgrade k dashboard conxa-web events settings monitor logs metrics manage environment shell scaling previews disk one-off jobs new plans, zero seat fees we're updating workspace pricing to help",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "4d1ba336831f6a321bc59d6d259fb2da17fe0c490f8bc86fd150034107675632": {
+    "intent": "interact_settings",
+    "normalized_text": "settings",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "ada49467d618f0e536ded84f4757822288aa2050a00aed213ecdd99d719d94c4": {
+    "intent": "interact_m_my_workspace_conxa_web_search_ctrl___k_k_new_u",
+    "normalized_text": "m my workspace conxa-web search ctrl + k k new upgrade k dashboard conxa-web events settings monitor logs metrics manage environment shell scaling previews disk one-off jobs new plans, zero seat fees we're updating workspace pricing to help",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "e482240c9e4bdd0048732e97cc877bdb0147a6bbd6fbad978fb4eaf9b08f9f51": {
+    "intent": "activate_control_delete_web_service",
+    "normalized_text": "delete web service",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "9daf0d3af582901240b7df6eb958289aa52bbd7cabbfa4ef1604539e21664d99": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "11a10f7e019352aa5d3937f2e6aa1e02306b6ebda64dd32ed80d78f910e20c2d": {
+    "intent": "activate_control_new",
+    "normalized_text": "new",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "2fcfdae81e35ecab2d5e7de4bb081f6661b5cbfcf4ab3fb8a0920b06a34d8250": {
+    "intent": "interact_blueprint",
+    "normalized_text": "blueprint",
+    "confidence": 0.6,
+    "source": "rule_fallback"
+  },
+  "74042d02c2e833b82185fbca140f5d4610329bc6a1a3c80760d3b30092f0298a": {
+    "intent": "activate_control_connect",
+    "normalized_text": "connect",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "745107bbb580309139775c4f09dfddd851d5854034fb0b3f9a4645afc32ed383": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  },
+  "dc9a137f9e06349d9a1bb1b0303f9cc93d6ec5c64249d70da39b2e68aab3fa2b": {
+    "intent": "activate_control_deploy_blueprint",
+    "normalized_text": "deploy blueprint",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  },
+  "3d66f30dd2b19884491a82a2c89bb550a2419bd068af484c34f8e72a3bbe2059": {
+    "intent": "provide_input",
+    "normalized_text": "provide_input",
+    "confidence": 0.7,
+    "source": "rule_fallback"
+  }
+}

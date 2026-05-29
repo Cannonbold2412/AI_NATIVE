@@ -1,0 +1,638 @@
+{
+  "399ef1920995c49a00bc9ffe56892f404c847a61d60ad66c166439852e5c800d": {
+    "anchors": [
+      {
+        "element": "contacts",
+        "relation": "target"
+      },
+      {
+        "element": "activities",
+        "relation": "near"
+      },
+      {
+        "element": "deals",
+        "relation": "near"
+      }
+    ]
+  },
+  "aff76e5f04de797185cf490f290738805810bc0ae0abf6f03d5ad05d81c86f9f": {
+    "anchors": [
+      {
+        "element": "add condition",
+        "relation": "target"
+      },
+      {
+        "element": "name",
+        "relation": "near"
+      },
+      {
+        "element": "organization",
+        "relation": "near"
+      },
+      {
+        "element": "email",
+        "relation": "near"
+      }
+    ]
+  },
+  "06ab3a99a9417aa798371f1b7f93c1f3abd8d49f3eb2b326c21e1345e8630849": {
+    "anchors": [
+      {
+        "element": "person filter button",
+        "relation": "target"
+      },
+      {
+        "element": "contacts section",
+        "relation": "inside"
+      },
+      {
+        "element": "add condition button",
+        "relation": "below"
+      },
+      {
+        "element": "filter dropdown",
+        "relation": "near"
+      }
+    ]
+  },
+  "1424e1bdf5bd35d440c648cb90252952618c379420ee967d7d02cd2bb448df69": {
+    "anchors": [
+      {
+        "element": "name input field",
+        "relation": "target"
+      },
+      {
+        "element": "add person form",
+        "relation": "inside"
+      },
+      {
+        "element": "organization input",
+        "relation": "below"
+      },
+      {
+        "element": "save button",
+        "relation": "near"
+      }
+    ]
+  },
+  "ceb09751e52e004247a7a6b08a208e89b8810ef8f3b1af25fd5fcc3b6517945c": {
+    "anchors": [
+      {
+        "element": "search bar for services",
+        "relation": "target"
+      },
+      {
+        "element": "ungrouped services section",
+        "relation": "inside"
+      },
+      {
+        "element": "active (2) tab",
+        "relation": "below"
+      },
+      {
+        "element": "conxa-web service",
+        "relation": "above"
+      }
+    ]
+  },
+  "3644ab5ca044fbd1fa88c2d4425f24bf1a9ec8a7021db4ecd5e1cfdb9aa8f044": {
+    "anchors": [
+      {
+        "element": "search bar for services",
+        "relation": "target"
+      },
+      {
+        "element": "ungrouped services section",
+        "relation": "inside"
+      },
+      {
+        "element": "active (2) tab",
+        "relation": "below"
+      },
+      {
+        "element": "conxa-web service",
+        "relation": "above"
+      }
+    ]
+  },
+  "6e2e847a49d63fe18ade5edf97b3fcfc895695026ba848a7e4787c58849cc135": {
+    "anchors": [
+      {
+        "element": "settings",
+        "relation": "target"
+      },
+      {
+        "element": "new plans, zero seat fees",
+        "relation": "near"
+      },
+      {
+        "element": "general",
+        "relation": "below"
+      }
+    ]
+  },
+  "7b3a3a05dfeb54b43a703603e25d35e551b50a5d316510ed5699fa8e257edfae": {
+    "anchors": [
+      {
+        "element": "delete web service button",
+        "relation": "target"
+      },
+      {
+        "element": "delete web service",
+        "relation": "inside"
+      },
+      {
+        "element": "cancel",
+        "relation": "below"
+      }
+    ]
+  },
+  "56a2edb19d37b9eab98dda08af7d144fbb208bedd5b828c107bff939fd4cf759": {
+    "anchors": [
+      {
+        "element": "command input field",
+        "relation": "target"
+      },
+      {
+        "element": "delete confirmation message",
+        "relation": "above"
+      },
+      {
+        "element": "delete web service button",
+        "relation": "below"
+      },
+      {
+        "element": "cancel button",
+        "relation": "near"
+      }
+    ]
+  },
+  "2b24a2db8404e7fbb57384f22a3fd73be6715442d46d7032b91db149411f7953": {
+    "anchors": [
+      {
+        "element": "delete web service button",
+        "relation": "target"
+      },
+      {
+        "element": "delete web service",
+        "relation": "inside"
+      },
+      {
+        "element": "cancel button",
+        "relation": "below"
+      }
+    ]
+  },
+  "b60c9cc494b08905e0f9362d1be8e29b450c698f0aedcc57a8f960558abef3e6": {
+    "anchors": [
+      {
+        "element": "opt in early button",
+        "relation": "target"
+      },
+      {
+        "element": "new plans, zero seat fees",
+        "relation": "above"
+      },
+      {
+        "element": "changelog",
+        "relation": "below"
+      },
+      {
+        "element": "contact support",
+        "relation": "below"
+      }
+    ]
+  },
+  "0ba68b1a176cde14322b8cd604cb633229f2cfda9bbdb3c818677a7605cfe46a": {
+    "anchors": [
+      {
+        "element": "search bar for services",
+        "relation": "target"
+      },
+      {
+        "element": "ungrouped services",
+        "relation": "below"
+      },
+      {
+        "element": "health checks project",
+        "relation": "near"
+      },
+      {
+        "element": "create your first project button",
+        "relation": "above"
+      }
+    ]
+  },
+  "37ccabdb4c8871bcf4d388c34afd7c73904b23c6715952717704e676a6c0d431": {
+    "anchors": [
+      {
+        "element": "service search bar",
+        "relation": "target"
+      },
+      {
+        "element": "ungrouped services section",
+        "relation": "inside"
+      },
+      {
+        "element": "conxa-web service",
+        "relation": "below"
+      },
+      {
+        "element": "get organized with projects",
+        "relation": "above"
+      }
+    ]
+  },
+  "d988d87c7c60b42cf7ce104fd6bcfc7426fac5d44869954fd0cf615fa9cac585": {
+    "anchors": [
+      {
+        "element": "conxa-web service entry",
+        "relation": "target"
+      },
+      {
+        "element": "ungrouped services section",
+        "relation": "inside"
+      },
+      {
+        "element": "health checks project",
+        "relation": "near"
+      },
+      {
+        "element": "new plans, zero seat fees",
+        "relation": "above"
+      }
+    ]
+  },
+  "da43d8684947ce99fec5a5b090d97ade6f452df1dd9c111301c0fc7033d028d2": {
+    "anchors": [
+      {
+        "element": "delete web service button",
+        "relation": "target"
+      },
+      {
+        "element": "delete web service confirmation text",
+        "relation": "above"
+      }
+    ]
+  },
+  "12dcb3e8594d92d7fa441d42c73bf0687efbe51d4c8369e3aa6c0c164445e293": {
+    "anchors": [
+      {
+        "element": "delete web service button",
+        "relation": "target"
+      },
+      {
+        "element": "delete web service",
+        "relation": "inside"
+      },
+      {
+        "element": "delete web service",
+        "relation": "below"
+      }
+    ]
+  },
+  "b18e6f9b6704052cf68a6f8685cd69fcd6827d53ba02bc9cbcab2ebedca5d4f8": {
+    "anchors": [
+      {
+        "element": "new button",
+        "relation": "target"
+      },
+      {
+        "element": "search input",
+        "relation": "below"
+      },
+      {
+        "element": "upgrade button",
+        "relation": "below"
+      },
+      {
+        "element": "team dropdown",
+        "relation": "near"
+      }
+    ]
+  },
+  "9bd4c6eef3371bca21ef1a4a3131f88139575b255ae12cb6231019edb03ff001": {
+    "anchors": [
+      {
+        "element": "deploy blueprint",
+        "relation": "target"
+      },
+      {
+        "element": "cancel",
+        "relation": "near"
+      }
+    ]
+  },
+  "1e28bccc89b7c357f4d546d967db77bcb9f42b98fd1f2f239b0cf8c3d78ac6aa": {
+    "anchors": [
+      {
+        "element": "loading indicator",
+        "relation": "target"
+      },
+      {
+        "element": "workspace",
+        "relation": "above"
+      },
+      {
+        "element": "new blueprint",
+        "relation": "above"
+      },
+      {
+        "element": "search bar",
+        "relation": "above"
+      }
+    ]
+  },
+  "ffda51fbf4cc8a47282ae67ea59ca1caa777b3662013bf55e0a938d2c0ae57d1": {
+    "anchors": [
+      {
+        "element": "upgrade button",
+        "relation": "target"
+      },
+      {
+        "element": "loading indicator",
+        "relation": "above"
+      },
+      {
+        "element": "new button",
+        "relation": "above"
+      },
+      {
+        "element": "search bar",
+        "relation": "above"
+      }
+    ]
+  },
+  "b24588dd34cbca2d98e78b1604b4b02b7c48ae9f3d968850dbeff7a2f13d61db": {
+    "anchors": [
+      {
+        "element": "blueprint name input",
+        "relation": "target"
+      },
+      {
+        "element": "blueprint deployment",
+        "relation": "above"
+      },
+      {
+        "element": "branch selector",
+        "relation": "below"
+      },
+      {
+        "element": "blueprint path input",
+        "relation": "below"
+      }
+    ]
+  },
+  "019fb69bdea25b21779c06fc7f8cea5a8b93957ae0747d929faa80a15dae6b27": {
+    "anchors": [
+      {
+        "element": "blueprint name input",
+        "relation": "target"
+      },
+      {
+        "element": "blueprint name label",
+        "relation": "above"
+      },
+      {
+        "element": "branch input",
+        "relation": "below"
+      },
+      {
+        "element": "blueprint path input",
+        "relation": "below"
+      }
+    ]
+  },
+  "25fad5815665c8ff07046452687a5fbe78f04bfa3526ca4a6ff6d28cd1edfb43": {
+    "anchors": [
+      {
+        "element": "+ new button",
+        "relation": "target"
+      },
+      {
+        "element": "projects section",
+        "relation": "inside"
+      },
+      {
+        "element": "search input",
+        "relation": "near"
+      },
+      {
+        "element": "upgrade button",
+        "relation": "near"
+      }
+    ]
+  },
+  "ea51d4e01634d884fc870c6c347bde6074482adeb233f1fc74133663405e72fe": {
+    "anchors": [
+      {
+        "element": "blueprint option",
+        "relation": "target"
+      },
+      {
+        "element": "project",
+        "relation": "above"
+      },
+      {
+        "element": "create your first project button",
+        "relation": "below"
+      },
+      {
+        "element": "projects section",
+        "relation": "inside"
+      }
+    ]
+  },
+  "242e73cd310ae72a9d247474c2e50320b5eea56d1ba39a3c8bceb52f5c99d3ff": {
+    "anchors": [
+      {
+        "element": "search bar",
+        "relation": "target"
+      },
+      {
+        "element": "search engine",
+        "relation": "inside"
+      },
+      {
+        "element": "connect a repository",
+        "relation": "above"
+      }
+    ]
+  },
+  "e1f269a5a391477a95c1eed0acdd0b4c49a7c8b877ab9564337dffe1c58b205d": {
+    "anchors": [
+      {
+        "element": "search bar",
+        "relation": "target"
+      },
+      {
+        "element": "search engine",
+        "relation": "inside"
+      },
+      {
+        "element": "connect a repository",
+        "relation": "above"
+      }
+    ]
+  },
+  "e8f21e6b4f1c060fc9e2ba8086542933602d57b5af7196e098af31f474f34cd3": {
+    "anchors": [
+      {
+        "element": "loading",
+        "relation": "target"
+      },
+      {
+        "element": "search",
+        "relation": "above"
+      }
+    ]
+  },
+  "fd0f615ed034cb9ba4204328d0fb4fe67cf0bb600f1a5eb86bf4abc7f084fca5": {
+    "anchors": [
+      {
+        "element": "blueprint name input",
+        "relation": "target"
+      },
+      {
+        "element": "blueprint name label",
+        "relation": "above"
+      }
+    ]
+  },
+  "4bb87d7bdadbd99fcd2177b21b2e1c8d5668dea97c08e54884442f899b719e72": {
+    "anchors": [
+      {
+        "element": "blueprint",
+        "relation": "target"
+      },
+      {
+        "element": "blueprint name",
+        "relation": "inside"
+      }
+    ]
+  },
+  "aaebe17105dacf2caeb0a711ee92fb86f21f4ba717cb0b75d3d21e69041e5ea0": {
+    "anchors": [
+      {
+        "element": "loading bar",
+        "relation": "target"
+      },
+      {
+        "element": "search bar",
+        "relation": "above"
+      }
+    ]
+  },
+  "a5e4b969f85e75329d61452fbf7ff225b3d9c272bcfab199d5f6e17c10af0605": {
+    "anchors": [
+      {
+        "element": "deploy blueprint",
+        "relation": "target"
+      },
+      {
+        "element": "blueprint path",
+        "relation": "above"
+      },
+      {
+        "element": "specified configurations",
+        "relation": "above"
+      }
+    ]
+  },
+  "17038bf65e2780dac4874a9578033f579d9c3bfe747b9747bb6c8cdaecfcc9ce": {
+    "anchors": [
+      {
+        "element": "new button",
+        "relation": "target"
+      },
+      {
+        "element": "search input",
+        "relation": "below"
+      },
+      {
+        "element": "upgrade button",
+        "relation": "near"
+      },
+      {
+        "element": "team section",
+        "relation": "inside"
+      }
+    ]
+  },
+  "9cbbc3c4ebdd06073390df9f69ba95a07a0de30646368cd449ea9fc5a260d296": {
+    "anchors": [
+      {
+        "element": "new blueprint button",
+        "relation": "target"
+      },
+      {
+        "element": "new button",
+        "relation": "above"
+      },
+      {
+        "element": "project button",
+        "relation": "above"
+      },
+      {
+        "element": "team section",
+        "relation": "inside"
+      }
+    ]
+  },
+  "09dfcfc512b066a7bf5ff48fff39ed7f095735077a654d1d73cb841fb5695f9d": {
+    "anchors": [
+      {
+        "element": "+ new button",
+        "relation": "target"
+      },
+      {
+        "element": "search input",
+        "relation": "below"
+      },
+      {
+        "element": "upgrade button",
+        "relation": "near"
+      },
+      {
+        "element": "team dropdown",
+        "relation": "near"
+      }
+    ]
+  },
+  "8416f85598f34075433bc37c1655cb5d8ec9f532b643269ef8e9330333e44f18": {
+    "anchors": [
+      {
+        "element": "new button for blueprints",
+        "relation": "target"
+      },
+      {
+        "element": "projects section",
+        "relation": "inside"
+      },
+      {
+        "element": "overview",
+        "relation": "below"
+      },
+      {
+        "element": "+ new button for team",
+        "relation": "near"
+      }
+    ]
+  },
+  "9e7c8dde8655338c2542640b68b6817876af13f6e48fde4f1c8879e42186acfa": {
+    "anchors": [
+      {
+        "element": "search bar",
+        "relation": "target"
+      },
+      {
+        "element": "search",
+        "relation": "inside"
+      },
+      {
+        "element": "connect a repository",
+        "relation": "above"
+      }
+    ]
+  }
+}

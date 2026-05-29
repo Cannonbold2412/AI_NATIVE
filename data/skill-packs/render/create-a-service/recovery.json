@@ -1,0 +1,291 @@
+{
+  "steps": [
+    {
+      "step_id": 1,
+      "intent": "click_new_button",
+      "target": {
+        "text": "",
+        "role": "button"
+      },
+      "anchors": [
+        {
+          "text": "+ new button",
+          "priority": 2
+        },
+        {
+          "text": "upgrade button",
+          "priority": 1
+        },
+        {
+          "text": "search input",
+          "priority": 1
+        },
+        {
+          "text": "team dropdown",
+          "priority": 1
+        }
+      ],
+      "fallback": {
+        "text_variants": [],
+        "role": "button"
+      },
+      "selector_context": {
+        "primary": "label:has-text(\"Projects Search CTRL + K K\") + button",
+        "alternatives": [
+          "label:has-text(\"Projects Search CTRL + K K\") ~ button",
+          "text=\"New\"",
+          "input[type=\"button\"]",
+          "[role=\"button\"][name=\"New\"]"
+        ]
+      },
+      "visual_ref": "visuals/Image_1.jpg"
+    },
+    {
+      "step_id": 2,
+      "intent": "navigate_to_blueprint",
+      "target": {
+        "text": "",
+        "role": "link"
+      },
+      "anchors": [
+        {
+          "text": "loading bar",
+          "priority": 2
+        },
+        {
+          "text": "search bar",
+          "priority": 1
+        }
+      ],
+      "fallback": {
+        "text_variants": [],
+        "role": "link"
+      },
+      "selector_context": {
+        "primary": "label:has-text(\"Project\") + a",
+        "alternatives": [
+          "label:has-text(\"Project\") ~ a",
+          "text=\"Blueprint\"",
+          "[role=\"link\"][name=\"Blueprint\"]"
+        ]
+      },
+      "visual_ref": "visuals/Image_2.jpg"
+    },
+    {
+      "step_id": 3,
+      "intent": "focus_search",
+      "target": {
+        "text": "",
+        "role": "input"
+      },
+      "anchors": [
+        {
+          "text": "search bar",
+          "priority": 2
+        },
+        {
+          "text": "search",
+          "priority": 1
+        },
+        {
+          "text": "connect a repository",
+          "priority": 1
+        }
+      ],
+      "fallback": {
+        "text_variants": [],
+        "role": "input"
+      },
+      "selector_context": {
+        "primary": "label:has-text(\"Search repositories\") + input",
+        "alternatives": [
+          "label:has-text(\"Search repositories\") ~ input",
+          "[placeholder=\"Search\"]",
+          "input[type=\"text\"]",
+          "[data-testid=\"select-git-repo-url-input\"]"
+        ]
+      },
+      "visual_ref": "visuals/Image_3.jpg"
+    },
+    {
+      "step_id": 4,
+      "intent": "enter_search_value",
+      "target": {
+        "text": "",
+        "role": "textbox"
+      },
+      "anchors": [
+        {
+          "text": "search bar",
+          "priority": 2
+        },
+        {
+          "text": "search engine",
+          "priority": 1
+        },
+        {
+          "text": "connect a repository",
+          "priority": 1
+        }
+      ],
+      "fallback": {
+        "text_variants": [],
+        "role": "textbox"
+      },
+      "selector_context": {
+        "primary": "label:has-text(\"Search repositories\") + input",
+        "alternatives": [
+          "label:has-text(\"Search repositories\") ~ input",
+          "[placeholder=\"Search\"]",
+          "input[type=\"text\"]",
+          "[data-testid=\"select-git-repo-url-input\"]"
+        ]
+      },
+      "visual_ref": "visuals/Image_4.jpg"
+    },
+    {
+      "step_id": 5,
+      "intent": "activate_control_connect",
+      "target": {
+        "text": "",
+        "role": "button"
+      },
+      "anchors": [
+        {
+          "text": "loading",
+          "priority": 2
+        },
+        {
+          "text": "search",
+          "priority": 1
+        }
+      ],
+      "fallback": {
+        "text_variants": [],
+        "role": "button"
+      },
+      "selector_context": {
+        "primary": "label:has-text(\"{{repository_name}}\") + button",
+        "alternatives": [
+          "label:has-text(\"{{repository_name}}) ~ button",
+          "text=\"Connect\"",
+          "input[type=\"button\"]",
+          "[role=\"button\"][name=\"Connect\"]"
+        ]
+      },
+      "visual_ref": "visuals/Image_5.jpg"
+    },
+    {
+      "step_id": 6,
+      "intent": "focus_name",
+      "target": {
+        "text": "name",
+        "role": "input"
+      },
+      "anchors": [
+        {
+          "text": "blueprint name input",
+          "priority": 2
+        },
+        {
+          "text": "blueprint name label",
+          "priority": 1
+        },
+        {
+          "text": "name",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "name"
+        ],
+        "role": "input"
+      },
+      "selector_context": {
+        "primary": "input[name=\"name\"]",
+        "alternatives": [
+          "label:has-text(\"Blueprint Name\") + input",
+          "label:has-text(\"Blueprint Name\") ~ input",
+          "input[type=\"text\"]",
+          "#name"
+        ]
+      },
+      "visual_ref": "visuals/Image_6.jpg"
+    },
+    {
+      "step_id": 7,
+      "intent": "enter_name_value",
+      "target": {
+        "text": "name",
+        "role": "textbox"
+      },
+      "anchors": [
+        {
+          "text": "blueprint",
+          "priority": 2
+        },
+        {
+          "text": "blueprint name",
+          "priority": 1
+        },
+        {
+          "text": "name",
+          "priority": 2
+        }
+      ],
+      "fallback": {
+        "text_variants": [
+          "name"
+        ],
+        "role": "textbox"
+      },
+      "selector_context": {
+        "primary": "input[name=\"name\"]",
+        "alternatives": [
+          "label:has-text(\"Blueprint Name\") + input",
+          "label:has-text(\"Blueprint Name\") ~ input",
+          "input[type=\"text\"]",
+          "#name"
+        ]
+      },
+      "visual_ref": "visuals/Image_7.jpg"
+    },
+    {
+      "step_id": 8,
+      "intent": "submit_form",
+      "target": {
+        "text": "",
+        "role": "button"
+      },
+      "anchors": [
+        {
+          "text": "deploy blueprint",
+          "priority": 2
+        },
+        {
+          "text": "blueprint path",
+          "priority": 1
+        },
+        {
+          "text": "specified configurations",
+          "priority": 1
+        }
+      ],
+      "fallback": {
+        "text_variants": [],
+        "role": "button"
+      },
+      "selector_context": {
+        "primary": "label:has-text(\"M My Workspace New Blueprint Search CTRL + K K New Upgrade K\") + button",
+        "alternatives": [
+          "label:has-text(\"M My Workspace New Blueprint Search CTRL + K K New Upgrade K\") ~ button",
+          "text=\"Deploy Blueprint\"",
+          "input[type=\"submit\"]",
+          "[role=\"button\"][name=\"Deploy Blueprint\"]"
+        ]
+      },
+      "visual_ref": "visuals/Image_8.jpg"
+    }
+  ]
+}
