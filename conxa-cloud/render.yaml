@@ -14,22 +14,6 @@ services:
         fromDatabase:
           name: conxa-db
           property: connectionString
-      - key: SKILL_CLERK_ISSUER
-        sync: false
-      - key: SKILL_CLERK_JWKS_URL
-        sync: false
-      - key: SKILL_CORS_ORIGINS
-        sync: false
-      - key: RAZORPAY_KEY_ID
-        sync: false
-      - key: RAZORPAY_KEY_SECRET
-        sync: false
-      - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
-      - key: SKILL_GROQ_ENABLED
-        value: true
-      - key: SKILL_GROQ_API_KEYS
-        sync: false
 
 databases:
   - name: conxa-db

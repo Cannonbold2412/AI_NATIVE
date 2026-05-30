@@ -15,6 +15,7 @@ from conxa_core.config import settings
 PUBLIC_PATHS = {
     "/",
     "/health",
+    "/healthz",
     "/api/v1/health",
     "/api/v1/webhooks/stripe",
 }
@@ -26,7 +27,6 @@ PUBLIC_TRACKING_EVENT_PREFIXES = ("/api/tracking/", "/api/v1/tracking/")
 # plugin_id in the path is the only credential and the file is non-sensitive.
 PUBLIC_PATH_PREFIXES = (
     "/api/v1/installers/",
-    # Build Studio bootstrap and runtime self-updater fetch these before/without Clerk auth
     "/api/v1/updates/",
 )
 
