@@ -18,53 +18,69 @@ Conxa is a full-stack platform for building and running AI-native automation plu
 ## Repository Layout
 
 ```
-app/                    FastAPI backend (Python 3.11+)
-  api/                  HTTP routes, all mounted under /api/v1
-  recorder/             Playwright session capture + bridge.js injection
-  pipeline/             Event normalise / dedupe / enrich
-  compiler/             Events → SkillPackage (selectors, assertions, recovery)
-  execution/            Lifecycle state machine, checkpoint, drift, trace
-  llm/                  Multi-provider LLM router (Groq, Google AI Studio, NVIDIA NIM)
-  services/             Plugin builder, installer builder, LLM metering, publish
-  storage/              JSON/SQLite stores, DOM snapshots, plugin/installer templates
-  models/               Pydantic schemas: SkillPackage, RecordedEvent, Plugin
-  auth/                 Playwright storageState manager
-  editor/               Workflow editor service + DTOs
+packages/conxa-core/      Shared Python foundation (pip package `conxa_core`)
+  conxa_core/
+    config.py             Pydantic settings (env_prefix=SKILL_)
+    db.py                 Dual store: Postgres (cloud) / filesystem fallback (Studio)
+    models/               Pydantic schemas: SkillPackage, RecordedEvent, Plugin
+    storage/              JSON/SQLite stores, DOM snapshots, plugin/installer templates
+    llm/                  Router protocol + get/set_router singleton + HTTP client (call_llm)
+    metrics/, progress.py, workspace.py, skill_pack_build_log.py   shared primitives
+  Installed by BOTH the cloud backend and the Build Studio — one source of truth.
 
-runtime/                Node.js MCP runtime (ships to ~/.conxa/runtime/)
-  server.js             MCP stdio server — Claude integration point
-  run.js                Step executor + 5-tier self-healing recovery cascade
-  auth_manager.js       Token storage (keytar), session encryption, auth-failure recovery
-  sync.js               Delta skill-pack sync with exponential backoff
-  browser.js            Playwright browser/context lifecycle
+conxa-builder/            Build Studio — Windows desktop app (records + compiles LOCALLY)
+  electron/               Electron shell (main.js, preload.js, React+Vite renderer)
+  python/                 Python stdio backend (spawned by Electron)
+    backend.py            JSON-RPC dispatcher (create_plugin, record, compile, build, publish)
+    requirements.txt      playwright, Pillow, bs4, lxml (+ conxa-core, installed separately)
+    services/             LLM proxy client, auth (Clerk PKCE), bootstrap, metadata reporter
+    conxa_compile/        The local pipeline (moved out of the cloud):
+      recorder/           Playwright capture + injected bridge.js
+      pipeline/           Event normalise / dedupe / enrich
+      compiler/           Events → SkillPackage (selectors, assertions, recovery)
+      editor/             Workflow editor service + DTOs + patch gate
+      llm/                Task clients (intent, semantic, recovery, vision, anchor) + openapi_client
+      anchors/, confidence/, policy/   supporting modules
+      plugin_builder.py, installer_builder.py, conxa_runtime.py
+  pyinstaller.spec        Collects conxa_core + conxa_compile into dist/backend/
 
-frontend/               Next.js 16 App Router UI (cloud dashboard)
-  src/                  Dashboard, Plugins, SkillPackBuilder, TestPlugin pages
+conxa-cloud/              Thin cloud SaaS (Render + Vercel) — proxy/auth/billing/dashboard/hosting
+  backend/                FastAPI backend (depends on conxa-core; NO recorder/compiler)
+    app/
+      main.py             Entrypoint; routers + fail-fast config validation + /healthz, /readyz
+      api/                llm_proxy, razorpay, product, publish (+ installer hosting),
+                          skillpack_update (runtime sync), updates, tracking, run, job, plugins
+      llm/router.py       Multi-provider pool (Groq, Google AI Studio, NVIDIA NIM) behind the proxy
+      services/           saas (billing/workspace), rbac, llm_metering, jobs (status)
+      worker.py           Render worker entrypoint
+    requirements.txt, build.sh, start.sh, Dockerfile, Aptfile
+  frontend/               Next.js 16 dashboard (Dashboard, Plugins, Billing, Team, Settings)
+  scripts/                recompile_session.py, test_plugin.py (compile tools; need conxa-builder/python on PYTHONPATH)
+  tests/                  pytest suite (core + compile + cloud; see pytest.ini pythonpath)
 
-conxa-builder/          Build Studio — Windows desktop app
-  electron/             Electron shell (main.js, preload.js, renderer)
-    renderer/src/       React 18 + TypeScript + Vite UI
-      pages/            SetupWizard, PluginDetail, RecordingFeed,
-                        CompileProgress, StepEditor
-      components/       Sidebar, WorkflowViewer, StepEditorPanel,
-                        ValidationReportPanel, SuggestionsPanel
-  python/               Python backend (stdio JSON-RPC)
-    backend.py          Command dispatcher (create_plugin, record, compile, build, publish)
-    services/           LLM proxy client, auth service (Clerk PKCE), bootstrap,
-                        installer builder, metadata reporter
+runtime/                  Node.js MCP runtime (standalone; ships to ~/.conxa/runtime/)
+  server.js               MCP stdio server — Claude integration point
+  run.js                  Step executor + 5-tier self-healing recovery cascade
+  auth_manager.js         Token storage (keytar), session encryption, auth-failure recovery
+  sync.js                 Delta skill-pack sync (atomic write + sha256 verify)
+  browser.js              Playwright browser/context lifecycle
 
-scripts/
-  test_plugin.py        End-to-end plugin validator (5 phases)
-  recompile_session.py  Recompile a session and dump the selector report
-
-tests/                  pytest suite — unit, integration, e2e
-docs/architecture.md    Authoritative deep-dive: iframe pipeline, recovery cascade,
-                        data contracts, observability
+docs/architecture.md      Authoritative deep-dive: iframe pipeline, recovery cascade, data contracts
 
 .github/workflows/
-  build-runtime.yml     Builds runtime-win.exe + keytar.node → GitHub Release
-  build-studio.yml      PyInstaller backend + electron-builder NSIS installer
+  build-runtime.yml       Builds runtime-win.exe + keytar.node → GitHub Release
+  build-studio.yml        Installs conxa-core wheel → PyInstaller → electron-builder NSIS installer
 ```
+
+### How the three units relate
+
+```
+conxa-core ──pip install──▶ Build Studio (records + compiles + builds LOCALLY)
+           ──pip install──▶ Cloud backend (LLM proxy, auth, billing, dashboard, hosting)
+Build Studio ──/llm/proxy, auth, publish upload──▶ Cloud
+Runtime (Node) ──skill-pack sync, telemetry, updates, auth──▶ Cloud
+```
+
 
 ---
 
@@ -212,8 +228,25 @@ The runtime exposes these tools to Claude via stdio MCP:
 
 ### Cloud (Render + Vercel)
 
-- **Backend + worker**: build with `./build.sh`, start with `./start.sh`. Required env vars: `SKILL_AUTH_REQUIRED=true`, Clerk issuer + JWKS, DB (`SKILL_DATABASE_URL`), Redis, Blob store, LLM provider keys, `CORS_ORIGINS`.
-- **Frontend**: Vercel, project root `frontend`. Set `API_ORIGIN` to the backend URL, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`.
+- **Backend**: root directory `conxa-cloud/backend`. `build.sh` installs the shared
+  foundation (`pip install ../../packages/conxa-core`) then `requirements.txt`; `start.sh`
+  runs `uvicorn app.main:app`. A `Dockerfile` is provided (build context = repo root:
+  `docker build -f conxa-cloud/backend/Dockerfile .`). The schema is created by `init_db()`
+  on startup; `GET /readyz` gates the deploy (checks the DB), `GET /healthz` is liveness.
+  Required env: `SKILL_AUTH_REQUIRED=true`, Clerk issuer/JWKS/audience, `SKILL_DATABASE_URL`,
+  `CORS_ORIGINS`, Razorpay key/secret/webhook secret, LLM provider keys. **With
+  `SKILL_AUTH_REQUIRED=true` the backend refuses to start if any of these are unset** (no
+  silent filesystem-DB fallback). The cloud no longer records or compiles — no Playwright.
+- **Frontend**: Vercel, project root `conxa-cloud/frontend`. Set `API_ORIGIN`,
+  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`.
+
+### Build Studio (`.exe`)
+
+CI (`build-studio.yml`) builds `conxa-core` as a wheel and installs it **non-editable**
+(so package data — `bridge.js`, templates, policy JSON — materializes), installs
+`conxa-builder/python/requirements.txt`, runs PyInstaller (`pyinstaller.spec` collects
+`conxa_core` + `conxa_compile`), then electron-builder wraps `dist/backend/` into the NSIS
+installer.
 
 ### CI — GitHub Actions
 

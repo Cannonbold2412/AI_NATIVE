@@ -22,50 +22,49 @@ Conxa: a marketplace for AI-native automation plugins. Real browser workflows ar
 ## Repository Layout
 
 ```
-conxa-builder/        Electron desktop studio (Windows; records + compiles locally)
+packages/conxa-core/  Shared Python foundation — pip package `conxa_core`, installed by
+  conxa_core/         BOTH the cloud backend and the Build Studio (one source of truth):
+    config.py         Pydantic settings (env_prefix=SKILL_)
+    db.py             Dual store: Postgres (cloud) / filesystem fallback (Studio); + healthcheck()
+    models/           Pydantic schemas: SkillPackage, RecordedEvent, Plugin
+    storage/          JSON/SQLite stores, snapshots, plugin/installer templates
+    llm/              Router protocol + get/set_router singleton + HTTP client (call_llm)
+    metrics/, progress.py (job-event sink), workspace.py (LOCAL_WORKSPACE_ID), skill_pack_build_log.py
+  pyproject.toml      Declares package-data so templates/bridge.js ship on `pip install`
+
+conxa-builder/        Electron desktop studio (Windows; records + compiles + builds LOCALLY)
   electron/           Electron main process + React renderer (Vite + TypeScript)
-  python/             Python stdio backend (spawned by Electron; imports app/ as lib)
-    backend.py        JSON-RPC dispatcher
-    services/         auth_service, bootstrap, installer_builder, llm_proxy_client
-  pyinstaller.spec    Bundles python/ + conxa-cloud/backend/app/ into dist/backend/
-
-conxa-cloud/          Cloud SaaS (Render + Vercel)
-  backend/            FastAPI backend (Python 3.11+)
-    app/              Main package
-      main.py         Entrypoint; mounts every router under /api/v1
-      config.py       Pydantic settings (env_prefix=SKILL_)
-      db.py           SQLAlchemy session + init_db()
-      worker.py       Render worker entrypoint (queue scaffold)
-      api/            HTTP routes (all included under /api/v1 by main.py)
-      recorder/       Phase 1: Playwright capture + injected bridge.js
-      pipeline/       Phase 2: normalize / dedupe / enrich recorded events
-      compiler/       Phase 3: events → SkillPackage (selectors, assertions,
-                      recovery blocks, structural fingerprint)
-      execution/      Lifecycle state machine, checkpoint, drift, trace
-      llm/            LLM clients + multi-provider router (see ROUTER_SETUP.md)
-      services/       plugin_builder, jobs, executor, saas, skill_pack/, rbac
-      storage/        JSON/SQLite stores, snapshots, plugin/installer templates
-      models/         Pydantic schemas: SkillPackage, RecordedEvent, Plugin
-      auth/           Plugin auth session manager (Playwright storageState)
+  python/             Python stdio backend (spawned by Electron; depends on conxa-core)
+    backend.py        JSON-RPC dispatcher; installs the cloud proxy via conxa_core.llm.set_router
+    requirements.txt  playwright, Pillow, bs4, lxml  (conxa-core installed separately)
+    services/         auth_service, bootstrap, llm_proxy_client, metadata_reporter
+    conxa_compile/    The local pipeline (moved out of the cloud):
+      recorder/       Playwright capture + injected bridge.js
+      pipeline/       Normalize / dedupe / enrich recorded events
+      compiler/       Events → SkillPackage (selectors, assertions, recovery, fingerprint)
       editor/         Workflow editor service + DTOs + patch gate
-      anchors/, confidence/, metrics/, policy/   Supporting modules
-    requirements.txt
-    build.sh, start.sh   Render build/start scripts
-    Aptfile              System packages for Playwright/Chromium on Render
-    ROUTER_SETUP.md      Multi-provider LLM router config
-  frontend/           Next.js 16 App Router UI
-    src/              Pages: Dashboard, Plugins, SkillPackBuilder, TestPlugin, …
-    proxy.ts          Clerk middleware
-    package.json      Clerk, TanStack Query, Tailwind 4, shadcn, Framer Motion
-  scripts/
-    test_plugin.py          End-to-end plugin validator (5 phases)
-    PLUGIN_TEST_README.md   Phase definitions + invocation modes
-    recompile_session.py    Recompile a session, dump compile report
-    plugin_test/            Phase implementations imported by test_plugin.py
-  tests/              pytest suite (unit + tests/integration + tests/e2e)
-  pytest.ini          Sets pythonpath=backend so tests find app/
+      llm/            Task clients (intent/semantic/recovery/vision/anchor) + openapi_client
+      anchors/, confidence/, policy/   supporting modules
+      plugin_builder.py, installer_builder.py, conxa_runtime.py
+  pyinstaller.spec    Collects conxa_core + conxa_compile into dist/backend/
 
-runtime/              Node.js MCP runtime (ships to ~/.conxa/runtime/)
+conxa-cloud/          Thin cloud SaaS (Render + Vercel) — proxy/auth/billing/dashboard/hosting
+  backend/            FastAPI backend (depends on conxa-core; NO recorder/compiler/Playwright)
+    app/
+      main.py         Routers + fail-fast prod config validation + /healthz, /readyz
+      worker.py       Render worker entrypoint (queue scaffold)
+      api/            llm_proxy, razorpay, product, publish (+installer hosting),
+                      skillpack_update (runtime sync), updates, tracking, run, job, plugins, security
+      llm/router.py   Multi-provider pool (Groq, Google AI Studio, NVIDIA NIM) behind the proxy
+      services/       saas (billing/workspace), rbac, llm_metering, jobs (status)
+    requirements.txt, build.sh, start.sh, Dockerfile, Aptfile, ROUTER_SETUP.md
+  frontend/           Next.js 16 dashboard (Dashboard, Plugins, Billing, Team, Settings)
+    package.json      Clerk, TanStack Query, Tailwind 4, shadcn, Framer Motion
+  scripts/            recompile_session.py, test_plugin.py (compile tools; need conxa-builder/python on PYTHONPATH)
+  tests/              pytest suite (core + compile + cloud)
+  pytest.ini          pythonpath = backend ../conxa-builder/python ../packages/conxa-core
+
+runtime/              Node.js MCP runtime (standalone; ships to ~/.conxa/runtime/)
   server.js           MCP stdio server (Claude Code integration)
   run.js              Step executor + fingerprint-scored recovery
   skill_loader.js, browser.js, auth_manager.js, sync.js, tracker.js
@@ -81,31 +80,29 @@ docs/architecture.md  Authoritative deep-dive: phases, iframe pipeline, recovery
 ### Backend
 
 ```bash
-cd conxa-cloud/backend
+# Install the shared foundation first (editable for dev), then the cloud deps.
+pip install -e packages/conxa-core
+cd conxa-cloud/backend && pip install -r requirements.txt   # (or ./build.sh — used by Render)
 
-# Install deps + Playwright Chromium
-pip install -r requirements.txt
-python -m playwright install chromium
-# (or run ./build.sh — used by Render)
-
-# Run the API
+# Run the API (no Playwright — the cloud no longer records/compiles)
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 # (start.sh runs the same without --reload, on $PORT)
 
-# Tests (run from conxa-cloud/)
-cd ..
-pytest -q tests                              # full suite
-pytest -q tests/test_pipeline_gates.py       # single file
-pytest -q tests/test_phases.py::test_x -x    # single test, stop on first failure
+# Tests (run from conxa-cloud/). pytest.ini puts backend, conxa-builder/python and
+# packages/conxa-core on the path, so `app`, `conxa_compile` and `conxa_core` all resolve.
+cd .. && pytest -q tests
 
-# Recompile a previously recorded session and dump the compile report
-python scripts/recompile_session.py <session_id>
+# Compile tools live with the Studio pipeline now — put conxa_compile on the path:
+PYTHONPATH=../conxa-builder/python python scripts/recompile_session.py <session_id>
+PYTHONPATH=../conxa-builder/python python scripts/test_plugin.py <plugin-slug> --skip-phase2 --skip-phase5
+```
 
-# End-to-end plugin validation
-# Phases 1 (structure) + 3 (steps) + 4 (recovery) — fast, deterministic
-python scripts/test_plugin.py <plugin-slug> --skip-phase2 --skip-phase5
-# Add Phase 5 (Playwright execution) when real selectors/URLs are wanted
-python scripts/test_plugin.py <plugin-slug> --skip-phase2 --execute --inputs path/to/inputs.json
+### Build Studio backend (local pipeline)
+
+```bash
+pip install -e packages/conxa-core
+cd conxa-builder/python && pip install -r requirements.txt && python -m playwright install chromium
+python backend.py   # stdio JSON-RPC backend (normally spawned by Electron)
 ```
 
 ### Frontend
@@ -130,29 +127,31 @@ npm run build:mac             # @yao-pkg/pkg → dist/runtime-mac
 
 ### Configuration
 
-Copy `.env.example` → `.env`. All backend settings use the `SKILL_` env prefix (see `conxa-cloud/backend/app/config.py`). LLM provider keys feed the multi-provider router — see `conxa-cloud/backend/ROUTER_SETUP.md` (Groq, Google AI Studio, and NVIDIA NIM are enabled by default).
+Copy `.env.example` → `.env`. All backend settings use the `SKILL_` env prefix (see `packages/conxa-core/conxa_core/config.py`). LLM provider keys feed the multi-provider router — see `conxa-cloud/backend/ROUTER_SETUP.md` (Groq, Google AI Studio, and NVIDIA NIM are enabled by default).
 
 ## Architecture: The Big Picture
 
 ### Offline pipeline (record → compile → package)
 
 ```
+(Runs locally in the Build Studio — conxa-builder/python/conxa_compile/)
+
 Browser
-  └─ conxa-cloud/backend/app/recorder/bridge.js      injected into every frame; captures
+  └─ conxa_compile/recorder/bridge.js      injected into every frame; captures
                                   click / type / select / hover / drag / etc.
   ↓
-conxa-cloud/backend/app/recorder/session.py    Playwright binding sink; walks iframe parent
-                                               chain, accumulates page-level offsets
+conxa_compile/recorder/session.py    Playwright binding sink; walks iframe parent
+                                      chain, accumulates page-level offsets
   ↓ events.jsonl  +  screenshots
-conxa-cloud/backend/app/pipeline/run.py        normalize / dedupe / enrich
+conxa_compile/pipeline/run.py        normalize / dedupe / enrich
   ↓
-conxa-cloud/backend/app/compiler/build.py      compile_skill_package() — produces:
+conxa_compile/compiler/build.py      compile_skill_package() — produces:
     • ElementFingerprint per step      (role / tag / text / aria / testid / anchors)
     • Assertion[] per step              (url_pattern, selector_present, …)
     • RecoveryBlock (anchors, fallback selectors)
     • SkillMeta.structural_fingerprint  (drift baseline)
-  ↓
-conxa-cloud/backend/app/services/plugin_builder.py   data-only plugin folder under
+  ↓ LLM calls route through conxa_core.llm.get_router() → metered cloud proxy
+conxa_compile/plugin_builder.py      data-only plugin folder under
                                   output/skill_package/{slug}-plugin/
                                   (auth files are NEVER placed in build output)
 ```
@@ -196,8 +195,11 @@ Selectors are cached by `(dom_hash, bbox, model)`. Iframe context flows through 
 
 ### API surface
 
-- Everything mounts under `/api/v1/*` (`conxa-cloud/backend/app/main.py`).
-- Execution lifecycle: `GET /api/v1/executions`, `GET /api/v1/executions/{id}`, `POST /api/v1/executions/{id}/{pause,resume,cancel}`, `GET /api/v1/executions/{id}/trace`.
+- Everything mounts under `/api/v1/*` (`conxa-cloud/backend/app/main.py`). The thin cloud serves the
+  metered LLM proxy (`/llm/proxy/*`), auth, billing (`/subscriptions`, `/billing/*`), dashboard
+  (`/dashboard`, `/plugins`), publish + installer hosting, runtime sync (`/skill-packs/*`), updates,
+  and telemetry (`/runs`, `/tracking`). Recording, compiling, building, and execution are **not**
+  served by the cloud — they run locally (Build Studio + runtime). `/healthz`, `/readyz` are unversioned.
 - MCP tools exposed by `runtime/server.js`: `execute_plan` (sync or `async: true`), `get_execution_status`, `pause_execution`, `resume_execution`, `cancel_execution`, `list_skills`, `read_skill_files`, `install_plugin`, `search_registry`.
 - Frontend reaches the backend via the Next.js `/api/v1/*` route handler; set `API_ORIGIN` in production.
 
@@ -205,20 +207,26 @@ Selectors are cached by `(dom_hash, bbox, model)`. Iframe context flows through 
 
 | Concern                            | Code paths                                                                  |
 | ---------------------------------- | --------------------------------------------------------------------------- |
-| Recorder event types               | `conxa-cloud/backend/app/recorder/bridge.js` → `app/pipeline/` → `app/compiler/build.py` → `runtime/run.js` |
-| Selector compilation / scoring     | `conxa-cloud/backend/app/compiler/llm_selector_generator_v2.py`, `selector_score.py`, `selector_filters.py` |
+| Recorder event types               | `conxa-builder/python/conxa_compile/recorder/bridge.js` → `conxa_compile/pipeline/` → `conxa_compile/compiler/build.py` → `runtime/run.js` |
+| Selector compilation / scoring     | `conxa-builder/python/conxa_compile/compiler/llm_selector_generator_v2.py`, `selector_score.py`, `selector_filters.py` |
 | Runtime element resolution         | `runtime/run.js` — `resolveElement`, `withLocator`, `rootCandidates`        |
-| Execution lifecycle / pause-resume | `conxa-cloud/backend/app/execution/lifecycle.py`, `checkpoint.py`; runtime pause-signal polling |
-| Assertions / outcome validation    | `conxa-cloud/backend/app/compiler/validation_planner.py`; runtime `verifyAssertions()` |
-| Plugin packaging                   | `conxa-cloud/backend/app/services/plugin_builder.py` (data-only output, auth excluded) |
-| LLM calls                          | `conxa-cloud/backend/app/llm/client.py` → `app/llm/router.py` (multi-provider pool) |
+| Assertions / outcome validation    | `conxa-builder/python/conxa_compile/compiler/validation_planner.py`; runtime `verifyAssertions()` |
+| Plugin packaging                   | `conxa-builder/python/conxa_compile/plugin_builder.py` (data-only output, auth excluded) |
+| LLM calls (compile side)           | task clients in `conxa_compile/llm/` → `conxa_core.llm.get_router()` (Studio installs the cloud proxy client) |
+| LLM provider pool (cloud)          | `conxa-cloud/backend/app/llm/router.py` behind `POST /api/v1/llm/proxy/{text,vision}` |
 | Frame / iframe handling            | `docs/architecture.md` § "Iframe Pipeline"; `bridge.js`, `session.py`, `build.py`, `run.js` |
-| Auth / session validation          | `conxa-cloud/backend/app/auth/session_manager.py`                          |
-| Frontend product shell             | `conxa-cloud/frontend/src/` (DashboardPage, PluginsPage, SkillPackBuilderPage, …) |
+| Shared data contracts              | `packages/conxa-core/conxa_core/models/` (SkillPackage, RecordedEvent, Plugin) |
+| Frontend product shell             | `conxa-cloud/frontend/src/` (Dashboard, Plugins, Billing, Team, Settings)   |
 
 ## Deployment
 
-- **Backend + worker** on Render: set root directory to `conxa-cloud/backend`; build with `build.sh`, API starts via `start.sh` (`uvicorn app.main:app`). Worker entrypoint is `app/worker.py`. Required env: `SKILL_AUTH_REQUIRED=true`, Clerk issuer/JWKS, DB, Redis, Blob, Razorpay, allowed CORS origins, LLM provider keys, app URL.
+- **Backend** on Render: root directory `conxa-cloud/backend`. `build.sh` installs the shared
+  foundation (`pip install ../../packages/conxa-core`) then `requirements.txt`; `start.sh` runs
+  `uvicorn app.main:app` (schema created by `init_db()`). A `Dockerfile` exists (build context = repo
+  root). `GET /readyz` gates the deploy (DB ping), `GET /healthz` is liveness. With
+  `SKILL_AUTH_REQUIRED=true` the app **refuses to start** unless `SKILL_DATABASE_URL`, Clerk
+  issuer/JWKS, `CORS_ORIGINS`, Razorpay key/secret/webhook, and a provider key are set — no silent
+  filesystem-DB fallback. The cloud no longer records/compiles, so no Playwright.
 - **Frontend** on Vercel: set project root to `conxa-cloud/frontend`, build `npm run build`. The Next route handler `/api/v1/*` proxies to `API_ORIGIN`. Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` for Clerk.
 - System packages for Playwright/Chromium on the API host are listed in `conxa-cloud/backend/Aptfile`.
 
