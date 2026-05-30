@@ -786,7 +786,7 @@ class TestSavedSkillJsonBuild:
         assert manifest["auth_requirements"] == {"kind": "cookie", "manual_login": True}
         assert manifest["runtime_min_version"] == "1.0.0"
 
-        # Per-plugin Claude.md points at the installer flow, not the deleted npm CLI.
+        # Per-plugin Claude.md points at the conxa MCP runtime flow, not the deleted npm CLI.
         claude_md = (tmp_path / "Claude.md").read_text(encoding="utf-8")
-        assert "Build Installer" in claude_md
+        assert "conxa" in claude_md
         assert "npx -y conxa install" not in claude_md

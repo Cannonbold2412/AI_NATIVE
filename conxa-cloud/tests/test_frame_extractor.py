@@ -21,5 +21,8 @@ def test_find_ffmpeg_uses_imageio_ffmpeg_fallback(monkeypatch, tmp_path) -> None
         SimpleNamespace(get_ffmpeg_exe=lambda: str(executable)),
     )
     monkeypatch.setattr(frame_extractor.shutil, "which", lambda _name: None)
+    # Isolate from any real Playwright browser dirs on the host (e.g. /opt/pw-browsers)
+    # so the imageio fallback is exercised regardless of the CI/sandbox environment.
+    monkeypatch.setattr(frame_extractor.Path, "is_dir", lambda self: False)
 
     assert frame_extractor._find_ffmpeg() == str(executable)

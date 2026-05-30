@@ -71,6 +71,25 @@ _VISION_ANCHOR_OK = {
 }
 
 
+class _FakeRouter:
+    """LLM router stub for compile tests.
+
+    A non-empty ``pool`` satisfies the compiler's provider gate; ``route_*`` are
+    never reached because the per-task ``call_llm`` entry points are mocked.
+    """
+
+    pool = (object(),)
+
+    def route_text(self, *args, **kwargs):
+        return None
+
+    def route_vision(self, *args, **kwargs):
+        return None
+
+    def stats(self):
+        return {}
+
+
 def _compile_with_vision_mocks(session_id: str, events: list[dict], *, call_llm_return=_VISION_ANCHOR_OK):
     """Prepare temp session JPEGs and return (data_dir, patch context managers)."""
     data_dir = Path(tempfile.mkdtemp())
@@ -80,9 +99,7 @@ def _compile_with_vision_mocks(session_id: str, events: list[dict], *, call_llm_
     return (
         data_dir,
         patch.object(settings, "data_dir", data_dir),
-        patch.object(settings, "llm_vision_endpoint", "https://example.com/v1"),
-        patch.object(settings, "llm_enabled", True),
-        patch.object(settings, "llm_anchor_vision", True),
+        patch("conxa_core.llm._router", _FakeRouter()),
         patch("conxa_compile.llm.intent_llm.call_llm", return_value=None),
         patch("conxa_compile.llm.anchor_vision_llm.call_llm", return_value=call_llm_return),
     )
@@ -829,9 +846,7 @@ class PhaseTests(unittest.TestCase):
             Image.new("RGB", (100, 80), "white").save(root / "images" / "a.jpg")
             with (
                 patch.object(settings, "data_dir", root),
-                patch.object(settings, "llm_enabled", True),
-                patch.object(settings, "llm_anchor_vision", True),
-                patch.object(settings, "llm_vision_endpoint", "http://llm.test"),
+                patch("conxa_core.llm._router", _FakeRouter()),
                 patch("conxa_compile.llm.anchor_vision_llm.supports_multimodal_chat", return_value=True),
                 patch(
                     "conxa_compile.llm.anchor_vision_llm.call_llm",
