@@ -347,93 +347,11 @@ const renameSkillPackageRecordSchema = z.object({
   previous_name: z.string(),
 })
 
-export function fetchSkillList(): Promise<{ skills: SkillSummary[] }> {
-  return fetch(apiUrl('/skills'))
-    .then((r) => json<{ skills: SkillSummary[] }>(r))
-    .then((payload) => parseOrThrow(skillListSchema, payload, '/skills'))
-}
-
-export function deleteSkillPackage(skillId: string): Promise<{ skill_id: string; title: string; deleted: boolean }> {
-  const endpoint = `/skills/${encodeURIComponent(skillId)}`
-  return fetch(apiUrl(endpoint), { method: 'DELETE' })
-    .then(json)
-    .then((payload) => parseOrThrow(deleteSkillSchema, payload, endpoint))
-}
-
 export function fetchWorkflow(skillId: string): Promise<WorkflowResponse> {
   const endpoint = `/skills/${encodeURIComponent(skillId)}/workflow`
   return fetch(apiUrl(endpoint))
     .then(json)
     .then((payload) => parseOrThrow(workflowSchema, payload, endpoint) as WorkflowResponse)
-}
-
-export function fetchRecordingScreenshots(skillId: string): Promise<{
-  skill_id: string
-  session_id: string | null
-  items: RecordingScreenshotItemDTO[]
-}> {
-  const endpoint = `/skills/${encodeURIComponent(skillId)}/recording-screenshots`
-  return fetch(apiUrl(endpoint))
-    .then(json)
-    .then((payload) => {
-      const parsed = parseOrThrow(recordingScreenshotsSchema, payload, endpoint)
-      return {
-        skill_id: parsed.skill_id,
-        session_id: parsed.session_id ?? null,
-        items: parsed.items,
-      }
-    })
-}
-
-export function postApplyRecordingVisual(
-  skillId: string,
-  stepIndex: number,
-  body: { event_index: number },
-): Promise<{
-  skill_id: string
-  meta: Record<string, unknown>
-  revalidation: Record<string, unknown>
-  workflow: WorkflowResponse
-}> {
-  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}/apply-recording-visual`
-  return fetch(apiUrl(endpoint), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-    .then(json)
-    .then(
-      (payload) =>
-        parseOrThrow(applyRecordingVisualResponseSchema, payload, endpoint) as {
-          skill_id: string
-          meta: Record<string, unknown>
-          revalidation: Record<string, unknown>
-          workflow: WorkflowResponse
-        },
-    )
-}
-
-export function postClearStepVisual(
-  skillId: string,
-  stepIndex: number,
-): Promise<{
-  skill_id: string
-  meta: Record<string, unknown>
-  revalidation: Record<string, unknown>
-  workflow: WorkflowResponse
-}> {
-  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}/clear-step-visual`
-  return fetch(apiUrl(endpoint), { method: 'POST' })
-    .then(json)
-    .then(
-      (payload) =>
-        parseOrThrow(applyRecordingVisualResponseSchema, payload, endpoint) as {
-          skill_id: string
-          meta: Record<string, unknown>
-          revalidation: Record<string, unknown>
-          workflow: WorkflowResponse
-        },
-    )
 }
 
 export function postUpdateVisualBbox(
@@ -532,105 +450,6 @@ export function postWorkflowReplaceLiterals(
     )
 }
 
-export function renameSkill(skillId: string, title: string): Promise<Record<string, unknown>> {
-  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}`), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
-  }).then((r) => json<Record<string, unknown>>(r))
-}
-
-export function postValidate(skillId: string): Promise<Record<string, unknown>> {
-  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}/validate`), {
-    method: 'POST',
-  }).then((r) => json<Record<string, unknown>>(r))
-}
-
-export function postReorder(skillId: string, newOrder: number[]): Promise<{
-  skill_id: string
-  meta: Record<string, unknown>
-  workflow: WorkflowResponse
-}> {
-  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps:reorder`
-  return fetch(apiUrl(endpoint), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ new_order: newOrder }),
-  })
-    .then(json)
-    .then(
-      (payload) =>
-        parseOrThrow(workflowMutationSchema, payload, endpoint) as {
-          skill_id: string
-          meta: Record<string, unknown>
-          workflow: WorkflowResponse
-        },
-    )
-}
-
-export function postInsertStep(
-  skillId: string,
-  body: { action_kind: string; insert_after?: number | null },
-): Promise<{
-  skill_id: string
-  meta: Record<string, unknown>
-  workflow: WorkflowResponse
-}> {
-  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps`
-  return fetch(apiUrl(endpoint), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-    .then(json)
-    .then(
-      (payload) =>
-        parseOrThrow(workflowMutationSchema, payload, endpoint) as {
-          skill_id: string
-          meta: Record<string, unknown>
-          workflow: WorkflowResponse
-        },
-    )
-}
-
-export function deleteStep(skillId: string, stepIndex: number): Promise<{
-  skill_id: string
-  meta: Record<string, unknown>
-  workflow: WorkflowResponse
-}> {
-  const endpoint = `/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}`
-  return fetch(
-    apiUrl(`/skills/${encodeURIComponent(skillId)}/steps/${stepIndex}`),
-    { method: 'DELETE' },
-  )
-    .then(json)
-    .then(
-      (payload) =>
-        parseOrThrow(workflowMutationSchema, payload, endpoint) as {
-          skill_id: string
-          meta: Record<string, unknown>
-          workflow: WorkflowResponse
-        },
-    )
-}
-
-export function postCompileUpdated(
-  skillId: string,
-  skillTitle?: string,
-): Promise<Record<string, unknown>> {
-  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}/compile-updated`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ skill_title: skillTitle ?? null }),
-  }).then((r) => json<Record<string, unknown>>(r))
-}
-
-export function postSignOff(skillId: string): Promise<{ skill_id: string; signed_off: boolean }> {
-  return fetch(apiUrl(`/skills/${encodeURIComponent(skillId)}/sign-off`), {
-    method: 'POST',
-  }).then((r) => json<{ skill_id: string; signed_off: boolean }>(r))
-}
-
 export function postStartRecording(body: { capture_hover?: boolean } = {}): Promise<{ session_id: string }> {
   return fetch(apiUrl('/record'), {
     method: 'POST',
@@ -659,12 +478,6 @@ export function getRecordingStatus(sessionId: string): Promise<{
   )
 }
 
-export function postStopRecording(sessionId: string): Promise<{ session_id: string; status: string }> {
-  return fetch(apiUrl(`/record/${encodeURIComponent(sessionId)}/stop`), {
-    method: 'POST',
-  }).then((r) => json<{ session_id: string; status: string }>(r))
-}
-
 export function postCompileSession(sessionId: string, skillTitle?: string): Promise<{
   skill_id: string
   version: number
@@ -683,10 +496,6 @@ export function postCompileSession(sessionId: string, skillTitle?: string): Prom
       audit_status: string
     }>(r),
   )
-}
-
-export function fetchSkillDocument(skillId: string): Promise<Record<string, unknown>> {
-  return fetch(apiUrl(`/skill/${encodeURIComponent(skillId)}`)).then((r) => json<Record<string, unknown>>(r))
 }
 
 export function fetchMetrics(): Promise<Record<string, unknown>> {
@@ -749,85 +558,12 @@ export function fetchJob(jobId: string): Promise<JobRecord> {
     .then((payload) => parseOrThrow(jobRecordSchema, payload, endpoint) as JobRecord)
 }
 
-export async function streamJobEvents(
-  jobId: string,
-  onEvent: (event: JobEvent) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  const endpoint = `/jobs/${encodeURIComponent(jobId)}/events`
-  const response = await jobApiFetch(endpoint, { signal })
-  if (!response.ok) {
-    const payload = await json(response).catch(() => null)
-    const detail = payload && typeof payload === 'object' ? (payload as { detail?: unknown }).detail : null
-    throw new Error(typeof detail === 'string' && detail.trim() ? detail.trim() : response.statusText)
-  }
-  if (!response.body) throw new Error('No job event stream body')
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
-
-    for (;;) {
-      const sep = buffer.indexOf('\n\n')
-      if (sep === -1) break
-      const block = buffer.slice(0, sep)
-      buffer = buffer.slice(sep + 2)
-      const dataLines = block
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart())
-      if (dataLines.length === 0) continue
-      try {
-        const parsed = JSON.parse(dataLines.join('\n')) as Partial<JobEvent>
-        if (typeof parsed.event === 'string' && typeof parsed.message === 'string') {
-          onEvent({
-            ts: typeof parsed.ts === 'number' ? parsed.ts : Date.now() / 1000,
-            event: parsed.event,
-            message: parsed.message,
-            data: parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data as Record<string, unknown> : {},
-          })
-        }
-      } catch {
-        // Ignore malformed SSE rows and keep the stream alive.
-      }
-    }
-
-    if (done) break
-  }
-}
-
 export function enqueueCompileJob(sessionId: string, skillTitle?: string): Promise<EnqueuedJob> {
   const endpoint = '/jobs/compile'
   return jobApiFetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId, skill_title: skillTitle ?? '' }),
-  })
-    .then(json)
-    .then((payload) => parseOrThrow(enqueuedJobSchema, payload, endpoint) as EnqueuedJob)
-}
-
-export function enqueueRecompileSkillJob(skillId: string, skillTitle?: string): Promise<EnqueuedJob> {
-  const endpoint = `/jobs/skills/${encodeURIComponent(skillId)}/compile-updated`
-  return jobApiFetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ skill_title: skillTitle ?? null }),
-  })
-    .then(json)
-    .then((payload) => parseOrThrow(enqueuedJobSchema, payload, endpoint) as EnqueuedJob)
-}
-
-export function enqueuePackageBuildJob(body: SkillPackBuildPayload): Promise<EnqueuedJob> {
-  const endpoint = '/jobs/packages/build'
-  return jobApiFetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
   })
     .then(json)
     .then((payload) => parseOrThrow(enqueuedJobSchema, payload, endpoint) as EnqueuedJob)
@@ -1102,52 +838,6 @@ export function postAppendSkillPack(
     )
 }
 
-export function fetchSkillPackageList(): Promise<{ packages: SkillPackageSummary[]; bundle_root: string }> {
-  const endpoint = '/skill-pack/packages'
-  return fetch(apiUrl(endpoint))
-    .then((r) => json<{ packages: SkillPackageSummary[]; bundle_root?: string }>(r))
-    .then((payload) => parseOrThrow(skillPackageListSchema, payload, endpoint))
-}
-
-export function fetchSkillPackageFiles(bundleName: string): Promise<SkillPackageFiles> {
-  const endpoint = `/skill-pack/bundles/${encodeURIComponent(bundleName)}`
-  return fetch(apiUrl(endpoint))
-    .then((r) => json<SkillPackageFiles>(r))
-    .then((payload) => parseOrThrow(skillPackageFilesSchema, payload, endpoint))
-}
-
-export function deleteStoredSkillPackage(bundleName: string): Promise<{ package_name: string; deleted: boolean }> {
-  const endpoint = `/skill-pack/bundles/${encodeURIComponent(bundleName)}`
-  return fetch(apiUrl(endpoint), { method: 'DELETE' })
-    .then(json)
-    .then((payload) => parseOrThrow(deleteSkillPackageRecordSchema, payload, endpoint))
-}
-
-export function renameStoredSkillPackage(
-  bundleName: string,
-  newName: string,
-): Promise<{ package_name: string; previous_name: string }> {
-  const endpoint = `/skill-pack/bundles/${encodeURIComponent(bundleName)}`
-  return fetch(apiUrl(endpoint), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ new_name: newName }),
-  })
-    .then(json)
-    .then((payload) => parseOrThrow(renameSkillPackageRecordSchema, payload, endpoint))
-}
-
 const patchBundleRootResponseSchema = z.object({
   bundle_root: z.string(),
 })
-
-export function patchSkillPackBundleRoot(bundleRoot: string): Promise<{ bundle_root: string }> {
-  const endpoint = '/skill-pack/bundle-root'
-  return fetch(apiUrl(endpoint), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bundle_root: bundleRoot }),
-  })
-    .then(json)
-    .then((payload) => parseOrThrow(patchBundleRootResponseSchema, payload, endpoint))
-}

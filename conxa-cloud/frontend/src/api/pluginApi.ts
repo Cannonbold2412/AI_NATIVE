@@ -1,4 +1,4 @@
-import { apiFetch, apiUrl } from '@/lib/apiBase'
+import { apiFetch } from '@/lib/apiBase'
 
 async function json<T>(response: Response): Promise<T> {
   const raw = (await response.text()).trim()
@@ -265,14 +265,6 @@ export function deleteWorkflow(pluginId: string, workflowId: string): Promise<{ 
   ).then((r) => json<{ deleted: boolean }>(r))
 }
 
-export function buildPlugin(pluginId: string, version = '0.1.0'): Promise<Response> {
-  return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/build/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ version }),
-  })
-}
-
 export function updateWorkflow(
   pluginId: string,
   workflowId: string,
@@ -285,10 +277,6 @@ export function updateWorkflow(
   }).then((r) =>
     json<{ plugin_id: string; workflow_id: string; skill_id: string | null; status: PluginWorkflow['status'] }>(r),
   )
-}
-
-export function downloadPlugin(pluginId: string): string {
-  return `/api/v1/plugins/${encodeURIComponent(pluginId)}/download`
 }
 
 // ─────────────────────────────────────────────────
@@ -341,18 +329,6 @@ export function getCompiledSkill(
   return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/skills/${encodeURIComponent(skillSlug)}/compiled`).then(
     (r) => json<{ plugin_id: string; skill_slug: string; files: CompiledSkillFiles }>(r),
   )
-}
-
-export function fetchRuns(pluginId?: string, since?: number): Promise<RunsResponse> {
-  const params = new URLSearchParams()
-  if (pluginId) params.set('plugin_id', pluginId)
-  if (since != null) params.set('since', String(since))
-  const qs = params.toString()
-  return apiFetch(`/runs${qs ? '?' + qs : ''}`).then((r) => json<RunsResponse>(r))
-}
-
-export function fetchRun(runId: string): Promise<{ run: Run }> {
-  return apiFetch(`/runs/${encodeURIComponent(runId)}`).then((r) => json<{ run: Run }>(r))
 }
 
 // ─────────────────────────────────────────────────
@@ -430,16 +406,6 @@ export type InstallerBuildResult = {
   plugin_id: string
   version: string
   runtime_version: string
-}
-
-/** Returns a raw Response for SSE streaming — same pattern as buildPlugin(). */
-export function buildInstaller(pluginId: string): Promise<Response> {
-  return apiFetch(`/plugins/${encodeURIComponent(pluginId)}/build-installer/stream`, { method: 'POST' })
-}
-
-/** Returns the URL to download the compiled installer EXE. */
-export function installerDownloadUrl(pluginId: string): string {
-  return apiUrl(`/plugins/${encodeURIComponent(pluginId)}/installer/download`)
 }
 
 /** Stream a workflow test run (SSE). Returns a raw Response for readPluginSse(). */
