@@ -12,7 +12,7 @@ import sys
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 # Repo root is one level up from this spec file (conxa-builder/pyinstaller.spec).
 REPO_ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH is injected by PyInstaller)
@@ -30,12 +30,15 @@ _core_data = collect_data_files(
 _compile_data = collect_data_files(
     "conxa_compile", includes=["**/*.js", "**/*.json", "**/*.tmpl", "**/*.gitignore"]
 )
+# Playwright ships a self-contained Node driver used to download browsers at runtime.
+# collect_all bundles the driver binary + CLI scripts so ensure_chromium() works when frozen.
+_playwright_datas, _playwright_binaries, _ = collect_all("playwright")
 
 a = Analysis(
     [str(BACKEND_DIR / "backend.py")],
     pathex=[str(BACKEND_DIR)],
-    binaries=[],
-    datas=_core_data + _compile_data,
+    binaries=_playwright_binaries,
+    datas=_core_data + _compile_data + _playwright_datas,
     hiddenimports=(
         collect_submodules("conxa_core")
         + collect_submodules("conxa_compile")

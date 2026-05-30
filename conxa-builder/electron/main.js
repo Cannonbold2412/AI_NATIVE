@@ -51,7 +51,11 @@ let bridge = null;
 
 function backendCommand() {
   if (IS_DEV) {
-    const py = process.env.CONXA_PYTHON || "python3";
+    const defaultPy = process.platform === "win32" ? "python" : "python3";
+    const venvPy = process.env.VIRTUAL_ENV
+      ? path.join(process.env.VIRTUAL_ENV, process.platform === "win32" ? "Scripts\\python.exe" : "bin/python")
+      : defaultPy;
+    const py = process.env.CONXA_PYTHON || venvPy;
     const script = path.join(__dirname, "..", "python", "backend.py");
     return { cmd: py, args: [script] };
   }
@@ -65,7 +69,15 @@ function startBackend() {
   backend = spawn(cmd, args, {
     stdio: ["pipe", "pipe", "pipe"], // all pipes; windowsHide suppresses the console window
     windowsHide: true,
-    env: { ...process.env },
+    env: {
+      ...process.env,
+      SKILL_ALLOW_NO_PROVIDERS: "1",
+      PYTHONPATH: [
+        path.join(__dirname, "..", "..", "packages", "conxa-core"),
+        path.join(__dirname, "..", "python"),
+        process.env.PYTHONPATH || "",
+      ].filter(Boolean).join(path.delimiter),
+    },
   });
 
   bridge = new Bridge(
@@ -79,6 +91,9 @@ function startBackend() {
 
   const rl = readline.createInterface({ input: backend.stdout });
   rl.on("line", (line) => bridge.handleLine(line));
+
+  const rlErr = readline.createInterface({ input: backend.stderr });
+  rlErr.on("line", (line) => console.error("[backend]", line));
 
   backend.on("exit", (code) => {
     if (bridge) bridge.rejectAll(`backend exited (code ${code})`);

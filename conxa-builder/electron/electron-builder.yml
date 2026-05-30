@@ -16,7 +16,7 @@ files:
 
 # PyInstaller backend bundle — placed in resources/ so process.resourcesPath resolves it
 extraResources:
-  - from: "../../dist/backend"
+  - from: "../dist/backend"
     to: "backend"
     filter:
       - "**/*"
@@ -28,9 +28,9 @@ directories:
 # Auto-update via GitHub Releases (electron-updater)
 publish:
   provider: github
-  owner: conxa-ai
-  repo: conxa-build-studio
-  private: true
+  owner: Cannonbold2412
+  repo: AI_NATIVE
+  private: false
   releaseType: release
 
 # Update channels: stable (default) + beta (opt-in)
@@ -43,10 +43,6 @@ win:
     - target: nsis
       arch:
         - x64
-  # EV code signing — configure via CSC_LINK + CSC_KEY_PASSWORD secrets in CI.
-  # In V1 we ship unsigned; add signing in V1.1 when the EV cert is procured.
-  signingHashAlgorithms:
-    - sha256
 
 nsis:
   # Per-machine install (requires elevation) so it works on shared workstations.

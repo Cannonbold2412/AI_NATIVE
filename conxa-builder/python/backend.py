@@ -33,6 +33,13 @@ if _PY_DIR not in sys.path:
 
 from services import bootstrap as _bootstrap_pkg  # noqa: E402
 
+# Pre-import the recorder and plugin store at startup (main thread, before serve()
+# starts blocking on stdin). Importing these lazily in a dispatch thread causes a
+# deadlock: two simultaneous record clicks hit Python's per-module import lock while
+# conxa_core.config.Settings() tries to read the repo .env from a piped-stdin context.
+from conxa_compile.recorder.session import registry as _recorder_registry  # noqa: E402
+from conxa_core.storage.plugin_store import get_plugin as _get_plugin  # noqa: E402
+
 
 # --- stdout protocol ---------------------------------------------------------
 
@@ -125,16 +132,32 @@ class Backend:
         return {"identity": self._auth_service().current_identity()}
 
     def cmd_start_recording(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from conxa_compile.recorder.session import registry
+        from pathlib import Path
+        from conxa_core.config import settings as _settings
 
         with self._rec_lock:
             if self._active_recording is not None:
                 raise _CommandError("recording_in_progress", "A recording is already active.")
-            start_url = str(payload.get("start_url") or "about:blank")
-            auth_mode = bool(payload.get("auth_mode"))
-            storage_state_path = str(payload.get("storage_state_path") or "")
-            storage_state_autosave = str(payload.get("storage_state_autosave_path") or "")
-            sess = registry.create(
+
+            plugin_id = payload.get("plugin_id")
+            workflow_name = payload.get("workflow_name")
+
+            if plugin_id:
+                plugin = _get_plugin(plugin_id)
+                if not plugin:
+                    raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+                start_url = str(plugin.target_url or "about:blank")
+                auth_mode = (workflow_name == "__auth__")
+                plugin_dir = Path(_settings.data_dir) / "plugins" / plugin_id
+                storage_state_path = str(plugin_dir / "auth" / "auth.json")
+                storage_state_autosave = str(plugin_dir / "auth" / "auth.json") if auth_mode else ""
+            else:
+                start_url = str(payload.get("start_url") or "about:blank")
+                auth_mode = bool(payload.get("auth_mode"))
+                storage_state_path = str(payload.get("storage_state_path") or "")
+                storage_state_autosave = str(payload.get("storage_state_autosave_path") or "")
+
+            sess = _recorder_registry.create(
                 start_url=start_url,
                 storage_state_path=storage_state_path,
                 storage_state_autosave_path=storage_state_autosave,
@@ -144,13 +167,13 @@ class Backend:
             try:
                 self._loop.run(sess.start())
             except RuntimeError as exc:
-                registry.pop(sess.session_id)
+                _recorder_registry.pop(sess.session_id)
                 raise _CommandError("recorder_launch_failed", str(exc)) from exc
             self._active_recording = sess.session_id
             return {"session_id": sess.session_id, "start_url": start_url}
 
     def cmd_stop_recording(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from conxa_compile.recorder.session import registry
+        registry = _recorder_registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
         sess = registry.get(session_id)
@@ -166,7 +189,7 @@ class Backend:
     def cmd_run_pipeline(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         from conxa_compile.pipeline.run import run_pipeline
         from conxa_core.storage.session_events import read_session_events
-        from conxa_compile.recorder.session import registry
+        registry = _recorder_registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
         sess = registry.get(session_id)
@@ -179,7 +202,7 @@ class Backend:
         from conxa_compile.pipeline.run import run_pipeline
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_core.storage.session_events import read_session_events
-        from conxa_compile.recorder.session import registry
+        registry = _recorder_registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
         title = str(payload.get("skill_title") or "").strip()
@@ -229,6 +252,27 @@ class Backend:
 
         plugins = _list()
         return {"plugins": [p.model_dump(mode="json") for p in plugins]}
+
+    def cmd_get_plugin(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.plugin_store import get_plugin
+        from conxa_core.storage.json_store import read_skill
+
+        plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
+        plugin = get_plugin(plugin_id)
+        if plugin is None:
+            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+        data = plugin.model_dump(mode="json")
+        for wf_data, wf in zip(data["workflows"], plugin.workflows):
+            step_count = 0
+            if wf.skill_id:
+                try:
+                    skill = read_skill(wf.skill_id)
+                    if skill:
+                        step_count = len((skill.get("skills") or [{}])[0].get("steps") or [])
+                except Exception:
+                    pass
+            wf_data["step_count"] = step_count
+        return {"plugin": data}
 
     def cmd_list_workflows(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         from conxa_core.storage.plugin_store import get_plugin

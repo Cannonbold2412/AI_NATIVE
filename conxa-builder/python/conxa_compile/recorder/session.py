@@ -901,6 +901,7 @@ class RecordingSession:
 
     def _run_sync_recorder(self) -> None:
         try:
+            import sys as _sys
             self._playwright = sync_playwright().start()
             self._browser = self._playwright.chromium.launch(
                 headless=False,
@@ -910,6 +911,13 @@ class RecordingSession:
                 ]
             )
             self.browser_open = True
+            # Allow Chromium to steal the foreground on Windows despite focus-lock
+            if _sys.platform == "win32":
+                try:
+                    import ctypes
+                    ctypes.windll.user32.AllowSetForegroundWindow(-1)
+                except Exception:
+                    pass
             self._browser.on("disconnected", lambda _: self._on_browser_disconnected())
             ctx_kwargs: dict[str, Any] = {}
             if self.storage_state_path and Path(self.storage_state_path).is_file():
@@ -936,6 +944,10 @@ class RecordingSession:
                 self._remember_page_url_sync(self._page)
             except Exception as goto_err:
                 self.binding_errors.append(f"navigation_error: {goto_err!s}")
+            try:
+                self._page.bring_to_front()
+            except Exception:
+                pass
             if not self.auth_mode:
                 page = self._active_page_sync()
                 if page is not None:

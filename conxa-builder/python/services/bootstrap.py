@@ -102,20 +102,38 @@ def ensure_nsis(manifest: dict[str, Any], on_event: EventSink | None = None) -> 
 
 
 def ensure_chromium(on_event: EventSink | None = None) -> None:
-    """Install the Playwright Chromium build into the managed deps path."""
-    browsers_path = _deps_dir() / "chromium"
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
-    if any(browsers_path.glob("chromium-*")):
-        _emit(on_event, dep="chromium", status="ready")
-        return
-    _emit(on_event, dep="chromium", status="installing")
-    proc = subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "chromium"],
-        capture_output=True, text=True,
-    )
-    if proc.returncode != 0:
-        _emit(on_event, dep="chromium", status="error", message=proc.stderr[-500:])
-        raise RuntimeError(f"playwright install chromium failed: {proc.stderr[-300:]}")
+    """Ensure the Playwright Chromium build is available.
+
+    Dev mode: uses Playwright's default managed location (AppData/Local/ms-playwright).
+    Packaged (frozen) mode: installs into ~/.conxa/deps/chromium so the app is self-contained.
+    """
+    if getattr(sys, "frozen", False):
+        # Packaged build: redirect to a managed path under ~/.conxa/deps/
+        browsers_path = _deps_dir() / "chromium"
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
+        if any(browsers_path.glob("chromium-*")):
+            _emit(on_event, dep="chromium", status="ready")
+            return
+        _emit(on_event, dep="chromium", status="installing")
+        driver_dir = Path(sys._MEIPASS) / "playwright" / "driver"  # type: ignore[attr-defined]
+        node_exe = driver_dir / ("node.exe" if sys.platform == "win32" else "node")
+        driver_js = driver_dir / "package" / "cli.js"
+        proc = subprocess.run(
+            [str(node_exe), str(driver_js), "install", "chromium"],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            _emit(on_event, dep="chromium", status="error", message=proc.stderr[-500:])
+            raise RuntimeError(f"playwright install chromium failed: {proc.stderr[-300:]}")
+    else:
+        # Dev mode: use Playwright's default location; install only if missing (fast no-op if present).
+        proc = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            _emit(on_event, dep="chromium", status="error", message=proc.stderr[-500:])
+            raise RuntimeError(f"playwright install chromium failed: {proc.stderr[-300:]}")
     _emit(on_event, dep="chromium", status="ready")
 
 
