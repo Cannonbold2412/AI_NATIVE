@@ -41,6 +41,13 @@ _MIN_SKILL_PACK_VERSION = os.environ.get("CONXA_MIN_SKILL_PACK_VERSION", "0.3.0"
 _PLAYWRIGHT_VERSION = os.environ.get("CONXA_PLAYWRIGHT_VERSION", "1.49.0")
 _CHROMIUM_REVISION = os.environ.get("CONXA_CHROMIUM_REVISION", "1148460")
 
+_STUDIO_VERSION = os.environ.get("CONXA_STUDIO_VERSION", "v1.0.0")
+_STUDIO_WIN_URL = os.environ.get(
+    "CONXA_STUDIO_WIN_URL",
+    f"https://github.com/conxa-ai/conxa-build-studio/releases/download/{_STUDIO_VERSION}/conxa-build-studio-setup.exe",
+)
+_STUDIO_WIN_SHA256 = os.environ.get("CONXA_STUDIO_WIN_SHA256", "")
+
 
 @router.get("/updates/deps-manifest", include_in_schema=False)
 def deps_manifest() -> dict:
@@ -61,6 +68,20 @@ def deps_manifest() -> dict:
             "keytar_url": _RUNTIME_KEYTAR_URL,
             "keytar_sha256": _RUNTIME_KEYTAR_SHA256,
         },
+    }
+
+
+@router.get("/updates/studio-manifest", include_in_schema=False)
+def studio_manifest() -> dict:
+    """
+    Fetched by the web frontend to surface the Build Studio download link.
+    Public — called without authentication.
+    Set CONXA_STUDIO_WIN_URL on Render once the installer is published.
+    """
+    return {
+        "version": _STUDIO_VERSION,
+        "win_url": _STUDIO_WIN_URL,
+        "win_sha256": _STUDIO_WIN_SHA256,
     }
 
 

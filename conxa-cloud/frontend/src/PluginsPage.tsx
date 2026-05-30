@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { ArrowRight, Globe, KeyRound, Plus, Search, Trash2 } from 'lucide-react'
+import { OpenInStudioButton } from '@/components/OpenInStudioButton'
 
 function statusBadge(status: Plugin['status']) {
   const map: Record<Plugin['status'], { label: string; className: string }> = {
@@ -156,7 +157,12 @@ export function PluginsPage() {
       <PageHeader
         title="Plugins"
         description="Each plugin bundles auth + workflows for one web app."
-        actions={<CreatePluginDialog onCreated={refetch} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <OpenInStudioButton size="default" />
+            <CreatePluginDialog onCreated={refetch} />
+          </div>
+        }
       />
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6">
         {/* Search + filter bar */}
@@ -233,11 +239,14 @@ export function PluginsPage() {
                       <span>{plugin.workflows.length} workflow{plugin.workflows.length !== 1 ? 's' : ''}</span>
                       {plugin.build ? <span>v{plugin.build.version}</span> : null}
                     </div>
-                    <Button asChild size="icon-sm" variant="ghost" className="text-zinc-400 hover:text-white">
-                      <Link href={`/plugins/${plugin.id}`}>
-                        <ArrowRight className="size-4" />
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <OpenInStudioButton pluginId={plugin.id} />
+                      <Button asChild size="icon-sm" variant="ghost" className="text-zinc-400 hover:text-white">
+                        <Link href={`/plugins/${plugin.id}`}>
+                          <ArrowRight className="size-4" />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

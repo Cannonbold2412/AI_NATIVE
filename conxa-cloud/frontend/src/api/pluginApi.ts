@@ -408,6 +408,16 @@ export type InstallerBuildResult = {
   runtime_version: string
 }
 
+export type StudioManifest = {
+  version: string
+  win_url: string
+  win_sha256: string
+}
+
+export function getStudioManifest(): Promise<StudioManifest> {
+  return apiFetch('/updates/studio-manifest').then((r) => json<StudioManifest>(r))
+}
+
 /** Stream a workflow test run (SSE). Returns a raw Response for readPluginSse(). */
 export function testWorkflow(
   pluginId: string,
