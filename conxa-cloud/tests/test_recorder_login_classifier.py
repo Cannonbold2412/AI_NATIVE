@@ -25,7 +25,7 @@ def _make_event(
         selectors=Selectors(css="input", xpath="//input", text_based="", aria=""),
         context=DomContext(parent="form", siblings=[], index_in_parent=0),
         semantic=SemanticFeatures(normalized_text="", role="input", input_type=input_type, intent_hint="provide_input"),
-        visual=VisualFeatures(bbox={"x": 0, "y": 0, "w": 0, "h": 0}, viewport="1280x800", scroll_position="0,0"),
+        visual=VisualFeatures(bbox={"x": 0, "y": 0, "w": 0, "h": 0}, viewport="1280x800", scroll_position="0,0", timestamp_ms=0),
         page=PageContext(url=url, title=title),
         state_change=StateChange(before="", after=""),
         timing=Timing(),

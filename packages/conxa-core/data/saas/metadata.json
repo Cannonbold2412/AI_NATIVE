@@ -1,0 +1,40 @@
+{
+  "users": {
+    "user_local": {
+      "id": "user_local",
+      "email": "local@ai-native.dev",
+      "name": "Local Developer",
+      "auth_provider": "local",
+      "updated_at": 1780100279.7716024
+    }
+  },
+  "workspaces": {
+    "wrk_local": {
+      "id": "wrk_local",
+      "slug": "local",
+      "name": "Local workspace",
+      "updated_at": 1780100279.7716024,
+      "legacy_imported_at": 1780099869.3078256
+    }
+  },
+  "memberships": [
+    {
+      "user_id": "user_local",
+      "workspace_id": "wrk_local",
+      "role": "owner",
+      "created_at": 1780099869.3078256
+    }
+  ],
+  "billing": {
+    "wrk_local": {
+      "plan": "development",
+      "status": "inactive",
+      "customer_id": null,
+      "subscription_id": null,
+      "current_period_end": null,
+      "updated_at": 1780099869.3078256
+    }
+  },
+  "package_releases": {},
+  "audit_events": []
+}

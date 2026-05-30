@@ -16,8 +16,8 @@ def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, 
 
     from conxa_core.config import settings
     from conxa_core.models.plugin import Plugin, PluginBuild
-    from app.services import installer_builder
-    from app.services import plugin_builder
+    from conxa_compile import installer_builder
+    from conxa_compile import plugin_builder
     from conxa_core.storage import plugin_store
 
     skill_pack = tmp_path / "skill-packs" / "render"

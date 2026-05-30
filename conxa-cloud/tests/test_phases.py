@@ -46,6 +46,7 @@ def _minimal_click_event() -> dict:
             "bbox": {"x": 10, "y": 20, "w": 80, "h": 32},
             "viewport": "800x600",
             "scroll_position": "0,0",
+            "timestamp_ms": 0,
         },
         "page": {"url": "https://example.com/app", "title": "App"},
         "state_change": {"before": "aaa", "after": "bbb"},
@@ -818,7 +819,7 @@ class PhaseTests(unittest.TestCase):
             shutil.rmtree(data_dir, ignore_errors=True)
 
     def test_anchor_vision_prompt_defines_relation_direction_target_relative_to_anchor(self) -> None:
-        from app.llm import anchor_vision_llm
+        from conxa_compile.llm import anchor_vision_llm
         from conxa_compile.llm.anchor_vision_llm import generate_anchors_for_step_or_raise
         from conxa_compile.policy.bundle import get_policy_bundle
 

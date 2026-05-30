@@ -9,8 +9,9 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import Browser, Page, sync_playwright
 
+import conxa_compile.recorder as _recorder
 
-BRIDGE_JS = Path("app/recorder/bridge.js").read_text(encoding="utf-8")
+BRIDGE_JS = (Path(_recorder.__file__).parent / "bridge.js").read_text(encoding="utf-8")
 
 
 def _existing_chromium_executable(playwright_chromium) -> str | None:

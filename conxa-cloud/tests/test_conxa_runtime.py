@@ -1,4 +1,4 @@
-"""Tests for app/services/conxa_runtime.py and the rewritten plugin_executor.py."""
+"""Tests for conxa_compile/conxa_runtime.py (runtime dir resolution + skill-pack sync)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ class TestResolveRuntimeDir:
     def test_env_override_takes_priority(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         (tmp_path / "server.js").touch()
         monkeypatch.setenv("CONXA_DIR", str(tmp_path))
-        from app.services import conxa_runtime
+        from conxa_compile import conxa_runtime
         monkeypatch.delattr(conxa_runtime, "resolve_runtime_dir", raising=False)
         import importlib
         importlib.reload(conxa_runtime)
@@ -128,57 +128,3 @@ class TestSyncSkillPack:
             sync_skill_pack(company="c", source_dir=source, runtime_dir=runtime_dir)
 
         assert (dest / "pack.json").read_text() == '{"v":2}'
-
-
-# ─── execute_skill (plugin_executor) ─────────────────────────────────────────
-
-class TestPluginExecutor:
-    def _make_plugin(self) -> MagicMock:
-        plugin = MagicMock()
-        plugin.build = MagicMock()
-        plugin.id = "p-1"
-        plugin.name = "Test Plugin"
-        return plugin
-
-    @pytest.mark.asyncio
-    async def test_raises_when_plugin_not_built(self) -> None:
-        from app.services.plugin_executor import execute_skill
-        plugin = self._make_plugin()
-        plugin.build = None
-        with pytest.raises(ValueError, match="not built yet"):
-            await execute_skill(plugin, "my-skill", {})
-
-    @pytest.mark.asyncio
-    async def test_raises_with_actionable_message_when_runtime_missing(self) -> None:
-        from app.services.plugin_executor import execute_skill
-        plugin = self._make_plugin()
-        with patch("conxa_compile.conxa_runtime.resolve_runtime_dir", return_value=None):
-            with pytest.raises(RuntimeError, match="Conxa runtime not found"):
-                await execute_skill(plugin, "my-skill", {})
-
-    @pytest.mark.asyncio
-    async def test_returns_result_on_success(self) -> None:
-        from app.services.plugin_executor import execute_skill
-        plugin = self._make_plugin()
-        fake_result = {"success": True, "output": "done"}
-        fake_runtime = Path("/fake/runtime")
-
-        with patch("conxa_compile.conxa_runtime.resolve_runtime_dir", return_value=fake_runtime), \
-             patch("conxa_compile.conxa_runtime.sync_skill_pack"), \
-             patch("app.services.mcp_stdio_client.execute_skill_via_runtime", new=AsyncMock(return_value=fake_result)):
-            result = await execute_skill(plugin, "my-skill", {"key": "val"})
-
-        assert result == fake_result
-
-    @pytest.mark.asyncio
-    async def test_propagates_runtime_error(self) -> None:
-        from app.services.plugin_executor import execute_skill
-        plugin = self._make_plugin()
-        fake_runtime = Path("/fake/runtime")
-
-        with patch("conxa_compile.conxa_runtime.resolve_runtime_dir", return_value=fake_runtime), \
-             patch("conxa_compile.conxa_runtime.sync_skill_pack"), \
-             patch("app.services.mcp_stdio_client.execute_skill_via_runtime",
-                   new=AsyncMock(side_effect=RuntimeError("selector not found"))):
-            with pytest.raises(RuntimeError, match="selector not found"):
-                await execute_skill(plugin, "my-skill", {})

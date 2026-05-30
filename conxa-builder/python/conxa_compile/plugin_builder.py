@@ -963,7 +963,11 @@ def _bundle_root(bundle_slug: str) -> Path:
 # ─────────────────────────────────────────────────
 
 def _templates_dir() -> Path:
-    return Path(__file__).parent.parent / "storage" / "plugin_templates"
+    # Templates ship with the shared conxa_core.storage package (and are bundled
+    # by PyInstaller via collect_data_files('conxa_core', includes=['storage/**'])).
+    import conxa_core.storage as _storage
+
+    return Path(_storage.__file__).parent / "plugin_templates"
 
 
 def _render_plugin_template(name: str, **subs: str) -> str:

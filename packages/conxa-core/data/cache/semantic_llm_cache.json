@@ -1,0 +1,8 @@
+{
+  "d25d36b79cebd9faf19c21f54d11fae7ce32387b117c5dd29db6f96f5105fe0c": {
+    "intent": "activate_control_submit",
+    "normalized_text": "submit",
+    "confidence": 0.82,
+    "source": "rule_fallback"
+  }
+}

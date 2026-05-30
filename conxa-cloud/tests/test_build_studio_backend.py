@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-_PY_DIR = os.path.join(os.path.dirname(__file__), "..", "conxa-builder", "python")
+_PY_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "conxa-builder", "python")
 sys.path.insert(0, os.path.abspath(_PY_DIR))
 
 
