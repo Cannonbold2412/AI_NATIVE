@@ -21,6 +21,7 @@ class PluginWorkflow(BaseModel):
     last_test_status: Literal["passed", "failed", "never"] = "never"
     last_test_error: str | None = None
     last_test_inputs: dict[str, Any] = Field(default_factory=dict)
+    signed_off: bool = False
 
 
 class PluginAuth(BaseModel):

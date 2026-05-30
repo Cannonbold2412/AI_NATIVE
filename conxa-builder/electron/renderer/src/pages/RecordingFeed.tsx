@@ -39,18 +39,18 @@ export function RecordingFeed() {
         {
           seq: seqRef.current++,
           ts: Date.now(),
-          action: ev.action ?? "action",
-          selector: ev.selector,
-          value: ev.value,
-          url: ev.url,
-          screenshot: ev.screenshot,
+          action: ev.action ? String(ev.action) : "action",
+          selector: ev.selector != null ? String(ev.selector) : undefined,
+          value: ev.value != null ? String(ev.value) : undefined,
+          url: ev.url != null ? String(ev.url) : undefined,
+          screenshot: ev.screenshot != null ? String(ev.screenshot) : undefined,
           expanded: false,
         },
       ]);
     }
     if (ev.phase === "recording_stopped") {
       setStatus("done");
-      if (ev.session_id) setSessionId(ev.session_id);
+      if (ev.session_id) setSessionId(String(ev.session_id));
     }
   }, sessionId ?? undefined);
 

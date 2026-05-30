@@ -1,101 +1,42 @@
-import { useState } from "react";
+import { useState, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 
 type Props = {
-  data: Record<string, unknown> | null;
-  title?: string;
-  defaultOpen?: boolean;
-};
+  data: Record<string, unknown> | null
+  title?: ReactNode
+  defaultOpen?: boolean
+}
 
-export function ValidationReportPanel({ data, title = "Validation report", defaultOpen = true }: Props) {
-  const [open, setOpen] = useState(defaultOpen);
-  if (!data) return null;
-
-  const issues = Array.isArray(data.issues) ? (data.issues as { severity: string; message: string; code: string }[]) : null;
-  const isError = data.error;
-
+/**
+ * Collapsible JSON readout (validation / audit) — same pattern 21st.dev / inspector tools target.
+ */
+export function ValidationReportPanel({ data, title = 'Validation report', defaultOpen = true }: Props) {
+  const [open, setOpen] = useState(defaultOpen)
+  if (!data) return null
   return (
-    <div
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        overflow: "hidden",
-        background: "var(--bg-surface)",
-      }}
-    >
-      <button
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          width: "100%",
-          padding: "8px 12px",
-          fontSize: 11,
-          color: "var(--text-muted)",
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          textAlign: "left",
-        }}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span>{title}</span>
-        <span>{open ? "▲" : "▼"}</span>
-      </button>
-
-      {open && (
-        <div style={{ borderTop: "1px solid var(--border)", padding: "12px" }}>
-          {isError && (
-            <div style={{ color: "var(--red)", fontSize: 13 }}>{String(data.error)}</div>
-          )}
-          {issues && issues.length === 0 && (
-            <div className="banner-ok" style={{ fontSize: 13 }}>
-              All checks passed
-            </div>
-          )}
-          {issues && issues.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {issues.map((issue, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: "var(--radius)",
-                    background:
-                      issue.severity === "error"
-                        ? "rgba(248,113,113,0.08)"
-                        : "rgba(251,191,36,0.08)",
-                    border: `1px solid ${issue.severity === "error" ? "var(--red)" : "var(--amber)"}`,
-                    fontSize: 12,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      color: issue.severity === "error" ? "var(--red)" : "var(--amber)",
-                      marginBottom: 2,
-                    }}
-                  >
-                    [{issue.severity.toUpperCase()}] {issue.code}
-                  </div>
-                  <div style={{ color: "var(--text-secondary)" }}>{issue.message}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {!issues && !isError && (
-            <pre
-              style={{
-                fontFamily: "monospace",
-                fontSize: 11,
-                color: "var(--text-secondary)",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
+    <div className="bg-muted/20 border-border flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border">
+      <Collapsible open={open} onOpenChange={setOpen} className="flex min-h-0 flex-1 flex-col">
+        <CollapsibleTrigger
+          className="hover:bg-muted/40 text-muted-foreground focus-visible:ring-ring/50 flex w-full items-center justify-between gap-2 border-0 bg-transparent px-3 py-2 text-left text-xs font-medium tracking-wide uppercase focus-visible:ring-2 focus-visible:outline-none"
+          aria-expanded={open}
+        >
+          <span>{title}</span>
+          <ChevronDown
+            className={cn('text-muted-foreground size-4 shrink-0 transition-transform duration-200', open && 'rotate-180')}
+            aria-hidden
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="flex min-h-0 flex-1 flex-col">
+          <ScrollArea className="min-h-0 flex-1 border-t" role="region" aria-label="Validation result JSON" tabIndex={0}>
+            <pre className="text-muted-foreground p-3 font-mono text-xs break-words whitespace-pre-wrap">
               {JSON.stringify(data, null, 2)}
             </pre>
-          )}
-        </div>
-      )}
+          </ScrollArea>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
-  );
+  )
 }

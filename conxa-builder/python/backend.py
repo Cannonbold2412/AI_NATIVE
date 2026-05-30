@@ -313,6 +313,49 @@ class Backend:
             plugin_id, company_slug=company_slug, realtime_sink=_event_sink(rid)
         )
 
+    def cmd_test_workflow(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:
+        """Run a built workflow end-to-end against the local Conxa runtime.
+
+        Validates the workflow is built and compiled, then drives the shared
+        Node runtime. The runtime is an MCP stdio server (``server.js``) with no
+        single-skill CLI executor, so execution is not yet wired here — fail with
+        a clear, actionable error rather than a cryptic ``unknown_command``.
+        """
+        from conxa_compile.conxa_runtime import resolve_runtime_dir
+        from conxa_core.storage.plugin_store import get_plugin
+
+        plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
+        workflow_id = _safe_id(payload.get("workflow_id"), "workflow_id")
+
+        plugin = get_plugin(plugin_id)
+        if plugin is None:
+            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+        workflow = next((wf for wf in plugin.workflows if wf.id == workflow_id), None)
+        if workflow is None:
+            raise _CommandError("workflow_not_found", f"No workflow {workflow_id}")
+        if not workflow.skill_id:
+            raise _CommandError("workflow_not_compiled", "Compile this workflow before testing.")
+        if plugin.build is None:
+            raise _CommandError("plugin_not_built", "Build the plugin before testing its workflows.")
+
+        sink = _event_sink(rid)
+        sink({"kind": "workflow_test", "message": f"Preparing test for {workflow.name!r}…"})
+
+        runtime_dir = resolve_runtime_dir()
+        if runtime_dir is None:
+            raise _CommandError(
+                "runtime_not_found",
+                "Conxa runtime not found. Install the runtime (or set CONXA_DIR) to test workflows.",
+            )
+
+        raise _CommandError(
+            "test_runtime_unavailable",
+            "Workflow test execution is not yet wired in the Build Studio backend. "
+            "The shared runtime exposes MCP tools (execute_plan) over stdio rather than a "
+            "single-skill CLI; running a single workflow headlessly needs a dedicated runtime "
+            "entrypoint before this command can stream results.",
+        )
+
     def cmd_publish(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         import base64
         import urllib.request
@@ -357,6 +400,581 @@ class Backend:
         req.add_header("Authorization", f"Bearer {self._auth_service().get_token()}")
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
+
+    # ─── helpers ────────────────────────────────────────────────────────────
+
+    def _skill_response(
+        self,
+        skill_id: str,
+        doc: dict[str, Any],
+        revalidation: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+        from conxa_compile.editor.workflow_service import build_workflow_response
+
+        asset_base_url = f"file://{Path(settings.data_dir) / 'skills' / skill_id / 'assets'}"
+        workflow = build_workflow_response(skill_id, doc, asset_base_url=asset_base_url)
+        return {
+            "skill_id": skill_id,
+            "meta": dict(doc.get("meta") or {}),
+            "revalidation": revalidation or {},
+            "workflow": workflow.model_dump(mode="json"),
+        }
+
+    # ─── plugin management ──────────────────────────────────────────────────
+
+    def cmd_delete_plugin(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.plugin_store import delete_plugin
+
+        plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
+        if not delete_plugin(plugin_id):
+            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+        return {"deleted": True}
+
+    def cmd_delete_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.plugin_store import remove_workflow
+
+        plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
+        workflow_id = _safe_id(payload.get("workflow_id"), "workflow_id")
+        if remove_workflow(plugin_id, workflow_id) is None:
+            raise _CommandError("not_found", "Plugin or workflow not found")
+        return {"deleted": True}
+
+    def cmd_re_record_auth(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        """Clear a plugin's captured auth so the user can record a fresh session.
+
+        Drops the stored ``auth.json`` and resets the plugin back to the
+        ``needs_auth`` state; the renderer then drives a new auth recording.
+        """
+        from pathlib import Path
+        from conxa_core.config import settings as _settings
+        from conxa_core.storage.plugin_store import get_plugin, save_plugin
+
+        plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
+        plugin = get_plugin(plugin_id)
+        if plugin is None:
+            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+
+        plugin.auth = None
+        plugin.status = "needs_auth"
+        save_plugin(plugin)
+
+        auth_file = Path(_settings.data_dir) / "plugins" / plugin_id / "auth" / "auth.json"
+        if auth_file.is_file():
+            auth_file.unlink()
+        return {"status": "needs_auth"}
+
+    def cmd_update_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.plugin_store import get_plugin, save_plugin
+
+        plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
+        workflow_id = _safe_id(payload.get("workflow_id"), "workflow_id")
+        plugin = get_plugin(plugin_id)
+        if plugin is None:
+            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+        for wf in plugin.workflows:
+            if wf.id == workflow_id:
+                if "skill_id" in payload:
+                    wf.skill_id = payload["skill_id"]
+                if "status" in payload:
+                    wf.status = payload["status"]
+                save_plugin(plugin)
+                return {"plugin_id": plugin_id, "workflow_id": workflow_id,
+                        "skill_id": wf.skill_id, "status": wf.status}
+        raise _CommandError("workflow_not_found", f"No workflow {workflow_id}")
+
+    # ─── recording status ────────────────────────────────────────────────────
+
+    def cmd_get_recording_status(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        session_id = _safe_id(payload.get("session_id"), "session_id")
+        sess = _recorder_registry.get(session_id)
+        if sess is None:
+            raise _CommandError("session_not_found", f"No session {session_id}")
+        return sess.status()
+
+    # ─── skill workflow (human edit) ─────────────────────────────────────────
+
+    def cmd_get_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+        from conxa_core.storage.json_store import read_skill
+        from conxa_compile.editor.workflow_service import build_workflow_response
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        document = read_skill(skill_id)
+        if document is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        asset_base_url = f"file://{Path(settings.data_dir) / 'skills' / skill_id / 'assets'}"
+        return build_workflow_response(skill_id, document, asset_base_url=asset_base_url).model_dump(mode="json")
+
+    def cmd_patch_step(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.compiler.patch import revalidate_step
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        step_index = int(payload.get("step_index") or 0)
+        patch = dict(payload.get("patch") or {})
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = dict(doc)
+        skills = list(doc.get("skills") or [])
+        if not skills:
+            raise _CommandError("invalid_document", "No skills block")
+        block = dict(skills[0])
+        steps = list(block.get("steps") or [])
+        if step_index < 0 or step_index >= len(steps):
+            raise _CommandError("step_not_found", f"Step {step_index} out of range")
+        step = {**dict(steps[step_index]), **patch}
+        steps[step_index] = step
+        block["steps"] = steps
+        skills[0] = block
+        doc["skills"] = skills
+        revalidation = revalidate_step(step)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc, revalidation)
+
+    def cmd_validate_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill
+        from conxa_compile.editor.workflow_service import validate_skill_document
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        return validate_skill_document(doc)
+
+    def cmd_reorder_steps(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.workflow_service import reorder_steps
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        new_order = list(payload.get("new_order") or [])
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = reorder_steps(doc, new_order)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc)
+
+    def cmd_insert_step(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.workflow_service import insert_step_after
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        action_kind = str(payload.get("action_kind") or "click")
+        insert_after = payload.get("insert_after")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = insert_step_after(doc, action_kind, insert_after)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc)
+
+    def cmd_delete_step(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.workflow_service import delete_step_at
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        step_index = int(payload.get("step_index") or 0)
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = delete_step_at(doc, step_index)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc)
+
+    def cmd_update_workflow_inputs(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.workflow_service import merge_skill_inputs
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        inputs = list(payload.get("inputs") or [])
+        title = payload.get("title")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = merge_skill_inputs(doc, inputs, title)
+        write_skill(skill_id, doc)
+        return {"skill_id": skill_id, "ok": True}
+
+    def cmd_replace_literals(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.workflow_service import replace_string_literals_in_skill_document
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        find = str(payload.get("find") or "")
+        replace_with = str(payload.get("replace_with") or "")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = replace_string_literals_in_skill_document(doc, find, replace_with)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc)
+
+    def cmd_sign_off_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import time
+        from conxa_core.storage.plugin_store import list_plugins, save_plugin
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        for plugin in list_plugins():
+            for wf in plugin.workflows:
+                if wf.skill_id == skill_id:
+                    wf.edited_at = time.time()
+                    wf.signed_off = True
+                    save_plugin(plugin)
+                    return {"skill_id": skill_id, "signed_off": True}
+        return {"skill_id": skill_id, "signed_off": True}
+
+    def cmd_compile_updated(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        skill_title = str(payload.get("skill_title") or "").strip()
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = dict(doc)
+        meta = dict(doc.get("meta") or {})
+        if skill_title:
+            meta["title"] = skill_title
+        meta["version"] = int(meta.get("version") or 1) + 1
+        doc["meta"] = meta
+        write_skill(skill_id, doc)
+        return {"skill_id": skill_id, "ok": True}
+
+    # ─── recording visuals ───────────────────────────────────────────────────
+
+    def cmd_list_recording_screenshots(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+        from conxa_core.storage.json_store import read_skill
+        from conxa_compile.editor.recording_visual import screenshot_items_for_skill
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        asset_base_url = f"file://{Path(settings.data_dir) / 'skills' / skill_id / 'assets'}"
+        session_id, items = screenshot_items_for_skill(skill_id, doc, asset_base_url=asset_base_url)
+        return {"skill_id": skill_id, "session_id": session_id, "items": items}
+
+    def cmd_apply_recording_visual(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.recording_visual import apply_recording_event_visual_to_step_or_raise
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        step_index = int(payload.get("step_index") or 0)
+        event_index = int(payload.get("event_index") or 0)
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = apply_recording_event_visual_to_step_or_raise(doc, step_index, event_index)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc)
+
+    def cmd_clear_step_visual(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.recording_visual import clear_step_visual_screenshots_or_raise
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        step_index = int(payload.get("step_index") or 0)
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = clear_step_visual_screenshots_or_raise(doc, step_index)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc)
+
+    def cmd_update_visual_bbox(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.recording_visual import (
+            update_step_visual_bbox_and_regenerate_anchors_or_raise,
+        )
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        step_index = int(payload.get("step_index") or 0)
+        bbox = {k: float(payload.get(k) or 0) for k in ("x", "y", "w", "h")}
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = update_step_visual_bbox_and_regenerate_anchors_or_raise(doc, step_index, bbox)
+        write_skill(skill_id, doc)
+        return self._skill_response(skill_id, doc)
+
+    # ─── skill library ───────────────────────────────────────────────────────
+
+    def cmd_list_skills(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        skills_dir = Path(settings.data_dir) / "skills"
+        result = []
+        if skills_dir.is_dir():
+            for d in sorted(skills_dir.iterdir()):
+                skill_json = d / "skill.json"
+                if skill_json.is_file():
+                    try:
+                        doc = json.loads(skill_json.read_text(encoding="utf-8"))
+                        meta = doc.get("meta") or {}
+                        steps = (doc.get("skills") or [{}])[0].get("steps") or []
+                        result.append({
+                            "skill_id": d.name,
+                            "title": str(meta.get("title") or d.name),
+                            "version": int(meta.get("version") or 1),
+                            "step_count": len(steps),
+                            "modified_at": skill_json.stat().st_mtime,
+                        })
+                    except Exception:
+                        pass
+        return {"skills": result}
+
+    def cmd_delete_skill(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import shutil
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        skill_dir = Path(settings.data_dir) / "skills" / skill_id
+        if not skill_dir.is_dir():
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        title = skill_id
+        skill_json = skill_dir / "skill.json"
+        if skill_json.is_file():
+            try:
+                title = str(
+                    (json.loads(skill_json.read_text(encoding="utf-8")).get("meta") or {}).get("title") or skill_id
+                )
+            except Exception:
+                pass
+        shutil.rmtree(skill_dir)
+        return {"skill_id": skill_id, "title": title, "deleted": True}
+
+    def cmd_rename_skill(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill, write_skill
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            raise _CommandError("invalid_input", "title is required")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        doc = dict(doc)
+        meta = dict(doc.get("meta") or {})
+        meta["title"] = title
+        doc["meta"] = meta
+        write_skill(skill_id, doc)
+        return {"skill_id": skill_id, "title": title}
+
+    def cmd_get_skill_document(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from conxa_core.storage.json_store import read_skill
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        return doc
+
+    def cmd_get_compiled_skill(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.storage.plugin_store import get_plugin
+
+        plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
+        skill_slug = str(payload.get("skill_slug") or "").strip()
+        if not skill_slug:
+            raise _CommandError("invalid_input", "skill_slug is required")
+        plugin = get_plugin(plugin_id)
+        if plugin is None:
+            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+        if plugin.build is None:
+            raise _CommandError("not_built", "Plugin has not been built yet")
+        skill_dir = Path(plugin.build.output_path) / "skills" / skill_slug
+        if not skill_dir.is_dir():
+            raise _CommandError("skill_not_found", f"No compiled skill {skill_slug}")
+        files: dict[str, Any] = {}
+        for fname in ("execution.json", "recovery.json", "input.json"):
+            fpath = skill_dir / fname
+            files[fname] = json.loads(fpath.read_text(encoding="utf-8")) if fpath.is_file() else None
+        return {"plugin_id": plugin_id, "skill_slug": skill_slug, "files": files}
+
+    # ─── skill packages ──────────────────────────────────────────────────────
+
+    def cmd_list_skill_packages(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        packs_dir = Path(settings.data_dir) / "skill-packs"
+        packages = []
+        if packs_dir.is_dir():
+            for bundle_dir in sorted(packs_dir.iterdir()):
+                if not bundle_dir.is_dir() or not (bundle_dir / "pack.json").is_file():
+                    continue
+                workflows = []
+                all_files: list[str] = []
+                for skill_dir in sorted(bundle_dir.iterdir()):
+                    if not skill_dir.is_dir():
+                        continue
+                    skill_files = sorted(f.name for f in skill_dir.iterdir() if f.is_file())
+                    all_files.extend(f"{skill_dir.name}/{fn}" for fn in skill_files)
+                    if skill_files:
+                        workflows.append({
+                            "workflow_slug": skill_dir.name,
+                            "modified_at": skill_dir.stat().st_mtime,
+                            "files": skill_files,
+                        })
+                packages.append({
+                    "package_name": bundle_dir.name,
+                    "modified_at": bundle_dir.stat().st_mtime,
+                    "workflows": workflows,
+                    "files": all_files,
+                })
+        return {"packages": packages, "bundle_root": "skill_package"}
+
+    def cmd_list_skill_package_files(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        package_name = str(payload.get("package_name") or "").strip()
+        if not package_name:
+            raise _CommandError("invalid_input", "package_name is required")
+        bundle_dir = Path(settings.data_dir) / "skill-packs" / package_name
+        if not bundle_dir.is_dir():
+            raise _CommandError("package_not_found", f"No package {package_name}")
+        files: dict[str, str] = {}
+        for fpath in sorted(bundle_dir.rglob("*")):
+            if fpath.is_file():
+                rel = fpath.relative_to(bundle_dir).as_posix()
+                try:
+                    files[rel] = fpath.read_text(encoding="utf-8")
+                except Exception:
+                    files[rel] = ""
+        return {"package_name": package_name, "files": files}
+
+    def cmd_delete_skill_package(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import shutil
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        package_name = str(payload.get("package_name") or "").strip()
+        if not package_name:
+            raise _CommandError("invalid_input", "package_name is required")
+        bundle_dir = Path(settings.data_dir) / "skill-packs" / package_name
+        if not bundle_dir.is_dir():
+            raise _CommandError("package_not_found", f"No package {package_name}")
+        shutil.rmtree(bundle_dir)
+        return {"package_name": package_name, "deleted": True}
+
+    def cmd_rename_skill_package(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        package_name = str(payload.get("package_name") or "").strip()
+        new_name = str(payload.get("new_name") or "").strip()
+        if not package_name or not new_name:
+            raise _CommandError("invalid_input", "package_name and new_name are required")
+        packs_dir = Path(settings.data_dir) / "skill-packs"
+        bundle_dir = packs_dir / package_name
+        new_dir = packs_dir / new_name
+        if not bundle_dir.is_dir():
+            raise _CommandError("package_not_found", f"No package {package_name}")
+        if new_dir.exists():
+            raise _CommandError("already_exists", f"Package {new_name} already exists")
+        bundle_dir.rename(new_dir)
+        pack_json = new_dir / "pack.json"
+        if pack_json.is_file():
+            try:
+                pack = json.loads(pack_json.read_text(encoding="utf-8"))
+                pack["company"] = new_name
+                pack_json.write_text(json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
+        return {"package_name": new_name, "previous_name": package_name}
+
+    def cmd_set_skill_pack_bundle_root(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        bundle_root = str(payload.get("bundle_root") or "").strip()
+        if not bundle_root:
+            raise _CommandError("invalid_input", "bundle_root is required")
+        return {"bundle_root": bundle_root}
+
+    # ─── runs ────────────────────────────────────────────────────────────────
+
+    def cmd_list_runs(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        plugin_id = payload.get("plugin_id")
+        since = payload.get("since")
+        runs_dir = Path(settings.data_dir) / "runs"
+        runs = []
+        if runs_dir.is_dir():
+            for fpath in sorted(runs_dir.glob("*.jsonl")):
+                try:
+                    for line in fpath.read_text(encoding="utf-8", errors="replace").splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            record = json.loads(line)
+                            if plugin_id and record.get("plugin_id") != plugin_id:
+                                continue
+                            if since is not None and record.get("ts", 0) < float(since):
+                                continue
+                            runs.append(record)
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+                except Exception:
+                    continue
+        runs.sort(key=lambda r: r.get("ts", 0), reverse=True)
+        return {"runs": runs[:100]}
+
+    def cmd_get_run(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+
+        run_id = str(payload.get("run_id") or "").strip()
+        if not run_id:
+            raise _CommandError("invalid_input", "run_id is required")
+        runs_dir = Path(settings.data_dir) / "runs"
+        if runs_dir.is_dir():
+            for fpath in sorted(runs_dir.glob("*.jsonl")):
+                try:
+                    for line in fpath.read_text(encoding="utf-8", errors="replace").splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            record = json.loads(line)
+                            if record.get("run_id") == run_id:
+                                return {"run": record}
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+                except Exception:
+                    continue
+        raise _CommandError("run_not_found", f"No run {run_id}")
+
+    # ─── metrics ─────────────────────────────────────────────────────────────
+
+    def cmd_get_metrics(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        from pathlib import Path
+        from conxa_core.config import settings
+        from conxa_core.storage.plugin_store import list_plugins
+
+        data_dir = Path(settings.data_dir)
+        skills_dir = data_dir / "skills"
+        skill_count = (
+            sum(1 for d in skills_dir.iterdir() if d.is_dir() and (d / "skill.json").is_file())
+            if skills_dir.is_dir()
+            else 0
+        )
+        packs_dir = data_dir / "skill-packs"
+        pack_count = sum(1 for d in packs_dir.iterdir() if d.is_dir()) if packs_dir.is_dir() else 0
+        return {
+            "skill_count": skill_count,
+            "plugin_count": len(list_plugins()),
+            "pack_count": pack_count,
+        }
 
     # -- dispatch ------------------------------------------------------------
 

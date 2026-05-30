@@ -1,31 +1,33 @@
-import { create } from "zustand";
+import { create } from 'zustand'
 
-interface EditorState {
-  selectedStepIndex: number | null;
-  dirtySteps: Set<number>;
-  validationReport: Record<string, unknown> | null;
-  setSelectedStepIndex: (index: number | null) => void;
-  markStepDirty: (index: number) => void;
-  clearStepDirty: (index: number) => void;
-  setValidationReport: (report: Record<string, unknown> | null) => void;
+type EditorState = {
+  selectedStepIndex: number | null
+  dirtySteps: Set<number>
+  validationReport: Record<string, unknown> | null
+  setSelectedStepIndex: (i: number | null) => void
+  markStepDirty: (i: number) => void
+  clearStepDirty: (i: number) => void
+  clearAllDirty: () => void
+  setValidationReport: (r: Record<string, unknown> | null) => void
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
-  selectedStepIndex: null,
+  selectedStepIndex: 0,
   dirtySteps: new Set(),
   validationReport: null,
-  setSelectedStepIndex: (index) => set({ selectedStepIndex: index }),
-  markStepDirty: (index) =>
+  setSelectedStepIndex: (i) => set({ selectedStepIndex: i }),
+  markStepDirty: (i) =>
     set((s) => {
-      const next = new Set(s.dirtySteps);
-      next.add(index);
-      return { dirtySteps: next };
+      const n = new Set(s.dirtySteps)
+      n.add(i)
+      return { dirtySteps: n }
     }),
-  clearStepDirty: (index) =>
+  clearStepDirty: (i) =>
     set((s) => {
-      const next = new Set(s.dirtySteps);
-      next.delete(index);
-      return { dirtySteps: next };
+      const n = new Set(s.dirtySteps)
+      n.delete(i)
+      return { dirtySteps: n }
     }),
-  setValidationReport: (report) => set({ validationReport: report }),
-}));
+  clearAllDirty: () => set({ dirtySteps: new Set() }),
+  setValidationReport: (r) => set({ validationReport: r }),
+}))

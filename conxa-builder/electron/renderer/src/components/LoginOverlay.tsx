@@ -1,0 +1,67 @@
+import { useState } from 'react'
+import { Layers } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cmd } from '@/lib/ipc'
+import type { Identity } from '@/contexts/AuthContext'
+
+export function LoginOverlay({ onLogin }: { onLogin: (identity: Identity) => void }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSignIn() {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await cmd<{ identity: Identity }>('login')
+      if (result?.identity) {
+        onLogin(result.identity)
+      } else {
+        setError('Sign-in completed but no identity returned. Please try again.')
+        setLoading(false)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#090b0d]/95 backdrop-blur-sm"
+      aria-modal="true"
+      role="dialog"
+      aria-label="Sign in"
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0f12] p-8 shadow-2xl">
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-md">
+            <Layers className="size-7 text-white" strokeWidth={1.5} />
+          </span>
+          <div className="text-center">
+            <h1 className="text-xl font-semibold text-white">Conxa Build Studio</h1>
+            <p className="mt-1 text-sm text-zinc-400">Sign in to your workspace</p>
+          </div>
+        </div>
+
+        <Button
+          className="w-full"
+          size="lg"
+          onClick={handleSignIn}
+          disabled={loading}
+        >
+          {loading ? 'Opening browser…' : 'Sign in'}
+        </Button>
+
+        {loading && (
+          <p className="mt-4 text-center text-xs text-zinc-500">
+            Complete sign-in in your browser window, then return here.
+          </p>
+        )}
+
+        {error && (
+          <p className="mt-4 text-center text-xs text-red-400">{error}</p>
+        )}
+      </div>
+    </div>
+  )
+}

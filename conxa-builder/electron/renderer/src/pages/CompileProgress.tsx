@@ -46,7 +46,7 @@ export function CompileProgress() {
 
   useBackendEvents((ev) => {
     if (ev.phase === "compile_step") {
-      const { step, status, detail } = ev as {
+      const { step, status, detail } = ev as unknown as {
         phase: string;
         step: string;
         status: string;
@@ -77,8 +77,9 @@ export function CompileProgress() {
   }, sessionId ?? undefined);
 
   function goToEditor() {
-    if (!pluginId || !skillId) return;
-    navigate(`/plugins/${encodeURIComponent(pluginId)}/edit/${encodeURIComponent(skillId)}`);
+    if (!skillId) return;
+    const fromParam = pluginId ? `?from=${encodeURIComponent(`/plugins/${pluginId}`)}` : "";
+    navigate(`/edit/${encodeURIComponent(skillId)}${fromParam}`);
   }
 
   function goToPlugin() {
