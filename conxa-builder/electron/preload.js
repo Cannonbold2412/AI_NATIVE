@@ -18,4 +18,11 @@ contextBridge.exposeInMainWorld("conxa", {
   },
 
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
+
+  /** Subscribe to deep-link URLs sent from the main process. Returns an unsubscribe fn. */
+  onDeepLink: (handler) => {
+    const listener = (_e, url) => handler(url);
+    ipcRenderer.on("deep-link", listener);
+    return () => ipcRenderer.removeListener("deep-link", listener);
+  },
 });

@@ -16,6 +16,30 @@ const { Bridge } = require("./bridge");
 
 const IS_DEV = !app.isPackaged;
 const MAX_BACKEND_RESTARTS = 3;
+
+// Enforce single instance so second-instance fires (required for Windows deep-link handling).
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+// Windows: app already running — focus it and forward the deep-link URL.
+app.on("second-instance", (_event, argv) => {
+  const url = argv.find((a) => a.startsWith("conxa-studio://"));
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    if (url) mainWindow.webContents.send("deep-link", url);
+  }
+});
+
+// macOS: OS fires this when the app is already running and a conxa-studio:// link is opened.
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("deep-link", url);
+  }
+});
 const APP_ICON_PATH = path.join(__dirname, "build", "icon.png");
 
 let mainWindow = null;
@@ -156,6 +180,14 @@ app.whenReady().then(() => {
   startBackend();
   createWindow();
   initAutoUpdate();
+
+  // Windows cold-launch: deep link URL is passed as a CLI arg when the app starts fresh.
+  const coldUrl = process.argv.find((a) => a.startsWith("conxa-studio://"));
+  if (coldUrl) {
+    mainWindow.webContents.once("did-finish-load", () => {
+      mainWindow.webContents.send("deep-link", coldUrl);
+    });
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

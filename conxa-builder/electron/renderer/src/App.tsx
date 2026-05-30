@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Sidebar, type PluginSummary } from "@/components/Sidebar";
-import { cmd } from "@/lib/ipc";
+import { cmd, CmdError } from "@/lib/ipc";
 import { SetupWizard } from "@/pages/SetupWizard";
 import { PluginDetail } from "@/pages/PluginDetail";
 import { RecordingFeed } from "@/pages/RecordingFeed";
@@ -23,6 +23,7 @@ function toSummary(p: RawPlugin): PluginSummary {
 export function App() {
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const refresh = useCallback(async () => {
     try {
@@ -37,6 +38,25 @@ export function App() {
   useEffect(() => {
     void refresh();
   }, [location.pathname, refresh]);
+
+  // Handle deep links from the web dashboard (conxa-studio://open[?plugin=<id>]).
+  useEffect(() => {
+    const unsub = window.conxa.onDeepLink(async (url) => {
+      const pluginMatch = url.match(/[?&]plugin=([^&]+)/);
+      const pluginId = pluginMatch ? decodeURIComponent(pluginMatch[1]) : null;
+      try {
+        const info = await cmd<{ logged_in: boolean }>("whoami");
+        if (!info.logged_in) await cmd("login");
+      } catch (err) {
+        if (err instanceof CmdError && err.code === "cancelled") return;
+        navigate("/setup");
+        return;
+      }
+      await refresh();
+      navigate(pluginId ? `/plugins/${pluginId}` : "/setup");
+    });
+    return unsub;
+  }, [navigate, refresh]);
 
   return (
     <div className="app-shell">
