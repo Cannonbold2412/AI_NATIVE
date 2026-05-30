@@ -3,7 +3,7 @@ services:
     name: conxa-api
     plan: free
     runtime: python
-    rootDir: backend/
+    rootDir: conxa-cloud/backend/
     buildCommand: bash build.sh
     startCommand: bash start.sh
     healthCheckPath: /healthz
