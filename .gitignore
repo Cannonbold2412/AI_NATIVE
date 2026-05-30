@@ -87,6 +87,19 @@ Thumbs.db
 .claude/settings.local.json
 
 output/
+# Generated runtime state, anywhere in the tree (e.g. the conxa-core default
+# data_dir resolves to packages/conxa-core/data/ when SKILL_DATA_DIR is unset).
+**/data/chromium/
+**/data/installers/
+**/data/kv/
+**/data/sessions/
+**/data/skill-packs/
+**/data/saas/
+**/data/cache/
+**/data/plugins/
+**/data/skills/
+**/data/executions/
+**/data/runs/
 data/chromium/
 data/installers/
 # Runtime-generated state — KV stores, session data, skill packs, caches

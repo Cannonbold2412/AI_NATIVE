@@ -1,9 +1,0 @@
-{
-  "slug": "dl-test",
-  "filename": "Acme-Setup.exe",
-  "version": "1.2.0",
-  "sha256": "7d52522597f8ec4e52980ce0592ec8c8200944ed85714dbd665d2edd531a111e",
-  "size": 18,
-  "uploaded_at": 1780100279.7729619,
-  "workspace_id": "wrk_local"
-}
