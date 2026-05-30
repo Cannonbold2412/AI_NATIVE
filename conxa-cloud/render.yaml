@@ -1,6 +1,7 @@
 services:
   - type: web
     name: conxa-api
+    plan: free
     runtime: python
     rootDir: backend/
     buildCommand: bash build.sh
