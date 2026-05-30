@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 const isPublic = createRouteMatcher(['/', '/sign-in(.*)', '/sign-up(.*)', '/api/v1/webhooks/(.*)'])
 const isOnboarding = createRouteMatcher(['/onboarding(.*)'])
 
-export const proxy = clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   if (isPublic(req)) return
 
   const { userId, orgId } = await auth()
