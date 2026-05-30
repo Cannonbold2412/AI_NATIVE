@@ -1,7 +1,13 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
-const isPublic = createRouteMatcher(['/', '/sign-in(.*)', '/sign-up(.*)', '/api/v1/webhooks/(.*)'])
+const isPublic = createRouteMatcher([
+  '/',
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+  '/__clerk(.*)',
+  '/api/v1/webhooks/(.*)',
+])
 const isOnboarding = createRouteMatcher(['/onboarding(.*)'])
 
 export default clerkMiddleware(async (auth, req) => {
