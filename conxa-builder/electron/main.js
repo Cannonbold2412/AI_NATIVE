@@ -8,7 +8,7 @@
  * restarted up to 3 times on unexpected exit before surfacing a fatal dialog.
  */
 
-const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const readline = require("readline");
@@ -72,6 +72,16 @@ function startBackend() {
     env: {
       ...process.env,
       SKILL_ALLOW_NO_PROVIDERS: "1",
+      // Production auth + cloud config baked in as defaults.
+      // Set these env vars in the shell to override for dev/staging.
+      CONXA_CLERK_DOMAIN:
+        process.env.CONXA_CLERK_DOMAIN || "https://clerk.conxa.in",
+      CONXA_CLERK_CLIENT_ID:
+        process.env.CONXA_CLERK_CLIENT_ID || "Z7O8UdIVowd3Aegx",
+      CONXA_CLERK_CLIENT_SECRET:
+        process.env.CONXA_CLERK_CLIENT_SECRET || "6m0kGz57pwu46rWtQIGNkitLfJE8Xagu",
+      CONXA_CLOUD_API:
+        process.env.CONXA_CLOUD_API || "https://apis.conxa.in",
       PYTHONPATH: [
         path.join(__dirname, "..", "..", "packages", "conxa-core"),
         path.join(__dirname, "..", "python"),
@@ -131,6 +141,31 @@ ipcMain.handle("python:cmd", async (_e, { type, payload }) => {
 
 ipcMain.handle("open-external", (_e, url) => shell.openExternal(url));
 
+function windowFromEvent(event) {
+  return BrowserWindow.fromWebContents(event.sender);
+}
+
+ipcMain.handle("window:minimize", (event) => {
+  windowFromEvent(event)?.minimize();
+});
+
+ipcMain.handle("window:toggle-maximize", (event) => {
+  const win = windowFromEvent(event);
+  if (!win) return false;
+  if (win.isMaximized()) {
+    win.unmaximize();
+  } else {
+    win.maximize();
+  }
+  return win.isMaximized();
+});
+
+ipcMain.handle("window:close", (event) => {
+  windowFromEvent(event)?.close();
+});
+
+ipcMain.handle("window:is-maximized", (event) => Boolean(windowFromEvent(event)?.isMaximized()));
+
 // ─── Window ─────────────────────────────────────────────────────────────────
 
 function createWindow() {
@@ -141,7 +176,8 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: "#1a1a1a",
     icon: APP_ICON_PATH,
-    titleBarStyle: "hiddenInset",
+    title: "Conxa Build Studio",
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -154,6 +190,13 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, "renderer", "dist", "index.html"));
   }
+
+  const sendMaximizeState = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("window:maximized", mainWindow.isMaximized());
+  };
+  mainWindow.on("maximize", sendMaximizeState);
+  mainWindow.on("unmaximize", sendMaximizeState);
 }
 
 // ─── Auto-update (electron-updater) ─────────────────────────────────────────────
@@ -185,6 +228,8 @@ function initAutoUpdate() {
 // ─── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+
   if (process.platform === "win32") {
     app.setAppUserModelId("ai.conxa.build-studio");
   }

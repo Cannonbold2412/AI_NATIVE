@@ -17,15 +17,15 @@ import { postCompileUpdated } from '@/api/workflowApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CompiledSkillsTab } from '@/components/CompiledSkillsTab'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { KeyRound, Loader2, MousePointer2, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { KeyRound, ListChecks, Loader2, MousePointer2, PackageCheck, Play, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
 
 // ─────────────────────────────────────────────────
 // Auth panel
@@ -87,38 +87,46 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
   }, [isRecording, autoFinalizing, finalizeMut, statusQ.data?.browser_open])
 
   return (
-    <Card className="border-white/8 bg-white/[0.03] shadow-none">
-      <CardHeader className="flex-row items-center justify-between border-b border-white/8 pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-white">
-          <KeyRound className="size-4 text-amber-400" />
-          Authentication
-        </CardTitle>
+    <section>
+      <div className="flex items-start justify-between gap-3 border-b border-white/8 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10">
+            <KeyRound className="size-4 text-amber-300" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-white">Authentication workflow</h2>
+            <p className="mt-1 text-xs text-zinc-500">Capture the login session before recording workflows.</p>
+          </div>
+        </div>
         {plugin.auth ? (
-          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
-            Captured ✓
+          <Badge variant="outline" className="shrink-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+            Captured
           </Badge>
         ) : (
-          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-300">
+          <Badge variant="outline" className="shrink-0 border-amber-500/30 bg-amber-500/10 text-amber-300">
             Required
           </Badge>
         )}
-      </CardHeader>
-      <CardContent className="space-y-3 pt-4">
+      </div>
+      <div className="max-w-3xl space-y-4 p-5">
         {plugin.auth ? (
-          <div className="space-y-2 text-xs text-zinc-400">
-            <p>
-              Session captured{' '}
-              {new Date(plugin.auth.captured_at * 1000).toLocaleString([], {
-                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-              })}
-            </p>
-            <p className="text-zinc-500">
-              Re-record to refresh an expired session. Existing workflows are unaffected.
-            </p>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-emerald-200">
+                <ShieldCheck className="size-4" />
+                Session ready
+              </div>
+              <p className="mt-1 text-xs text-emerald-100/70">
+                Captured{' '}
+                {new Date(plugin.auth.captured_at * 1000).toLocaleString([], {
+                  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                })}
+              </p>
+            </div>
             <Button
               size="sm"
               variant="outline"
-              className="border-white/10 bg-white/5 text-zinc-300"
+              className="h-9 border-white/10 bg-white/[0.06] px-3 text-zinc-200 hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-100"
               onClick={() => reRecordMut.mutate()}
               disabled={reRecordMut.isPending}
             >
@@ -128,18 +136,18 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
           </div>
         ) : isRecording ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
-              <Loader2 className="size-4 animate-spin text-blue-400" />
-              <p className="text-xs text-blue-300">
-                {autoFinalizing ? 'Chromium closed, saving session…' : 'Browser is open — log in, navigate to the page where workflows should start, then close Chromium.'}
+            <div className="flex items-start gap-3 rounded-lg border border-blue-500/20 bg-blue-500/[0.07] px-3 py-3">
+              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-blue-300" />
+              <p className="text-xs leading-5 text-blue-100/80">
+                {autoFinalizing ? 'Chromium closed, saving session…' : 'Browser is open. Log in, navigate to the page where workflows should start, then close Chromium.'}
               </p>
             </div>
             {!autoFinalizing && (
-              <div className="flex gap-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="flex-1 border-white/10 bg-white/5 text-zinc-300"
+                  className="h-9 border-white/10 bg-white/[0.06] text-zinc-300 hover:bg-white/10 hover:text-white"
                   onClick={() => setActiveSession(null)}
                   disabled={finalizeMut.isPending}
                 >
@@ -147,7 +155,7 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
                 </Button>
                 <Button
                   size="sm"
-                  className="flex-1"
+                  className="h-9 bg-blue-600 text-white hover:bg-blue-500"
                   onClick={() => finalizeMut.mutate()}
                   disabled={finalizeMut.isPending}
                 >
@@ -164,14 +172,17 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            <p className="text-xs text-zinc-500">
-              A browser will open at <span className="font-mono text-zinc-300">{plugin.target_url}</span>.
-              Log in, navigate to the page where workflows should start, then close Chromium.
-            </p>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-3">
+              <p className="text-[11px] font-medium text-zinc-500">Target URL</p>
+              <p className="mt-1 truncate font-mono text-xs text-zinc-300">{plugin.target_url}</p>
+              <p className="mt-2 text-xs leading-5 text-zinc-500">
+                Log in, navigate to the page where workflows should start, then close Chromium.
+              </p>
+            </div>
             <Button
               size="sm"
-              className="w-full"
+              className="h-9 w-full bg-amber-500 text-zinc-950 hover:bg-amber-400"
               onClick={() => startMut.mutate()}
               disabled={startMut.isPending}
             >
@@ -189,9 +200,9 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
             </Button>
           </div>
         )}
-        {error ? <p className="text-xs text-red-400">{error}</p> : null}
-      </CardContent>
-    </Card>
+        {error ? <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p> : null}
+      </div>
+    </section>
   )
 }
 
@@ -364,9 +375,10 @@ function NewWorkflowDialog({
   const [workflowFinalizeRequested, setWorkflowFinalizeRequested] = useState(false)
   const [promoteToAuth, setPromoteToAuth] = useState<{ sessionId: string; workflowId: string } | null>(null)
 
+  const workflowStartUrl = (plugin.protected_url || plugin.target_url).trim()
   const varPattern = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g
-  const requiredVars = Array.from(plugin.protected_url.matchAll(varPattern), (m) => m[1])
-  const hasProtectedUrl = !!plugin.protected_url.trim()
+  const requiredVars = Array.from(workflowStartUrl.matchAll(varPattern), (m) => m[1])
+  const canRecordWorkflow = plugin.status === 'ready' && !!plugin.auth
 
   const startMut = useMutation({
     mutationFn: () => startWorkflowRecord(plugin.id, name, requiredVars.length > 0 ? urlVariables : undefined, captureHover),
@@ -442,16 +454,18 @@ function NewWorkflowDialog({
         setOpen(nextOpen)
       }}
     >
-      <Button
-        size="sm"
-        variant="outline"
-        className="border-white/10 bg-white/[0.04] text-zinc-200"
-        disabled={plugin.status !== 'ready' || !hasProtectedUrl}
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="size-4" />
-        Create a Workflow
-      </Button>
+      <DialogTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-white/10 bg-white/[0.04] text-zinc-200"
+          disabled={!canRecordWorkflow}
+          title={canRecordWorkflow ? 'Create a Workflow' : 'Record auth first'}
+        >
+          <Plus className="size-4" />
+          Create a Workflow
+        </Button>
+      </DialogTrigger>
       <DialogContent className="border-white/10 bg-[#0d0f12] text-zinc-100">
         <DialogHeader>
           <DialogTitle className="text-white">Record Workflow</DialogTitle>
@@ -512,9 +526,9 @@ function NewWorkflowDialog({
                   ? requiredVars.reduce(
                       (url, varName) =>
                         url.replace(new RegExp(`{{\\s*${varName}\\s*}}`), urlVariables[varName] || `{{${varName}}}`),
-                      plugin.protected_url,
+                      workflowStartUrl,
                     )
-                  : plugin.protected_url}
+                  : workflowStartUrl}
               </span>
               . Record your workflow without needing to log in again.
             </p>
@@ -536,14 +550,14 @@ function NewWorkflowDialog({
               <Button
                 className="flex-1"
                 onClick={() => startMut.mutate()}
-                disabled={!name || startMut.isPending || plugin.status !== 'ready' || !hasProtectedUrl}
+                disabled={!name || startMut.isPending || !canRecordWorkflow}
               >
                 {startMut.isPending ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
                     Launching browser…
                   </>
-                ) : plugin.status !== 'ready' || !hasProtectedUrl ? (
+                ) : !canRecordWorkflow ? (
                   'Record auth first'
                 ) : (
                   <>
@@ -660,6 +674,12 @@ export function PluginDetailPage() {
   }
 
   const plugin = q.data.plugin
+  const workflowCount = plugin.workflows.length
+  const compiledCount = plugin.workflows.filter((workflow) => workflow.status === 'compiled' && workflow.skill_id).length
+  const tabLabelClass = (tab: 'auth' | 'workflows' | 'compiled') =>
+    activeTab === tab ? 'truncate font-bold text-white' : 'truncate font-medium'
+  const tabMetaClass = (tab: 'auth' | 'workflows' | 'compiled', activeColor: string) =>
+    activeTab === tab ? `text-[11px] font-semibold ${activeColor}` : 'text-[11px] text-zinc-500'
 
   return (
     <div className="h-full overflow-y-auto">
@@ -667,7 +687,7 @@ export function PluginDetailPage() {
         title={plugin.name}
         description={<span className="truncate font-mono text-xs text-zinc-500">{plugin.target_url}</span>}
       />
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 text-xs text-zinc-400">
           <span>
             Auth:{' '}
@@ -676,7 +696,7 @@ export function PluginDetailPage() {
             </span>
           </span>
           <span className="text-white/20">·</span>
-          <span>{plugin.workflows.length} workflow{plugin.workflows.length !== 1 ? 's' : ''}</span>
+          <span>{workflowCount} workflow{workflowCount !== 1 ? 's' : ''}</span>
           {plugin.build ? (
             <>
               <span className="text-white/20">·</span>
@@ -691,59 +711,92 @@ export function PluginDetailPage() {
         </div>
 
         <Tabs
+          className="!w-full !flex-col gap-0"
           key={`${plugin.id}-${plugin.auth ? 'auth-captured' : 'needs-auth'}`}
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as 'auth' | 'workflows' | 'compiled')}
         >
-          <TabsList className="border border-white/10 bg-white/[0.03] text-zinc-400">
-            <TabsTrigger value="auth">Auth</TabsTrigger>
-            <TabsTrigger value="workflows">Workflows</TabsTrigger>
-            <TabsTrigger value="compiled">Compiled Skills</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="auth" className="mt-4">
-            <AuthPanel plugin={plugin} onRefresh={refresh} />
-          </TabsContent>
-
-          <TabsContent value="workflows" className="mt-4">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-medium text-zinc-300">Workflows</h2>
-                <NewWorkflowDialog plugin={plugin} onCreated={refresh} />
-              </div>
-              <Card className="border-white/8 bg-white/[0.03] shadow-none">
-                {plugin.workflows.length === 0 ? (
-                  <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
-                    <p className="text-sm text-zinc-400">No workflows yet</p>
-                    <p className="max-w-xs text-xs text-zinc-600">
-                      {plugin.status !== 'ready'
-                        ? 'Record login first, then add workflows.'
-                        : 'Click "Create a Workflow" to record the first one.'}
-                    </p>
-                  </CardContent>
-                ) : (
-                  <CardContent className="p-0">
-                    {plugin.workflows.map((wf) => (
-                      <WorkflowRow
-                        key={wf.id}
-                        workflow={wf}
-                        pluginId={plugin.id}
-                        onDelete={refresh}
-                        onCompiled={() => {
-                          refresh()
-                          setActiveTab('compiled')
-                        }}
-                      />
-                    ))}
-                  </CardContent>
-                )}
-              </Card>
+          <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-[#101317]/95">
+            <div className="border-b border-white/8 bg-black/20 px-4 pt-3">
+              <TabsList className="!inline-flex h-auto !w-auto max-w-full gap-1 overflow-x-auto rounded-none border-0 bg-transparent p-0 text-zinc-400">
+                <TabsTrigger
+                  value="auth"
+                  className="h-10 min-w-[8.5rem] flex-none cursor-pointer rounded-t-lg border border-b-0 border-transparent bg-transparent px-3 text-left text-xs data-active:border-white/10 data-active:bg-[#101317] data-active:text-amber-100"
+                >
+                  <KeyRound className="size-4" />
+                  <span className={tabLabelClass('auth')}>Auth</span>
+                  <span className={tabMetaClass('auth', plugin.auth ? 'text-emerald-300' : 'text-amber-300')}>
+                    {plugin.auth ? 'Ready' : 'Required'}
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="workflows"
+                  className="h-10 min-w-[9rem] flex-none cursor-pointer rounded-t-lg border border-b-0 border-transparent bg-transparent px-3 text-left text-xs data-active:border-white/10 data-active:bg-[#101317] data-active:text-blue-100"
+                >
+                  <ListChecks className="size-4" />
+                  <span className={tabLabelClass('workflows')}>Workflows</span>
+                  <span className={tabMetaClass('workflows', 'text-blue-300')}>{workflowCount}</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="compiled"
+                  className="h-10 min-w-[11rem] flex-none cursor-pointer rounded-t-lg border border-b-0 border-transparent bg-transparent px-3 text-left text-xs data-active:border-white/10 data-active:bg-[#101317] data-active:text-emerald-100"
+                >
+                  <PackageCheck className="size-4" />
+                  <span className={tabLabelClass('compiled')}>Compiled Skills</span>
+                  <span className={tabMetaClass('compiled', 'text-emerald-300')}>{compiledCount}/{workflowCount}</span>
+                </TabsTrigger>
+              </TabsList>
             </div>
-          </TabsContent>
 
-          <TabsContent value="compiled" className="mt-4">
-            <CompiledSkillsTab plugin={plugin} />
-          </TabsContent>
+            <TabsContent value="auth" className="mt-0">
+              <AuthPanel plugin={plugin} onRefresh={refresh} />
+            </TabsContent>
+
+            <TabsContent value="workflows" className="mt-0">
+              <section>
+                <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-white">Workflows</h2>
+                    <p className="mt-1 text-xs text-zinc-500">Record and compile the automations this plugin exposes.</p>
+                  </div>
+                  <NewWorkflowDialog plugin={plugin} onCreated={refresh} />
+                </div>
+                <div className="p-5">
+                  <Card className="border-white/8 bg-white/[0.03] shadow-none">
+                    {plugin.workflows.length === 0 ? (
+                      <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+                        <p className="text-sm text-zinc-400">No workflows yet</p>
+                        <p className="max-w-xs text-xs text-zinc-600">
+                          {plugin.status !== 'ready'
+                            ? 'Record login first, then add workflows.'
+                            : 'Click "Create a Workflow" to record the first one.'}
+                        </p>
+                      </CardContent>
+                    ) : (
+                      <CardContent className="p-0">
+                        {plugin.workflows.map((wf) => (
+                          <WorkflowRow
+                            key={wf.id}
+                            workflow={wf}
+                            pluginId={plugin.id}
+                            onDelete={refresh}
+                            onCompiled={() => {
+                              refresh()
+                              setActiveTab('compiled')
+                            }}
+                          />
+                        ))}
+                      </CardContent>
+                    )}
+                  </Card>
+                </div>
+              </section>
+            </TabsContent>
+
+            <TabsContent value="compiled" className="mt-0">
+              <CompiledSkillsTab plugin={plugin} />
+            </TabsContent>
+          </div>
         </Tabs>
       </div>
     </div>

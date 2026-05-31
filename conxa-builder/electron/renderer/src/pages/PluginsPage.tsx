@@ -108,14 +108,33 @@ function CreatePluginDialog({ onCreated }: { onCreated: () => void }) {
 }
 
 function DeletePluginButton({ plugin, onDeleted }: { plugin: Plugin; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState('')
   const mutation = useMutation({
     mutationFn: () => deletePlugin(plugin.id),
-    onSuccess: onDeleted,
+    onSuccess: () => {
+      setError('')
+      setOpen(false)
+      onDeleted()
+    },
+    onError: (e: Error) => setError(e.message || 'Failed to delete plugin.'),
   })
   return (
-    <AlertDialog>
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (mutation.isPending) return
+        setOpen(nextOpen)
+        if (nextOpen) setError('')
+      }}
+    >
       <AlertDialogTrigger asChild>
-        <Button size="icon-sm" variant="ghost" className="text-zinc-500 hover:text-red-400">
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="text-zinc-500 hover:text-red-400"
+          disabled={mutation.isPending}
+        >
           <Trash2 className="size-4" />
         </Button>
       </AlertDialogTrigger>
@@ -126,13 +145,21 @@ function DeletePluginButton({ plugin, onDeleted }: { plugin: Plugin; onDeleted: 
             This deletes the plugin, all its workflows, and the built output. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {error ? <p className="text-sm text-red-400">{error}</p> : null}
         <AlertDialogFooter>
-          <AlertDialogCancel className="border-white/10 bg-white/5 text-zinc-200">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="border-white/10 bg-white/5 text-zinc-200" disabled={mutation.isPending}>
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction
             className="bg-red-600 text-white hover:bg-red-700"
-            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending}
+            onClick={(event) => {
+              event.preventDefault()
+              setError('')
+              mutation.mutate()
+            }}
           >
-            Delete
+            {mutation.isPending ? 'Deleting...' : 'Delete'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -147,6 +174,16 @@ export function PluginsPage() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['plugins'], queryFn: fetchPlugins, staleTime: 10_000 })
   const refetch = () => qc.invalidateQueries({ queryKey: ['plugins'] })
+  const handleDeleted = (deletedId: string) => {
+    qc.setQueryData(['plugins'], (current: unknown) => {
+      if (!current) return current
+      const next = normalizePluginList(current).filter((plugin) => plugin.id !== deletedId)
+      if (Array.isArray(current)) return next
+      if (typeof current === 'object') return { ...current, plugins: next }
+      return current
+    })
+    void refetch()
+  }
   const plugins = normalizePluginList(q.data)
 
   const [search, setSearch] = useState('')
@@ -226,7 +263,7 @@ export function PluginsPage() {
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {statusBadge(plugin.status)}
-                    <DeletePluginButton plugin={plugin} onDeleted={refetch} />
+                    <DeletePluginButton plugin={plugin} onDeleted={() => handleDeleted(plugin.id)} />
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">

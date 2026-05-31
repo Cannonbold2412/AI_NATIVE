@@ -25,6 +25,13 @@ declare global {
       cmd: <T = unknown>(type: string, payload?: unknown) => Promise<CmdResponse<T>>;
       onEvent: (handler: (event: BackendEvent) => void) => () => void;
       openExternal: (url: string) => Promise<void>;
+      windowControls: {
+        minimize: () => Promise<void>;
+        toggleMaximize: () => Promise<boolean>;
+        close: () => Promise<void>;
+        isMaximized: () => Promise<boolean>;
+        onMaximizeChange: (handler: (isMaximized: boolean) => void) => () => void;
+      };
       onDeepLink: (handler: (url: string) => void) => () => void;
     };
   }

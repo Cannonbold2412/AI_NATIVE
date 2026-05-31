@@ -70,6 +70,7 @@ export function App() {
             <Route path="/plugins/:pluginId/record/:workflowName" element={<RecordingFeed />} />
             <Route path="/plugins/:pluginId/compile/:sessionId" element={<CompileProgress />} />
             <Route path="/compile" element={<CompilePage />} />
+            <Route path="/edit" element={<HumanEditPage />} />
             <Route path="/edit/:skillId" element={<HumanEditPage />} />
             <Route path="/build" element={<BuildPage />} />
             <Route path="/test" element={<TestPluginPage />} />

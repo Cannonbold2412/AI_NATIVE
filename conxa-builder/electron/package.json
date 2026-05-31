@@ -7,9 +7,9 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev": "node scripts/cleanup-dev.js && concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite --config renderer/vite.config.ts",
-    "dev:electron": "cross-env CONXA_RENDERER_URL=http://localhost:5174 electron .",
+    "dev:electron": "node scripts/dev-electron.js",
     "build:renderer": "vite build --config renderer/vite.config.ts",
     "build": "npm run build:renderer && electron-builder --config electron-builder.yml",
     "test:bridge": "node test/bridge.test.js"

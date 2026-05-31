@@ -22,12 +22,14 @@ export type StepEditorDTO = {
   action_type: string
   action_payload: Record<string, unknown>
   action_spec: Record<string, unknown>
+  semantic_description?: string
   intent: string
   final_intent: string
   url: string
   frame: Record<string, unknown>
   target: Record<string, unknown>
   selectors: Record<string, unknown>
+  compiled_selectors?: string[]
   anchors_signals: Record<string, unknown>[]
   anchors_recovery: Record<string, unknown>[]
   validation: {

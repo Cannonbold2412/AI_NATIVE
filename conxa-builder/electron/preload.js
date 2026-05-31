@@ -19,6 +19,18 @@ contextBridge.exposeInMainWorld("conxa", {
 
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
 
+  windowControls: {
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
+    close: () => ipcRenderer.invoke("window:close"),
+    isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+    onMaximizeChange: (handler) => {
+      const listener = (_e, isMaximized) => handler(isMaximized);
+      ipcRenderer.on("window:maximized", listener);
+      return () => ipcRenderer.removeListener("window:maximized", listener);
+    },
+  },
+
   /** Subscribe to deep-link URLs sent from the main process. Returns an unsubscribe fn. */
   onDeepLink: (handler) => {
     const listener = (_e, url) => handler(url);

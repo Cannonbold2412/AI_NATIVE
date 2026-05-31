@@ -8,6 +8,7 @@ type EditorState = {
   markStepDirty: (i: number) => void
   clearStepDirty: (i: number) => void
   clearAllDirty: () => void
+  reindexDirtyAfterDelete: (deletedIndex: number) => void
   setValidationReport: (r: Record<string, unknown> | null) => void
 }
 
@@ -29,5 +30,14 @@ export const useEditorStore = create<EditorState>((set) => ({
       return { dirtySteps: n }
     }),
   clearAllDirty: () => set({ dirtySteps: new Set() }),
+  reindexDirtyAfterDelete: (deletedIndex) =>
+    set((s) => {
+      const n = new Set<number>()
+      for (const i of s.dirtySteps) {
+        if (i === deletedIndex) continue
+        n.add(i > deletedIndex ? i - 1 : i)
+      }
+      return { dirtySteps: n }
+    }),
   setValidationReport: (r) => set({ validationReport: r }),
 }))

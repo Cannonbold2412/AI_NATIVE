@@ -68,6 +68,12 @@ function frameChainFromStep(step: StepEditorDTO): Record<string, unknown>[] {
 function defaultsFromStep(step: StepEditorDTO): FormValues {
   const tgt = step.target as { primary_selector?: string; fallback_selectors?: string[] }
   const sel = step.selectors as { css?: string; aria?: string; text_based?: string; xpath?: string }
+  const compiledSelectors = Array.isArray(step.compiled_selectors)
+    ? step.compiled_selectors.map((selector) => String(selector || '').trim()).filter(Boolean)
+    : []
+  const targetSelectors = [String(tgt.primary_selector || ''), ...(tgt.fallback_selectors || [])].filter(
+    (selector, index, arr) => index === 0 || Boolean(selector) || arr.length === 1,
+  )
   const actionPayload = step.action_payload || {}
   const anc = (step.anchors_signals || [])
     .map((a) => {
@@ -84,9 +90,7 @@ function defaultsFromStep(step: StepEditorDTO): FormValues {
     scroll_mode: step.scroll_mode === 'scroll_to_locate' ? 'scroll_to_locate' : 'scroll_only',
     scroll_amount: step.scroll_amount === null || step.scroll_amount === undefined ? '' : String(step.scroll_amount),
     scroll_selector: String(step.scroll_selector || ''),
-    selectors: [String(tgt.primary_selector || ''), ...(tgt.fallback_selectors || [])].filter(
-      (selector, index, arr) => index === 0 || Boolean(selector) || arr.length === 1,
-    ),
+    selectors: targetSelectors.some(Boolean) ? targetSelectors : (compiledSelectors.length > 0 ? compiledSelectors : ['']),
     value:
       typeof step.value === 'string'
         ? step.value
@@ -225,7 +229,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
     },
     ref,
   ) {
-  const methods = useForm<FormValues>({ defaultValues: emptyForm })
+  const methods = useForm<FormValues>({ defaultValues: step ? defaultsFromStep(step) : emptyForm })
 
   useEffect(() => {
     if (step) {
@@ -603,7 +607,8 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                       {...methods.register('check_kind')}
                     >
                       <option value="url">URL contains pattern</option>
-                      <option value="url_exact">URL must be</option>
+                      <option value="url_exact">URL must be (exact)</option>
+                      <option value="url_must_be">URL must be (exact match)</option>
                       <option value="snapshot">Snapshot similarity (≥ threshold)</option>
                       <option value="selector">Element present</option>
                       <option value="text">Text appears on page</option>
@@ -703,7 +708,6 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
                         type="number"
                         inputMode="numeric"
                         placeholder="150"
-                        disabled={!canEdit('intent')}
                         {...methods.register('scroll_amount')}
                       />
                       <p className="text-muted-foreground text-xs">Use a signed number. Positive scrolls down; negative scrolls up.</p>

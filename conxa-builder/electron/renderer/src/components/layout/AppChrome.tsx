@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuth, performLogout } from '@/contexts/AuthContext'
+import { WindowTitleBar } from '@/components/layout/WindowTitleBar'
 import {
   ChevronLeft,
   ChevronRight,
@@ -33,13 +34,9 @@ const navGroups = [
       { to: '/build-installer', label: 'Build Installer', icon: PackageCheck },
     ],
   },
-  {
-    label: 'Manage',
-    items: [
-      { to: '/settings', label: 'Settings', icon: Settings },
-    ],
-  },
 ] as const
+
+const settingsNavItem = { to: '/settings', label: 'Settings', icon: Settings } as const
 
 function ProductMark() {
   return (
@@ -52,8 +49,35 @@ function ProductMark() {
   )
 }
 
-function SidebarNav({ collapsed }: { collapsed: boolean }) {
+function SidebarNavLink({
+  item,
+  collapsed,
+}: {
+  item: (typeof navGroups)[number]['items'][number] | typeof settingsNavItem
+  collapsed: boolean
+}) {
   const { pathname } = useLocation()
+  const Icon = item.icon
+  const active = pathname === item.to || pathname.startsWith(`${item.to}/`)
+
+  return (
+    <NavLink
+      to={item.to}
+      className={cn(
+        'group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition-colors',
+        'hover:border-white/8 hover:bg-white/[0.045] hover:text-white',
+        active ? 'border-white/10 bg-white/[0.07] text-white' : 'text-zinc-400',
+        collapsed && 'justify-center px-2.5',
+      )}
+      title={collapsed ? item.label : undefined}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className={cn('truncate', collapsed && 'hidden')}>{item.label}</span>
+    </NavLink>
+  )
+}
+
+function SidebarNav({ collapsed }: { collapsed: boolean }) {
   return (
     <nav className="space-y-1.5" aria-label="Primary">
       {navGroups.map((group) => (
@@ -61,26 +85,9 @@ function SidebarNav({ collapsed }: { collapsed: boolean }) {
           <p className={cn('px-3 pt-3 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-600', collapsed && 'sr-only')}>
             {group.label}
           </p>
-          {group.items.map((item) => {
-            const Icon = item.icon
-            const active = pathname === item.to || pathname.startsWith(`${item.to}/`)
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  'group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition-colors',
-                  'hover:border-white/8 hover:bg-white/[0.045] hover:text-white',
-                  active ? 'border-white/10 bg-white/[0.07] text-white' : 'text-zinc-400',
-                  collapsed && 'justify-center px-2.5',
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon className="size-4 shrink-0" />
-                <span className={cn('truncate', collapsed && 'hidden')}>{item.label}</span>
-              </NavLink>
-            )
-          })}
+          {group.items.map((item) => (
+            <SidebarNavLink key={item.to} item={item} collapsed={collapsed} />
+          ))}
         </div>
       ))}
     </nav>
@@ -119,9 +126,9 @@ function DesktopSidebar({ collapsed, setCollapsed }: { collapsed: boolean; setCo
         )}
       </div>
 
-      <div className="flex-1 space-y-6 px-3 py-4">
+      <div className="flex min-h-0 flex-1 flex-col px-3 py-4">
         {collapsed && (
-          <div className="flex justify-center">
+          <div className="mb-6 flex justify-center">
             <Button
               type="button"
               variant="ghost"
@@ -135,6 +142,9 @@ function DesktopSidebar({ collapsed, setCollapsed }: { collapsed: boolean; setCo
           </div>
         )}
         <SidebarNav collapsed={collapsed} />
+        <nav className="mt-auto border-t border-white/8 pt-3" aria-label="Settings">
+          <SidebarNavLink item={settingsNavItem} collapsed={collapsed} />
+        </nav>
       </div>
     </aside>
   )
@@ -174,7 +184,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
   }, [collapsed])
 
   return (
-    <div className="h-dvh overflow-hidden bg-[#0a0c0f] text-zinc-100">
+    <div className="flex h-dvh flex-col overflow-hidden bg-[#0a0c0f] text-zinc-100">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_40%),linear-gradient(180deg,_#0f1115_0%,_#090b0d_100%)]" />
         <div
@@ -183,7 +193,9 @@ export function AppChrome({ children }: { children: ReactNode }) {
         />
       </div>
 
-      <div className="flex h-full min-h-0">
+      <WindowTitleBar />
+
+      <div className="flex min-h-0 flex-1">
         <DesktopSidebar collapsed={collapsed} setCollapsed={setCollapsed} />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

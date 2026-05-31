@@ -72,11 +72,7 @@ export function HumanEditPage() {
   const [isResizingPane, setIsResizingPane] = useState(false)
   const [toolsPaneWidth, setToolsPaneWidth] = useState(384)
   const [isResizingToolsPane, setIsResizingToolsPane] = useState(false)
-  const [showValidationPane, setShowValidationPane] = useState(false)
-  const [showSuggestionsPane, setShowSuggestionsPane] = useState(true)
-  const [showVariablesPane, setShowVariablesPane] = useState(false)
-  const [showScreenshotsPane, setShowScreenshotsPane] = useState(false)
-  const [showSelectorsPane, setShowSelectorsPane] = useState(false)
+  const [activeToolsPane, setActiveToolsPane] = useState<string | null>('suggestions')
   const [recordingShotDragActive, setRecordingShotDragActive] = useState(false)
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null)
   const splitPaneRef = useRef<HTMLDivElement | null>(null)
@@ -126,6 +122,17 @@ export function HumanEditPage() {
       setFlowStatus('Editing workflow.')
     }
   }, [skillId])
+
+  useEffect(() => {
+    if (!q.data) return
+    if (q.data.steps.length === 0) {
+      setSelectedStepIndex(null)
+      return
+    }
+    if (selected === null || !q.data.steps.some((step) => step.step_index === selected)) {
+      setSelectedStepIndex(q.data.steps[0].step_index)
+    }
+  }, [q.data, selected, setSelectedStepIndex])
 
   useEffect(() => {
     const stored = window.localStorage.getItem(EDITOR_SIDEBAR_WIDTH_KEY)
@@ -218,26 +225,51 @@ export function HumanEditPage() {
 
   const onReorder = (newOrder: number[]) => {
     if (!skillId) return
-    postReorder(skillId, newOrder).then((r) => onWorkflowUpdated(r.workflow))
+    const prevSelected = useEditorStore.getState().selectedStepIndex
+    postReorder(skillId, newOrder)
+      .then((r) => {
+        onWorkflowUpdated(r.workflow)
+        if (prevSelected !== null) {
+          const newPos = newOrder.findIndex((origIdx) => origIdx === prevSelected)
+          if (newPos !== -1) useEditorStore.getState().setSelectedStepIndex(newPos)
+        }
+      })
+      .catch((err) => {
+        toast.error(errorMessage(err, 'Could not reorder steps'))
+        void q.refetch()
+      })
   }
 
-  const onDelete = (index: number) => {
+  const onDelete = async (index: number) => {
     if (!skillId) return
-    deleteStep(skillId, index).then((r) => {
-      onWorkflowUpdated(r.workflow)
-      const n = r.workflow.steps.length
-      const sel = useEditorStore.getState().selectedStepIndex
-      if (n === 0) {
-        useEditorStore.getState().setSelectedStepIndex(null)
+    if (index === selected) {
+      const savedOk = await (stepEditorRef.current?.submitIfDirty() ?? Promise.resolve(true))
+      if (!savedOk) {
+        toast.error('Could not save the open step — fix errors before deleting.')
         return
       }
-      if (sel === null) {
-        useEditorStore.getState().setSelectedStepIndex(0)
-        return
-      }
-      if (index < sel) useEditorStore.getState().setSelectedStepIndex(sel - 1)
-      else if (index === sel) useEditorStore.getState().setSelectedStepIndex(Math.min(sel, n - 1))
-    })
+    }
+    deleteStep(skillId, index)
+      .then((r) => {
+        onWorkflowUpdated(r.workflow)
+        useEditorStore.getState().reindexDirtyAfterDelete(index)
+        const n = r.workflow.steps.length
+        const sel = useEditorStore.getState().selectedStepIndex
+        if (n === 0) {
+          useEditorStore.getState().setSelectedStepIndex(null)
+          return
+        }
+        if (sel === null) {
+          useEditorStore.getState().setSelectedStepIndex(0)
+          return
+        }
+        if (index < sel) useEditorStore.getState().setSelectedStepIndex(sel - 1)
+        else if (index === sel) useEditorStore.getState().setSelectedStepIndex(Math.min(sel, n - 1))
+      })
+      .catch((err: Error) => {
+        toast.error(errorMessage(err, 'Could not delete step'))
+        void q.refetch()
+      })
   }
 
   const onAddAction = async (actionKind: string) => {
@@ -263,16 +295,16 @@ export function HumanEditPage() {
     }
   }
 
-  const rebuildSkillFromRecording = () => {
+  const bumpSkillVersion = () => {
     if (!skillId) return
     const ok = window.confirm(
-      'Rebuild this skill from the original recording? Any changes you saved in the editor (selectors, validation, etc.) will be replaced by a fresh compile from the session.',
+      'Bump the version of this skill? This increments the version counter in the metadata. It does not recompile from the original recording — your saved edits remain intact.',
     )
     if (!ok) return
     postCompileUpdated(skillId)
       .then(() => {
         void q.refetch()
-        toast.success('Skill rebuilt from recording')
+        toast.success('Skill version bumped')
       })
       .catch((e: Error) => {
         toast.error(e.message)
@@ -307,11 +339,7 @@ export function HumanEditPage() {
   }
 
   const toggleToolsPane = (pane: 'validation' | 'suggestions' | 'variables' | 'screenshots' | 'selectors') => {
-    setShowValidationPane(pane === 'validation')
-    setShowSuggestionsPane(pane === 'suggestions')
-    setShowVariablesPane(pane === 'variables')
-    setShowScreenshotsPane(pane === 'screenshots')
-    setShowSelectorsPane(pane === 'selectors')
+    setActiveToolsPane((current) => (current === pane ? null : pane))
   }
 
   const onDroppedRecordingScreenshot = useCallback(
@@ -586,7 +614,29 @@ export function HumanEditPage() {
       </div>
     )
   }
-  if (!q.data) return null
+  if (!q.data) {
+    return (
+      <div className="h-full overflow-y-auto">
+        <PageHeader title="Edit Skill" description="The editor did not receive workflow data." />
+        <main className="flex flex-1 items-center justify-center p-6">
+          <Card className="max-w-md border-white/10 bg-white/[0.04] shadow-none">
+            <CardHeader>
+              <CardTitle className="text-base text-white">No workflow data</CardTitle>
+              <CardDescription className="text-zinc-400">
+                The compiled skill opened, but Build Studio did not receive a workflow payload. Go back to the
+                plugin and open the compiled workflow again.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="default" asChild className="bg-white text-black hover:bg-zinc-200">
+                <Link to={fromPath ?? '/plugins'}>{fromPath ? 'Back to Plugin' : 'Back to Plugins'}</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    )
+  }
 
   const wf = q.data
   const skillTitle =
@@ -678,12 +728,12 @@ export function HumanEditPage() {
               size="sm"
               variant="outline"
               className="relative border-white/10 bg-white/[0.04] pr-7 text-zinc-200 hover:bg-white/[0.08]"
-              onClick={rebuildSkillFromRecording}
-              title="Discards saved editor changes and regenerates from the recording (destructive)."
+              onClick={bumpSkillVersion}
+              title="Increments the skill version counter in metadata. Your saved edits are preserved."
             >
-              Rebuild from recording
+              Bump version
               <Info className="absolute top-1 right-1 size-3 shrink-0 opacity-80" aria-hidden />
-              <span className="sr-only">About rebuilding from recording</span>
+              <span className="sr-only">About bumping version</span>
             </Button>
           </span>
           <span className="inline-flex items-center gap-1">
@@ -733,6 +783,7 @@ export function HumanEditPage() {
           <div className="mx-auto h-full w-px bg-white/10 transition-colors group-hover:bg-white/35 group-active:bg-white/45" />
         </div>
         <StepEditorPanel
+          key={currentStep?.id ?? 'empty-step-editor'}
           ref={stepEditorRef}
           step={currentStep}
           skillId={skillId}
@@ -760,25 +811,25 @@ export function HumanEditPage() {
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
-                variant={showValidationPane ? 'default' : 'outline'}
+                variant={activeToolsPane === 'validation' ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
-                  showValidationPane
+                  activeToolsPane === 'validation'
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
                 )}
                 onClick={() => toggleToolsPane('validation')}
-                aria-pressed={showValidationPane}
+                aria-pressed={activeToolsPane === 'validation'}
                 aria-controls="validation-pane"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <ShieldCheck className={cn('size-4 shrink-0', showValidationPane ? 'text-black' : 'text-emerald-300')} />
+                  <ShieldCheck className={cn('size-4 shrink-0', activeToolsPane === 'validation' ? 'text-black' : 'text-emerald-300')} />
                   <span className="truncate text-sm font-medium">Validation</span>
                 </span>
                 <span
                   className={cn(
                     'absolute top-1 right-1 inline-flex shrink-0',
-                    showValidationPane ? 'text-zinc-700' : 'text-zinc-400',
+                    activeToolsPane === 'validation' ? 'text-zinc-700' : 'text-zinc-400',
                   )}
                   title="View validation checks and failure details."
                 >
@@ -787,32 +838,32 @@ export function HumanEditPage() {
               </Button>
               <Button
                 type="button"
-                variant={showSuggestionsPane ? 'default' : 'outline'}
+                variant={activeToolsPane === 'suggestions' ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
-                  showSuggestionsPane
+                  activeToolsPane === 'suggestions'
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
                 )}
                 onClick={() => toggleToolsPane('suggestions')}
-                aria-pressed={showSuggestionsPane}
+                aria-pressed={activeToolsPane === 'suggestions'}
                 aria-controls="suggestions-pane"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <Lightbulb className={cn('size-4 shrink-0', showSuggestionsPane ? 'text-black' : 'text-amber-300')} />
+                  <Lightbulb className={cn('size-4 shrink-0', activeToolsPane === 'suggestions' ? 'text-black' : 'text-amber-300')} />
                   <span className="truncate text-sm font-medium">Suggestions</span>
                 </span>
                 <span className="ml-auto flex items-center gap-1.5 pr-3">
                   <Badge
                     variant="outline"
-                    className={cn('text-[0.65rem]', showSuggestionsPane ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300')}
+                    className={cn('text-[0.65rem]', activeToolsPane === 'suggestions' ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300')}
                   >
                     {suggestionCount}
                   </Badge>
                   <span
                     className={cn(
                       'absolute top-1 right-1 inline-flex shrink-0',
-                      showSuggestionsPane ? 'text-zinc-700' : 'text-zinc-400',
+                      activeToolsPane === 'suggestions' ? 'text-zinc-700' : 'text-zinc-400',
                     )}
                     title="Review AI suggestions to improve this workflow."
                   >
@@ -822,25 +873,25 @@ export function HumanEditPage() {
               </Button>
               <Button
                 type="button"
-                variant={showVariablesPane ? 'default' : 'outline'}
+                variant={activeToolsPane === 'variables' ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
-                  showVariablesPane
+                  activeToolsPane === 'variables'
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
                 )}
                 onClick={() => toggleToolsPane('variables')}
-                aria-pressed={showVariablesPane}
+                aria-pressed={activeToolsPane === 'variables'}
                 aria-controls="variables-pane"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <SlidersHorizontal className={cn('size-4 shrink-0', showVariablesPane ? 'text-black' : 'text-sky-300')} />
+                  <SlidersHorizontal className={cn('size-4 shrink-0', activeToolsPane === 'variables' ? 'text-black' : 'text-sky-300')} />
                   <span className="truncate text-sm font-medium">Input variables</span>
                 </span>
                 <span
                   className={cn(
                     'absolute top-1 right-1 inline-flex shrink-0',
-                    showVariablesPane ? 'text-zinc-700' : 'text-zinc-400',
+                    activeToolsPane === 'variables' ? 'text-zinc-700' : 'text-zinc-400',
                   )}
                   title="Configure input variables and replace literals with {{id}} across the workflow."
                 >
@@ -849,19 +900,19 @@ export function HumanEditPage() {
               </Button>
               <Button
                 type="button"
-                variant={showScreenshotsPane ? 'default' : 'outline'}
+                variant={activeToolsPane === 'screenshots' ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
-                  showScreenshotsPane
+                  activeToolsPane === 'screenshots'
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
                 )}
                 onClick={() => toggleToolsPane('screenshots')}
-                aria-pressed={showScreenshotsPane}
+                aria-pressed={activeToolsPane === 'screenshots'}
                 aria-controls="recording-screenshots-pane"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <ImageIcon className={cn('size-4 shrink-0', showScreenshotsPane ? 'text-black' : 'text-fuchsia-300')} />
+                  <ImageIcon className={cn('size-4 shrink-0', activeToolsPane === 'screenshots' ? 'text-black' : 'text-fuchsia-300')} />
                   <span className="truncate text-sm font-medium">Recording screenshots</span>
                 </span>
                 <span className="ml-auto flex items-center gap-1.5 pr-3">
@@ -869,7 +920,7 @@ export function HumanEditPage() {
                     variant="outline"
                     className={cn(
                       'text-[0.65rem]',
-                      showScreenshotsPane ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300',
+                      activeToolsPane === 'screenshots' ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300',
                     )}
                   >
                     {recordingShotsQ.data?.items?.length ?? '—'}
@@ -877,7 +928,7 @@ export function HumanEditPage() {
                   <span
                     className={cn(
                       'absolute top-1 right-1 inline-flex shrink-0',
-                      showScreenshotsPane ? 'text-zinc-700' : 'text-zinc-400',
+                      activeToolsPane === 'screenshots' ? 'text-zinc-700' : 'text-zinc-400',
                     )}
                     title="Recording frames plus 'No image' (default): drag onto the preview or a step - swap frame, attach, or strip the screenshot."
                   >
@@ -887,25 +938,25 @@ export function HumanEditPage() {
               </Button>
               <Button
                 type="button"
-                variant={showSelectorsPane ? 'default' : 'outline'}
+                variant={activeToolsPane === 'selectors' ? 'default' : 'outline'}
                 className={cn(
                   'relative h-10 w-full items-center justify-start gap-2 px-3 pr-7',
-                  showSelectorsPane
+                  activeToolsPane === 'selectors'
                     ? 'bg-white text-black hover:bg-zinc-200'
                     : 'border-white/12 bg-white/[0.02] text-zinc-200 hover:bg-white/[0.07]',
                 )}
                 onClick={() => toggleToolsPane('selectors')}
-                aria-pressed={showSelectorsPane}
+                aria-pressed={activeToolsPane === 'selectors'}
                 aria-controls="compiled-selectors-pane"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <Zap className={cn('size-4 shrink-0', showSelectorsPane ? 'text-black' : 'text-cyan-300')} />
+                  <Zap className={cn('size-4 shrink-0', activeToolsPane === 'selectors' ? 'text-black' : 'text-cyan-300')} />
                   <span className="truncate text-sm font-medium">Compiled selectors</span>
                 </span>
                 <span
                   className={cn(
                     'absolute top-1 right-1 inline-flex shrink-0',
-                    showSelectorsPane ? 'text-zinc-700' : 'text-zinc-400',
+                    activeToolsPane === 'selectors' ? 'text-zinc-700' : 'text-zinc-400',
                   )}
                   title="View and regenerate compiled selectors for this step."
                 >
@@ -915,11 +966,11 @@ export function HumanEditPage() {
             </div>
           </section>
           <ScrollArea className="min-h-0 flex-1">
-            <div id="validation-pane">{showValidationPane ? <ValidationReportPanel data={validationReport} defaultOpen /> : null}</div>
-            <div id="suggestions-pane">{showSuggestionsPane ? <SuggestionsInlinePanel suggestions={wf.suggestions} /> : null}</div>
-            <div id="variables-pane">{showVariablesPane ? <ParameterizationInlinePanel workflow={wf} onSaved={onWorkflowUpdated} /> : null}</div>
+            <div id="validation-pane">{activeToolsPane === 'validation' ? <ValidationReportPanel data={validationReport} defaultOpen /> : null}</div>
+            <div id="suggestions-pane">{activeToolsPane === 'suggestions' ? <SuggestionsInlinePanel suggestions={wf.suggestions} /> : null}</div>
+            <div id="variables-pane">{activeToolsPane === 'variables' ? <ParameterizationInlinePanel workflow={wf} onSaved={onWorkflowUpdated} /> : null}</div>
             <div id="recording-screenshots-pane" className="h-full min-h-0 px-1 py-2">
-              {showScreenshotsPane ? (
+              {activeToolsPane === 'screenshots' ? (
                 <RecordingScreenshotsPanel
                   loading={recordingShotsQ.isLoading || recordingShotsQ.isFetching}
                   error={(recordingShotsQ.error as Error) ?? null}
@@ -938,7 +989,7 @@ export function HumanEditPage() {
               ) : null}
             </div>
             <div id="compiled-selectors-pane" className="min-h-0 space-y-2 px-1 py-2">
-              {showSelectorsPane ? (
+              {activeToolsPane === 'selectors' ? (
                 <>
                   {currentStep ? (
                     <Card className="border-white/10 bg-white/[0.02]">

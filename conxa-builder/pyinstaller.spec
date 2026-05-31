@@ -17,6 +17,10 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_sub
 # Repo root is one level up from this spec file (conxa-builder/pyinstaller.spec).
 REPO_ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH is injected by PyInstaller)
 BACKEND_DIR = REPO_ROOT / "conxa-builder" / "python"
+# Make conxa_compile importable in the spec-execution context so that
+# collect_submodules() below can find all submodules. pathex only affects
+# the Analysis module graph, not the process sys.path used by collect_* calls.
+sys.path.insert(0, str(BACKEND_DIR))
 
 block_cipher = None
 
@@ -27,8 +31,26 @@ block_cipher = None
 _core_data = collect_data_files(
     "conxa_core", includes=["**/*.json", "storage/**"]
 )
-_compile_data = collect_data_files(
-    "conxa_compile", includes=["**/*.js", "**/*.json", "**/*.tmpl", "**/*.gitignore"]
+
+
+def _fs_collect(src_root: Path, dest_prefix: str, patterns):
+    """Glob for data files directly on the filesystem.
+
+    collect_data_files() requires the package to be pip-installed (dist-info);
+    conxa_compile is not, so we glob the source tree directly instead.
+    """
+    result = []
+    for pat in patterns:
+        for f in src_root.rglob(pat):
+            dest = str(Path(dest_prefix) / f.relative_to(src_root).parent)
+            result.append((str(f), dest))
+    return result
+
+
+_compile_data = _fs_collect(
+    BACKEND_DIR / "conxa_compile",
+    "conxa_compile",
+    ["*.js", "*.json", "*.tmpl", "*.gitignore"],
 )
 # Playwright ships a self-contained Node driver used to download browsers at runtime.
 # collect_all bundles the driver binary + CLI scripts so ensure_chromium() works when frozen.
