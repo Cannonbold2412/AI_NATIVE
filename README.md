@@ -180,12 +180,95 @@ npm run build:mac  # → dist/runtime-mac
 
 ### Build Studio (Electron, Windows only)
 
+The Build Studio has two parts that must both be set up: a **Python backend** (the record/compile pipeline, spawned by Electron over stdio) and an **Electron shell** (Vite renderer + main process).
+
+#### Prerequisites
+
+- Windows 10/11 x64
+- Python 3.10+ and pip
+- Node.js 18+ and npm
+- PyInstaller (`pip install pyinstaller`) — only needed for production builds
+
+#### 1 — Python backend setup
+
+Run these once from the **repo root**:
+
+```bash
+# Install the shared foundation in editable mode (brings pydantic, SQLAlchemy, etc.)
+pip install -e packages/conxa-core
+
+# Install the local pipeline dependencies (Playwright, Pillow, bs4, lxml, ffmpeg)
+pip install -r conxa-builder/python/requirements.txt
+
+# Download Chromium for recording
+python -m playwright install chromium
+```
+
+#### 2 — Electron shell setup
+
 ```bash
 cd conxa-builder/electron
 npm install
-npm run dev        # starts Vite renderer + Electron in parallel
-npm run build      # PyInstaller backend + electron-builder NSIS installer
 ```
+
+#### 3 — Run in development
+
+```bash
+# From conxa-builder/electron — starts Vite renderer on :5174 and Electron in parallel
+npm run dev
+```
+
+Electron spawns `conxa-builder/python/backend.py` automatically over stdio JSON-RPC.
+Set any required env vars before running (see Configuration below).
+
+#### 4 — Configuration
+
+Create a `.env` file in `conxa-builder/python/` (all vars use the `SKILL_` prefix):
+
+```env
+# LLM proxy — required for compile to work; points to the cloud backend
+SKILL_LLM_PROXY_URL=https://your-cloud-backend/api/v1/llm/proxy
+
+# Clerk OAuth — required for sign-in
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
+
+# Optional: override local data directory (defaults to ~/.conxa/data)
+SKILL_DATA_DIR=C:\Users\you\.conxa\data
+```
+
+See `packages/conxa-core/conxa_core/config.py` for the full list. LLM provider setup: `conxa-cloud/backend/ROUTER_SETUP.md`.
+
+#### 5 — Build a production installer
+
+The production build runs in two stages — PyInstaller bundles the Python backend first, then `electron-builder` wraps everything into an NSIS `.exe`.
+
+**Stage 1 — bundle the Python backend:**
+
+```bash
+# From the repo root (pyinstaller.spec lives in conxa-builder/)
+pip install pyinstaller
+pip install -e packages/conxa-core   # must be a real install so data files materialise
+
+cd conxa-builder
+pyinstaller pyinstaller.spec
+# → dist/backend/   (--onedir bundle; backend.exe + all deps)
+```
+
+**Stage 2 — build the Electron NSIS installer:**
+
+```bash
+cd conxa-builder/electron
+npm run build
+# Runs: vite build (renderer → renderer/dist/) then electron-builder
+# → dist/studio/Conxa-Build-Studio-Setup.exe
+```
+
+`electron-builder` picks up `conxa-builder/dist/backend/` as an `extraResource`, so the PyInstaller bundle must exist before this step.
+
+#### CI build (GitHub Actions)
+
+The `build-studio.yml` workflow automates the full pipeline on a `studio-v*` tag push:
+builds `conxa-core` as a wheel → installs deps → PyInstaller → electron-builder → uploads `Conxa-Build-Studio-Setup.exe` to GitHub Releases.
 
 ---
 
