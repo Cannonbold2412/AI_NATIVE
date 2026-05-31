@@ -41,6 +41,14 @@ tmp/
 graphify-out/
 AI_NATIVE/
 
+# Repo-local runtime downloads and generated execution state
+runtime/chromium/
+runtime/skill-packs/
+runtime/cache/
+runtime/sessions/
+runtime/installers/
+runtime/kv/
+
 # JavaScript dependencies and build output
 node_modules/
 frontend/node_modules/
