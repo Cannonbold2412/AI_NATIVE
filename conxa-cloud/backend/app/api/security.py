@@ -23,6 +23,10 @@ PUBLIC_PATHS = {
 # Runtime telemetry ingestion uses its own package token; tracking reads stay behind Clerk.
 PUBLIC_TRACKING_EVENT_PREFIXES = ("/api/tracking/", "/api/v1/tracking/")
 
+# Installed runtimes read data-only skill-pack deltas during startup before any
+# dashboard Clerk session exists. Event ingestion remains package-token guarded.
+PUBLIC_SKILL_PACK_SYNC_PREFIXES = ("/api/v1/skill-packs/",)
+
 # Installer downloads are fetched by end users who have no Clerk account; the
 # plugin_id in the path is the only credential and the file is non-sensitive.
 PUBLIC_PATH_PREFIXES = (
@@ -46,6 +50,8 @@ def _is_public_path(path: str, method: str = "GET") -> bool:
     if normalized in PUBLIC_PATHS:
         return True
     if any(normalized.startswith(p.rstrip("/")) for p in PUBLIC_PATH_PREFIXES):
+        return True
+    if method.upper() == "GET" and any(normalized.startswith(p.rstrip("/")) for p in PUBLIC_SKILL_PACK_SYNC_PREFIXES):
         return True
     if method.upper() == "POST" and normalized.endswith("/events"):
         return any(normalized.startswith(p) for p in PUBLIC_TRACKING_EVENT_PREFIXES)

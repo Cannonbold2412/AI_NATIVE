@@ -254,6 +254,15 @@ export function BuildInstallerPage() {
                     {currentResult?.cloud_download_url ? (
                       <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">{currentResult.cloud_download_url}</p>
                     ) : null}
+                    {currentResult?.cloud_workspace_id ? (
+                      <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">Workspace: {currentResult.cloud_workspace_id}</p>
+                    ) : null}
+                    {currentResult?.cloud_tracking_url ? (
+                      <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">Tracking: {currentResult.cloud_tracking_url}</p>
+                    ) : null}
+                    {currentResult?.installed_runtime_path ? (
+                      <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">Runtime: {currentResult.installed_runtime_path}</p>
+                    ) : null}
                   </div>
                 ) : null}
                 {activeError ? (

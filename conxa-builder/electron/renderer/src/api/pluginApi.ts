@@ -100,6 +100,11 @@ export type InstallerBuildResult = {
   cloud_download_url?: string
   cloud_sha256?: string
   cloud_upload_error?: string
+  cloud_workspace_id?: string
+  cloud_tracking_url?: string
+  cloud_tracking_token_present?: boolean
+  cloud_sync_endpoint?: string
+  installed_runtime_path?: string
 }
 
 export type TrackingEvent = {

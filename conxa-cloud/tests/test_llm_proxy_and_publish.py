@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conxa_core.config import settings
-from conxa_core.db import db_get
+from conxa_core.db import db_get, db_set
 from conxa_core.storage.plugin_store import list_plugins
 from app.main import app
 from app.services import llm_metering
@@ -110,6 +110,23 @@ def test_publish_and_sync_roundtrip():
     assert d.json()["current_version"] == "0.3.0"
 
 
+def test_skill_pack_delta_is_public_when_cloud_auth_required(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "auth_required", True)
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+
+    packs_dir = tmp_path / "skill-packs" / "public-sync"
+    packs_dir.mkdir(parents=True)
+    (packs_dir / "pack.json").write_text(
+        '{"company":"public-sync","skill_pack_version":"9.9.9","skills":[]}',
+        encoding="utf-8",
+    )
+
+    r = client.get("/api/v1/skill-packs/public-sync/delta?since=0")
+
+    assert r.status_code == 200, r.text
+    assert r.json()["current_version"] == "9.9.9"
+
+
 def test_tracking_ingest_requires_published_token_and_lists_runs():
     pub = client.post(
         "/api/v1/plugins/publish",
@@ -141,6 +158,34 @@ def test_tracking_ingest_requires_published_token_and_lists_runs():
     runs = client.get("/api/v1/tracking/track-test/runs")
     assert runs.status_code == 200
     assert runs.json()["runs"][0]["run_id"] == "run-ok"
+
+
+def test_tracking_runs_report_workspace_mismatch(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    db_set(
+        "tracking_tokens",
+        "workspace-hidden-test",
+        {"token": "hidden-token", "workspace_id": "wrk_other", "version": "1.0.0"},
+    )
+
+    accepted = client.post(
+        "/api/tracking/workspace-hidden-test/events",
+        json={
+            "rid": "run-hidden",
+            "pid": "hidden-skill",
+            "evts": [{"e": "wf_start", "ts": 1}],
+        },
+        headers={"X-Tracking-Token": "hidden-token"},
+    )
+    assert accepted.status_code == 202
+
+    runs = client.get("/api/v1/tracking/workspace-hidden-test/runs")
+    assert runs.status_code == 200
+    body = runs.json()
+    assert body["runs"] == []
+    assert body["workspace_id"] == "wrk_local"
+    assert body["total_all_workspaces"] == 1
+    assert body["hidden_workspace_runs"] == 1
 
 
 def test_publish_rejects_path_traversal():

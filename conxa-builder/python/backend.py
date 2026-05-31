@@ -225,7 +225,7 @@ class Backend:
         company_slug: str,
         plugin: Any,
         sink: Callable[[dict[str, Any]], None],
-    ) -> None:
+    ) -> dict[str, Any]:
         """Publish the built skill pack and rewrite local pack.json with cloud tracking."""
         from conxa_core.config import settings as _settings
         import base64
@@ -233,7 +233,7 @@ class Backend:
 
         if not self._auto_publish_enabled():
             sink({"kind": "installer_build", "message": "Cloud publish skipped for local API base"})
-            return
+            return {}
 
         data_dir = Path(_settings.data_dir)
         packs_dir = data_dir / "skill-packs" / company_slug
@@ -287,7 +287,24 @@ class Backend:
             "published_at": published.get("published_at"),
         }
         pack_path.write_text(json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8")
-        sink({"kind": "installer_build", "message": "Cloud tracking embedded in pack.json"})
+        workspace_id = str(published.get("workspace_id") or "")
+        sink(
+            {
+                "kind": "installer_build",
+                "message": (
+                    "Cloud tracking embedded in pack.json "
+                    f"(workspace {workspace_id or 'unknown'}, tracking token present, "
+                    f"url {tracking['tracking_url']})"
+                ),
+            }
+        )
+        return {
+            "cloud_api": cloud_api,
+            "workspace_id": workspace_id,
+            "tracking_url": tracking["tracking_url"],
+            "tracking_token_present": True,
+            "sync_endpoint": pack["sync_endpoint"],
+        }
 
     def _upload_installer_for_download(
         self,
@@ -709,8 +726,28 @@ class Backend:
             )
 
         sink = _event_sink(rid)
-        self._publish_skill_pack_for_installer(company_slug=company_slug, plugin=plugin, sink=sink)
+        publish_info = self._publish_skill_pack_for_installer(company_slug=company_slug, plugin=plugin, sink=sink)
         result = build_installer(plugin_id, company_slug=company_slug, realtime_sink=sink)
+        if publish_info:
+            result = dict(result)
+            result["cloud_workspace_id"] = publish_info.get("workspace_id", "")
+            result["cloud_tracking_url"] = publish_info.get("tracking_url", "")
+            result["cloud_tracking_token_present"] = bool(publish_info.get("tracking_token_present"))
+            result["cloud_sync_endpoint"] = publish_info.get("sync_endpoint", "")
+            result["installed_runtime_path"] = (
+                r"C:\Program Files\Conxa\runtime\runtime.exe"
+                if sys.platform == "win32"
+                else str(Path.home() / ".conxa" / "runtime" / "runtime")
+            )
+            sink(
+                {
+                    "kind": "installer_build",
+                    "message": (
+                        f"Post-install check: restart Claude, confirm Conxa MCP tools are available, "
+                        f"run list_skills, then execute a skill. Runtime path: {result['installed_runtime_path']}"
+                    ),
+                }
+            )
         return self._upload_installer_for_download(company_slug=company_slug, result=result, sink=sink)
 
     def cmd_test_workflow(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:

@@ -146,14 +146,23 @@ def list_runs(
     """Return paginated run summaries for a company."""
     pairs = db_list_kv(f"tracking/{company}")
     summaries = []
+    hidden_workspace_runs = 0
     for run_id, batches in pairs:
         scoped = _batches_for_workspace(batches, principal.workspace_id)
         if scoped:
             summaries.append(_run_summary(run_id, scoped))
+        else:
+            hidden_workspace_runs += 1
 
     # newest first by server_ts
     summaries.sort(key=lambda s: s.get("server_ts", 0), reverse=True)
-    return {"runs": summaries[offset : offset + limit], "total": len(summaries)}
+    return {
+        "runs": summaries[offset : offset + limit],
+        "total": len(summaries),
+        "workspace_id": principal.workspace_id,
+        "total_all_workspaces": len(pairs),
+        "hidden_workspace_runs": hidden_workspace_runs,
+    }
 
 
 @router.get("/{company}/runs/{run_id}")
@@ -169,7 +178,7 @@ def get_run_timeline(
 
     batches = _batches_for_workspace(data, principal.workspace_id)
     if not batches:
-        raise HTTPException(status_code=404, detail="run_not_found")
+        raise HTTPException(status_code=404, detail="run_not_found_for_workspace")
     events: list[dict] = []
     for b in batches:
         events.extend(b.get("events", []))

@@ -38,14 +38,36 @@ function createTracker(trackingConfig, runtimeContext) {
     try { log("warn", msg, extra || {}); } catch (_) {}
   }
 
+  function _info(msg, extra) {
+    if (!log) return;
+    try { log("info", msg, extra || {}); } catch (_) {}
+  }
+
   // Disabled: return a no-op tracker so callers never branch
   if (!cfg.enabled) {
+    _info("tracking_disabled", {
+      company: cfg.company_id || ctx.company_id || "",
+      plugin_id: ctx.plugin_id || "",
+    });
     const noop = () => {};
     return {
       forRun:  () => ({ emit: noop }),
       flush:   () => Promise.resolve(),
       destroy: noop,
     };
+  }
+
+  if (!cfg.tracking_url) {
+    _warn("tracking_url_missing", {
+      company: cfg.company_id || ctx.company_id || "",
+      plugin_id: ctx.plugin_id || "",
+    });
+  }
+  if (!cfg.tracking_token) {
+    _warn("tracking_token_missing", {
+      company: cfg.company_id || ctx.company_id || "",
+      plugin_id: ctx.plugin_id || "",
+    });
   }
 
   let queue    = [];
@@ -110,27 +132,64 @@ function createTracker(trackingConfig, runtimeContext) {
         },
       };
 
+      _info("tracking_flush_start", {
+        event_count: events.length,
+        run_id: _runCtx.rid,
+        host: trackingUrl.hostname,
+        path: trackingUrl.pathname,
+        token_present: Boolean(cfg.tracking_token),
+      });
+
       try {
         const req = lib.request(options, (res) => {
           if (res.statusCode < 200 || res.statusCode >= 300) {
-            _warn("tracking_http_status", { status: res.statusCode, host: trackingUrl.hostname, path: trackingUrl.pathname });
+            _warn("tracking_http_status", {
+              status: res.statusCode,
+              event_count: events.length,
+              run_id: _runCtx.rid,
+              host: trackingUrl.hostname,
+              path: trackingUrl.pathname,
+            });
+          } else {
+            _info("tracking_http_success", {
+              status: res.statusCode,
+              event_count: events.length,
+              run_id: _runCtx.rid,
+              host: trackingUrl.hostname,
+              path: trackingUrl.pathname,
+            });
           }
           res.resume();
           resolve();
         });
         req.on("error", (err) => {
-          _warn("tracking_request_failed", { host: trackingUrl.hostname, error: err && err.message ? err.message : String(err) });
+          _warn("tracking_request_failed", {
+            event_count: events.length,
+            run_id: _runCtx.rid,
+            host: trackingUrl.hostname,
+            error: err && err.message ? err.message : String(err),
+          });
           resolve();
         });
         req.setTimeout(5000, () => {
-          _warn("tracking_request_timeout", { host: trackingUrl.hostname, path: trackingUrl.pathname });
+          _warn("tracking_request_timeout", {
+            event_count: events.length,
+            run_id: _runCtx.rid,
+            host: trackingUrl.hostname,
+            path: trackingUrl.pathname,
+          });
           req.destroy();
           resolve();
         });
         req.write(payload);
         req.end();
       } catch (_) {
-        _warn("tracking_request_failed", { host: trackingUrl.hostname, error: "request_setup_failed" });
+        _warn("tracking_request_failed", {
+          event_count: events.length,
+          run_id: _runCtx.rid,
+          host: trackingUrl.hostname,
+          error: "request_setup_failed",
+        });
         resolve();
       }
     });
@@ -152,6 +211,13 @@ function createTracker(trackingConfig, runtimeContext) {
       uid: (userCtx && userCtx.uid) || "",
       wid: (userCtx && userCtx.wid) || "",
     };
+    _info("tracking_run_started", {
+      run_id: _runCtx.rid,
+      company: cfg.company_id || ctx.company_id || "",
+      plugin_id: ctx.plugin_id || "",
+      tracking_url_present: Boolean(cfg.tracking_url),
+      tracking_token_present: Boolean(cfg.tracking_token),
+    });
     return {
       emit(eventCode, fields) {
         const evt = Object.assign({ e: eventCode, ts: Date.now() }, fields || {});

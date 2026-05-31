@@ -73,17 +73,52 @@ function log(level, msg, extra = {}) {
   process.stderr.write(line);
 }
 
-// ─── 5. Lazy requires (after env setup) ──────────────────────────────────────
-const { Server }               = require("@modelcontextprotocol/sdk/server/index.js");
-const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
-const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
+log("info", "runtime_bootstrap", {
+  version: RUNTIME_VERSION,
+  conxa_dir: CONXA_DIR,
+  conxa_data_dir: CONXA_DATA_DIR,
+  skill_packs_dir: SKILL_PACKS_DIR,
+  cache_dir: CACHE_DIR,
+  log_file: LOG_FILE,
+});
 
-const skillLoader  = require("./skill_loader");
-const sync         = require("./sync");
-const authManager  = require("./auth_manager");
-const { runPlan, enrichStepsWithRecovery, appendRecoveryEvent, clearRetryBudget, checkRetryBudget, isAuthFailure } = require("./run");
-const { getCachedBrowser, gracefulShutdown } = require("./browser");
-const { createTracker, mapErrorToCode } = require("./tracker");
+process.on("uncaughtException",  (e) => log("error", "uncaught", { error: e.message, stack: e.stack }));
+process.on("unhandledRejection", (r) => log("error", "unhandled_rejection", { reason: String(r) }));
+
+// ─── 5. Lazy requires (after env setup) ──────────────────────────────────────
+let Server;
+let StdioServerTransport;
+let CallToolRequestSchema;
+let ListToolsRequestSchema;
+let skillLoader;
+let sync;
+let authManager;
+let runPlan;
+let enrichStepsWithRecovery;
+let appendRecoveryEvent;
+let clearRetryBudget;
+let checkRetryBudget;
+let isAuthFailure;
+let getCachedBrowser;
+let gracefulShutdown;
+let createTracker;
+let mapErrorToCode;
+
+try {
+  ({ Server }               = require("@modelcontextprotocol/sdk/server/index.js"));
+  ({ StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js"));
+  ({ CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js"));
+
+  skillLoader  = require("./skill_loader");
+  sync         = require("./sync");
+  authManager  = require("./auth_manager");
+  ({ runPlan, enrichStepsWithRecovery, appendRecoveryEvent, clearRetryBudget, checkRetryBudget, isAuthFailure } = require("./run"));
+  ({ getCachedBrowser, gracefulShutdown } = require("./browser"));
+  ({ createTracker, mapErrorToCode } = require("./tracker"));
+} catch (e) {
+  log("error", "runtime_bootstrap_failed", { error: e.message, stack: e.stack });
+  process.exit(1);
+}
 
 // ─── 6. Execution state (single lock per process) ─────────────────────────────
 let activeExecution = null;
@@ -275,8 +310,6 @@ log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR })
 // ─── 12. Graceful shutdown ────────────────────────────────────────────────────
 process.on("SIGINT",  () => gracefulShutdown());
 process.on("SIGTERM", () => gracefulShutdown());
-process.on("uncaughtException",  (e) => log("error", "uncaught", { error: e.message, stack: e.stack }));
-process.on("unhandledRejection", (r) => log("error", "unhandled_rejection", { reason: String(r) }));
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 function _toolDefinitions() {
@@ -348,6 +381,17 @@ function _toolDefinitions() {
       inputSchema: { type: "object", properties: {}, required: [] },
     },
     {
+      name: "get_runtime_status",
+      description: "Return non-mutating Conxa runtime diagnostics: loaded packs, tracking config presence, sync URLs, and log paths.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Filter to a specific company slug (optional)" },
+        },
+        required: [],
+      },
+    },
+    {
       name: "cancel_execution",
       description: "Cancel the currently running execution. Safe to call at any time.",
       inputSchema: { type: "object", properties: {}, required: [] },
@@ -404,6 +448,55 @@ function _resolveSkill(skillSlug, company) {
 function _syncStatus(pack) {
   if (!pack.last_synced) return "unknown";
   return (Date.now() - new Date(pack.last_synced).getTime()) < 3600000 ? "current" : "stale";
+}
+
+function _trackingStatus(pack) {
+  const tracking = (pack && pack.tracking) || {};
+  return {
+    enabled: tracking.enabled === true,
+    tracking_url_present: Boolean(tracking.tracking_url),
+    tracking_token_present: Boolean(tracking.tracking_token),
+    company_id: tracking.company_id || "",
+    workspace_id: pack?.published?.workspace_id || pack?.workspace_id || "",
+    sync_endpoint: pack?.sync_endpoint || "",
+  };
+}
+
+function _runtimeStatus(filterCompany = null) {
+  const entries = Object.values(skillIndex)
+    .filter(s => !filterCompany || s.company === filterCompany);
+  const companies = {};
+  for (const entry of entries) {
+    if (!companies[entry.company]) {
+      companies[entry.company] = {
+        company: entry.company,
+        sync_status: _syncStatus(entry.pack),
+        skill_count: 0,
+        tracking: _trackingStatus(entry.pack),
+        skills: [],
+      };
+    }
+    companies[entry.company].skill_count += 1;
+    companies[entry.company].skills.push(entry.slug);
+  }
+  return {
+    runtime_version: RUNTIME_VERSION,
+    conxa_dir: CONXA_DIR,
+    conxa_data_dir: CONXA_DATA_DIR,
+    skill_packs_dir: SKILL_PACKS_DIR,
+    cache_dir: CACHE_DIR,
+    log_file: LOG_FILE,
+    loaded_skills: Object.keys(skillIndex).length,
+    companies: Object.values(companies),
+    active_execution: activeExecution ? {
+      status: "running",
+      skill: activeExecution.slug,
+      company: activeExecution.company,
+      step: activeExecution.step,
+      total: activeExecution.total,
+      started_at: activeExecution.startedAt,
+    } : { status: "idle" },
+  };
 }
 
 // ─── Build L4/L5 failure response ─────────────────────────────────────────────
@@ -533,6 +626,11 @@ async function _handleTool(name, args) {
     }));
   }
 
+  // ── get_runtime_status ─────────────────────────────────────────────────────
+  if (name === "get_runtime_status") {
+    return text(JSON.stringify(_runtimeStatus(args.company ? String(args.company) : null)));
+  }
+
   // ── cancel_execution ─────────────────────────────────────────────────────────
   if (name === "cancel_execution") {
     if (!activeExecution) return text('{"cancelled":false,"reason":"no active execution"}');
@@ -641,6 +739,16 @@ async function _handleTool(name, args) {
 
     // Per-company observer pace (ms of minimum viewing time per page transition)
     const _observerMs = primary.entry.pack?.pacing?.observer_ms ?? 600;
+
+    log("info", "execute_start", {
+      tool: name,
+      run_count: resolved.length,
+      skill: primary.entry.slug,
+      company: primary.entry.company,
+      total_steps: resolved.reduce((n, r) => n + r.steps.length, 0),
+      watch,
+      tracking: _trackingStatus(primary.entry.pack),
+    });
 
     // Set up lightweight tracker for this execution
     const _tracker    = createTracker(primary.entry.pack?.tracking || {}, {

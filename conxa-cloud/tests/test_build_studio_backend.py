@@ -145,7 +145,7 @@ def test_installer_publish_rewrites_pack_with_cloud_tracking(backend, monkeypatc
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     logs: list[dict] = []
 
-    b._publish_skill_pack_for_installer(
+    publish_info = b._publish_skill_pack_for_installer(
         company_slug="render",
         plugin=SimpleNamespace(name="Render", target_url="https://dashboard.render.com", protected_url="https://dashboard.render.com/"),
         sink=logs.append,
@@ -157,6 +157,10 @@ def test_installer_publish_rewrites_pack_with_cloud_tracking(backend, monkeypatc
     assert rewritten["tracking"]["tracking_url"] == "https://apis.conxa.in/api/tracking/render/events"
     assert rewritten["tracking"]["tracking_token"] == "cloud-token"
     assert rewritten["sync_endpoint"] == "https://apis.conxa.in/api/v1/skill-packs/render/delta"
+    assert publish_info["workspace_id"] == "wrk_123"
+    assert publish_info["tracking_url"] == "https://apis.conxa.in/api/tracking/render/events"
+    assert publish_info["tracking_token_present"] is True
+    assert any("workspace wrk_123" in entry["message"] for entry in logs)
 
 
 def test_auth_stop_recording_marks_plugin_ready(backend, monkeypatch, tmp_path):
