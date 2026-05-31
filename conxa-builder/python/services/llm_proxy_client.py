@@ -9,9 +9,15 @@ so it can be injected wherever the compiler expects a router.
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Callable
+
+# Minimum HTTP timeout for proxied calls (double-hop: Studio → cloud → LLM provider).
+# The per-task timeout_ms (e.g. llm_text_timeout_ms=2000) was designed for direct
+# LLM endpoints; proxied calls need a much larger budget.
+_PROXY_MIN_TIMEOUT_S = 90.0
 
 
 class QuotaExceeded(RuntimeError):
@@ -29,10 +35,12 @@ class LLMProxyClient:
         token_provider: Callable[[], str],
         *,
         client_header: str = "build-studio",
+        on_api_call: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._cloud_api = cloud_api.rstrip("/")
         self._token_provider = token_provider
         self._client_header = client_header
+        self._on_api_call = on_api_call
 
     # -- public interface mirroring LLMRouter --------------------------------
 
@@ -77,11 +85,21 @@ class LLMProxyClient:
         req.add_header("X-Conxa-Client", self._client_header)
         req.add_header("Authorization", f"Bearer {self._token_provider()}")
 
+        # Use a minimum 90s budget for proxied calls; the caller's timeout_ms is
+        # calibrated for direct LLM endpoints, not a double-hop proxy.
+        http_timeout_s = max(timeout_ms / 1000, _PROXY_MIN_TIMEOUT_S) + 5.0
+        t0 = time.monotonic()
         try:
-            with urllib.request.urlopen(req, timeout=(timeout_ms / 1000) + 5) as resp:
+            with urllib.request.urlopen(req, timeout=http_timeout_s) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                return data if isinstance(data, dict) else None
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            if self._on_api_call is not None:
+                self._on_api_call({"task": task, "kind": kind, "duration_ms": duration_ms, "status": "ok"})
+            return data if isinstance(data, dict) else None
         except urllib.error.HTTPError as exc:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            if self._on_api_call is not None:
+                self._on_api_call({"task": task, "kind": kind, "duration_ms": duration_ms, "status": f"http_{exc.code}"})
             if exc.code == 401 and not _retried:
                 # Token likely expired — let the auth layer refresh, then retry once.
                 return self._post(
@@ -93,7 +111,13 @@ class LLMProxyClient:
             if error_detail is not None:
                 error_detail.append(f"proxy HTTP {exc.code}")
             return None
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            # urllib wraps connect/header timeouts in URLError; Windows raises the
+            # body-read timeout as a raw TimeoutError/OSError ("The read operation
+            # timed out"). Both cases mean the proxy is unreachable or too slow.
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            if self._on_api_call is not None:
+                self._on_api_call({"task": task, "kind": kind, "duration_ms": duration_ms, "status": "error"})
             raise CloudUnreachable(
-                "No internet connection — compile requires the cloud LLM proxy"
+                f"Cloud LLM proxy unreachable or timed out ({exc})"
             ) from exc

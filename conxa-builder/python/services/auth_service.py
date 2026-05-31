@@ -44,10 +44,12 @@ class AuthService:
         clerk_domain: str,
         client_id: str,
         *,
+        client_secret: str = "",
         cloud_api: str = "",
     ) -> None:
         self._clerk_domain = clerk_domain.rstrip("/")
         self._client_id = client_id
+        self._client_secret = client_secret
         self._cloud_api = cloud_api.rstrip("/")
         self._lock = threading.RLock()
 
@@ -80,6 +82,8 @@ class AuthService:
 
     def login(self, *, on_event=None) -> dict[str, Any]:
         """Run the interactive PKCE login. Returns ``{org_id, user_id, ...}``."""
+        if not self._clerk_domain or not self._client_id:
+            raise RuntimeError("auth_not_configured")
         verifier, challenge = _pkce_pair()
         state = secrets.token_urlsafe(16)
         result: dict[str, Any] = {}
@@ -93,20 +97,45 @@ class AuthService:
 
             def do_GET(self):
                 parsed = urllib.parse.urlparse(self.path)
+                # Ignore everything except the actual OAuth callback path.
+                if parsed.path != "/cb":
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 params = urllib.parse.parse_qs(parsed.query)
                 code = (params.get("code") or [""])[0]
                 got_state = (params.get("state") or [""])[0]
+                error = (params.get("error") or [""])[0]
+                error_desc = (params.get("error_description") or [""])[0]
                 self.send_response(200)
-                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
                 if code and got_state == state:
-                    self.wfile.write(b"<h2>Conxa: you can close this window.</h2>")
+                    self.wfile.write(b"<h2>Signed in! You can close this window.</h2>")
                     result["code"] = code
+                elif error:
+                    msg = f"{error}: {error_desc}" if error_desc else error
+                    result["error"] = msg
+                    self.wfile.write(
+                        f"<h2>Conxa: sign-in error</h2><p>{msg}</p>".encode()
+                    )
                 else:
-                    self.wfile.write(b"<h2>Conxa: login failed.</h2>")
+                    result["error"] = "state_mismatch"
+                    self.wfile.write(b"<h2>Conxa: login failed (state mismatch).</h2>")
                 done.set()
 
-        server = HTTPServer(("127.0.0.1", 0), Handler)
+        # Use a fixed port range so the redirect_uri can be pre-registered in Clerk.
+        # Random ports can never be pre-registered; Clerk requires an exact URI match.
+        _BASE_PORT = int(os.environ.get("CONXA_AUTH_PORT", "52741"))
+        server = None
+        for _p in range(_BASE_PORT, _BASE_PORT + 10):
+            try:
+                server = HTTPServer(("127.0.0.1", _p), Handler)
+                break
+            except OSError:
+                continue
+        if server is None:
+            raise RuntimeError("auth_port_unavailable")
         port = server.server_address[1]
         redirect_uri = f"http://127.0.0.1:{port}/cb"
 
@@ -117,7 +146,7 @@ class AuthService:
                     "response_type": "code",
                     "client_id": self._client_id,
                     "redirect_uri": redirect_uri,
-                    "scope": "openid profile email org",
+                    "scope": "profile email offline_access user:org:read",
                     "state": state,
                     "code_challenge": challenge,
                     "code_challenge_method": "S256",
@@ -134,22 +163,24 @@ class AuthService:
         server.shutdown()
 
         if not result.get("code"):
-            raise RuntimeError("login_timeout_or_cancelled")
+            raise RuntimeError(result.get("error") or "login_timeout_or_cancelled")
 
         tokens = self._exchange_code(result["code"], verifier, redirect_uri)
+        tokens["userinfo"] = self._fetch_userinfo_with_retry(tokens["access_token"])
         self._save(tokens)
         return self._claims(tokens)
 
     def _exchange_code(self, code: str, verifier: str, redirect_uri: str) -> dict[str, Any]:
-        body = urllib.parse.urlencode(
-            {
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": self._client_id,
-                "redirect_uri": redirect_uri,
-                "code_verifier": verifier,
-            }
-        ).encode()
+        params: dict[str, str] = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self._client_id,
+            "redirect_uri": redirect_uri,
+            "code_verifier": verifier,
+        }
+        if self._client_secret:
+            params["client_secret"] = self._client_secret
+        body = urllib.parse.urlencode(params).encode()
         return self._token_request(body)
 
     def _refresh(self, refresh_token: str) -> dict[str, Any]:
@@ -166,8 +197,36 @@ class AuthService:
         url = f"{self._clerk_domain}/oauth/token"
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        # Cloudflare sits in front of clerk.conxa.in and blocks requests with
+        # Python's default user-agent. Mimic a real browser so CF passes it through.
+        req.add_header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36",
+        )
+        req.add_header("Accept", "application/json, */*")
+        req.add_header("Accept-Language", "en-US,en;q=0.9")
+        req.add_header("Origin", self._clerk_domain)
+        req.add_header("Referer", f"{self._clerk_domain}/")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raw = b""
+            try:
+                raw = exc.read()
+            except Exception:
+                pass
+            body_text = raw.decode("utf-8", errors="replace")
+            try:
+                err_json = json.loads(body_text)
+                clerk_error = err_json.get("error", "")
+                clerk_desc = err_json.get("error_description", body_text[:300])
+                raise RuntimeError(f"clerk_token_error: {clerk_error}: {clerk_desc}") from exc
+            except (ValueError, AttributeError):
+                snippet = body_text[:300] or "(empty body)"
+                raise RuntimeError(f"clerk_token_http_{exc.code}: {snippet}") from exc
         now = time.time()
         return {
             "access_token": data["access_token"],
@@ -191,8 +250,54 @@ class AuthService:
                 self._save(tokens)
             return tokens["access_token"]
 
+    def _fetch_userinfo_with_retry(self, access_token: str) -> dict[str, Any]:
+        """Fetch userinfo, retrying once after a short delay.
+
+        The freshly-issued access token sometimes isn't propagated through
+        Clerk's backend by the time we immediately call /oauth/userinfo.
+        A 1-second pause + one retry handles that race without user impact.
+        """
+        _KEEP = ("sub", "email", "name", "full_name", "org_id")
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                raw = self._fetch_userinfo(access_token)
+                # Only keep the fields we need — Windows Credential Manager
+                # has a 2500-byte limit; the full userinfo response exceeds it.
+                return {k: raw.get(k) for k in _KEEP}
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 0:
+                    time.sleep(1)
+        import sys
+        print(f"[auth] userinfo fetch failed after retry: {last_exc}", file=sys.stderr)
+        return {}
+
+    def _fetch_userinfo(self, access_token: str) -> dict[str, Any]:
+        url = f"{self._clerk_domain}/oauth/userinfo"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("Authorization", f"Bearer {access_token}")
+        req.add_header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36",
+        )
+        req.add_header("Accept", "application/json")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
     def _claims(self, tokens: dict[str, Any]) -> dict[str, Any]:
-        """Decode the JWT payload (no signature check — server verifies on use)."""
+        """Extract identity from cached userinfo or fall back to JWT decode."""
+        userinfo = tokens.get("userinfo") or {}
+        if userinfo:
+            return {
+                "org_id": userinfo.get("org_id"),
+                "user_id": userinfo.get("sub"),
+                "name": userinfo.get("name") or userinfo.get("full_name"),
+                "email": userinfo.get("email"),
+            }
+        # Fallback: try to decode as JWT (Clerk may return JWTs on some plans)
         try:
             payload_b64 = tokens["access_token"].split(".")[1]
             payload_b64 += "=" * (-len(payload_b64) % 4)

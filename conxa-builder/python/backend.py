@@ -22,6 +22,8 @@ import os
 import sys
 import threading
 import traceback
+from pathlib import Path
+from urllib.parse import urlparse
 from typing import Any, Callable
 
 # Make this `python` dir importable (for the local `services` package and the
@@ -39,6 +41,17 @@ from services import bootstrap as _bootstrap_pkg  # noqa: E402
 # conxa_core.config.Settings() tries to read the repo .env from a piped-stdin context.
 from conxa_compile.recorder.session import registry as _recorder_registry  # noqa: E402
 from conxa_core.storage.plugin_store import get_plugin as _get_plugin  # noqa: E402
+
+
+def _is_rejected_protected_url(url: str) -> bool:
+    value = str(url or "").strip()
+    if not value:
+        return True
+    parsed = urlparse(value)
+    if parsed.scheme in {"", "about", "data", "blob", "file"}:
+        return True
+    haystack = " ".join([parsed.path, parsed.query, parsed.fragment]).lower()
+    return any(token in haystack for token in ("login", "signin", "sign-in", "auth", "callback", "oauth"))
 
 
 # --- stdout protocol ---------------------------------------------------------
@@ -97,19 +110,25 @@ class Backend:
             self._auth = AuthService(
                 clerk_domain=os.environ.get("CONXA_CLERK_DOMAIN", ""),
                 client_id=os.environ.get("CONXA_CLERK_CLIENT_ID", ""),
+                client_secret=os.environ.get("CONXA_CLERK_CLIENT_SECRET", ""),
                 cloud_api=self._cloud_api,
             )
         return self._auth
 
-    def _install_proxy_router(self) -> None:
+    def _install_proxy_router(self, sink: Callable[[dict[str, Any]], None] | None = None) -> None:
         """Redirect every compiler LLM call to the metered cloud proxy."""
         from services.llm_proxy_client import LLMProxyClient
         from conxa_core import llm as core_llm
+
+        def _on_api_call(info: dict[str, Any]) -> None:
+            if sink is not None:
+                sink({"phase": "api_call", **info})
 
         client = LLMProxyClient(
             self._cloud_api,
             token_provider=lambda: self._auth_service().get_token(),
             client_header=os.environ.get("CONXA_PROXY_CLIENT", "build-studio"),
+            on_api_call=_on_api_call,
         )
         core_llm.set_router(client)
 
@@ -122,7 +141,7 @@ class Backend:
         return _bootstrap_pkg.ensure_all(self._cloud_api, on_event=_event_sink(rid))
 
     def cmd_login(self, _payload: dict[str, Any], rid: str) -> dict[str, Any]:
-        return self._auth_service().login(on_event=_event_sink(rid))
+        return {"identity": self._auth_service().login(on_event=_event_sink(rid))}
 
     def cmd_logout(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         self._auth_service().logout()
@@ -132,6 +151,7 @@ class Backend:
         return {"identity": self._auth_service().current_identity()}
 
     def cmd_start_recording(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import re
         from pathlib import Path
         from conxa_core.config import settings as _settings
 
@@ -139,18 +159,38 @@ class Backend:
             if self._active_recording is not None:
                 raise _CommandError("recording_in_progress", "A recording is already active.")
 
-            plugin_id = payload.get("plugin_id")
+            plugin_id_raw = payload.get("plugin_id")
+            plugin_id = _safe_id(plugin_id_raw, "plugin_id") if plugin_id_raw else ""
             workflow_name = payload.get("workflow_name")
 
             if plugin_id:
                 plugin = _get_plugin(plugin_id)
                 if not plugin:
                     raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
-                start_url = str(plugin.target_url or "about:blank")
                 auth_mode = (workflow_name == "__auth__")
                 plugin_dir = Path(_settings.data_dir) / "plugins" / plugin_id
-                storage_state_path = str(plugin_dir / "auth" / "auth.json")
+                auth_state_path = str(plugin_dir / "auth" / "auth.json")
+                storage_state_path = auth_state_path
                 storage_state_autosave = str(plugin_dir / "auth" / "auth.json") if auth_mode else ""
+                if auth_mode:
+                    start_url = str(plugin.target_url or "about:blank")
+                else:
+                    workflow_name = str(workflow_name or "").strip()
+                    if not workflow_name:
+                        raise _CommandError("invalid_input", "workflow_name is required")
+                    if plugin.status != "ready" or plugin.auth is None:
+                        raise _CommandError("auth_required", "Record auth before creating workflows.")
+                    storage_state_path = str(plugin.auth.storage_state_path or auth_state_path)
+                    if not Path(storage_state_path).is_file():
+                        raise _CommandError("auth_required", "Saved auth session is missing. Re-record auth first.")
+                    start_url = str((plugin.protected_url or plugin.target_url or "about:blank")).strip()
+                    url_variables = payload.get("url_variables")
+                    if isinstance(url_variables, dict) and url_variables:
+                        pattern = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
+                        start_url = pattern.sub(
+                            lambda m: str(url_variables.get(m.group(1)) or m.group(0)),
+                            start_url,
+                        )
             else:
                 start_url = str(payload.get("start_url") or "about:blank")
                 auth_mode = bool(payload.get("auth_mode"))
@@ -169,8 +209,19 @@ class Backend:
             except RuntimeError as exc:
                 _recorder_registry.pop(sess.session_id)
                 raise _CommandError("recorder_launch_failed", str(exc)) from exc
+            result = {"session_id": sess.session_id, "start_url": start_url}
+            if plugin_id and not auth_mode:
+                from conxa_core.storage.plugin_store import add_workflow
+
+                added = add_workflow(plugin_id, str(workflow_name), sess.session_id)
+                if added is None:
+                    self._loop.run(sess.stop())
+                    _recorder_registry.pop(sess.session_id)
+                    raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+                _plugin, workflow = added
+                result["workflow_id"] = workflow.id
             self._active_recording = sess.session_id
-            return {"session_id": sess.session_id, "start_url": start_url}
+            return result
 
     def cmd_stop_recording(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         registry = _recorder_registry
@@ -179,11 +230,80 @@ class Backend:
         sess = registry.get(session_id)
         if sess is None:
             raise _CommandError("session_not_found", f"No session {session_id}")
+        plugin_id = str(payload.get("plugin_id") or "").strip()
+        auth_mode = bool(payload.get("auth_mode"))
+        storage_state_path = ""
+        final_url = ""
+        storage_state_saved = False
+        if auth_mode:
+            if not plugin_id:
+                raise _CommandError("invalid_input", "plugin_id is required")
+            plugin_id = _safe_id(plugin_id, "plugin_id")
+            plugin = _get_plugin(plugin_id)
+            if plugin is None:
+                raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+
+            from conxa_core.config import settings as _settings
+
+            storage_state_path = str(Path(_settings.data_dir) / "plugins" / plugin_id / "auth" / "auth.json")
+            try:
+                page = getattr(sess, "_active_page_sync", lambda: None)()
+                if page is not None:
+                    final_url = str(getattr(page, "url", "") or "")
+                    remember = getattr(sess, "_remember_page_url_sync", None)
+                    if callable(remember):
+                        remember(page)
+            except Exception:
+                final_url = ""
+            if not final_url:
+                final_url = str(getattr(sess, "current_url", "") or "")
+            try:
+                context = getattr(sess, "_context", None)
+                if context is not None:
+                    path = Path(storage_state_path)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    context.storage_state(path=str(path))
+            except Exception as exc:
+                if not Path(storage_state_path).is_file():
+                    raise _CommandError("auth_capture_failed", f"Failed to save auth session: {exc}") from exc
         events = sess.snapshot_events()
         self._loop.run(sess.stop())
         with self._rec_lock:
             if self._active_recording == session_id:
                 self._active_recording = None
+        if auth_mode:
+            from conxa_core.storage.plugin_store import set_plugin_auth
+
+            storage_state_saved = Path(storage_state_path).is_file()
+            if not storage_state_saved:
+                raise _CommandError("auth_capture_failed", "Auth browser closed before a session could be saved.")
+            protected_url = final_url if not _is_rejected_protected_url(final_url) else None
+            updated = set_plugin_auth(plugin_id, session_id, storage_state_path, protected_url=protected_url)
+            if updated is None:
+                raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+            return {
+                "session_id": session_id,
+                "event_count": len(events),
+                "plugin_status": updated.status,
+                "storage_state_saved": storage_state_saved,
+                "protected_url": updated.protected_url,
+            }
+        workflow_id = str(payload.get("workflow_id") or "").strip()
+        if plugin_id and workflow_id:
+            from conxa_core.storage.plugin_store import remove_workflow
+
+            plugin_id = _safe_id(plugin_id, "plugin_id")
+            workflow_id = _safe_id(workflow_id, "workflow_id")
+            if len(events) == 0:
+                remove_workflow(plugin_id, workflow_id)
+                raise _CommandError("empty_recording", "No workflow actions were recorded.")
+            return {
+                "session_id": session_id,
+                "event_count": len(events),
+                "workflow_id": workflow_id,
+                "status": "recorded",
+                "workflow_kind": "workflow",
+            }
         return {"session_id": session_id, "event_count": len(events)}
 
     def cmd_run_pipeline(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
@@ -198,43 +318,102 @@ class Backend:
         return {"session_id": session_id, "event_count": len(normalized)}
 
     def cmd_compile(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:
+        import time as _time
         from conxa_compile.compiler.build import compile_skill_package
         from conxa_compile.pipeline.run import run_pipeline
         from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_core.storage.plugin_store import get_plugin, save_plugin
         from conxa_core.storage.session_events import read_session_events
+        from services.llm_proxy_client import CloudUnreachable, QuotaExceeded
         registry = _recorder_registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
+        plugin_id = str(payload.get("plugin_id") or "").strip()
+        plugin = None
+        workflow = None
+        if plugin_id:
+            plugin_id = _safe_id(plugin_id, "plugin_id")
+            plugin = get_plugin(plugin_id)
+            if plugin is None:
+                raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+            workflow = next((wf for wf in plugin.workflows if wf.session_id == session_id), None)
+            if workflow is None:
+                raise _CommandError("workflow_not_found", f"No workflow recorded for session {session_id}")
+
         title = str(payload.get("skill_title") or "").strip()
+        if not title and workflow is not None:
+            title = workflow.name.strip()
         if not title:
             raise _CommandError("invalid_input", "skill_title is required")
 
-        self._install_proxy_router()
         sink = _event_sink(rid)
+
+        def _log(message: str, level: str = "info") -> None:
+            sink({"phase": "compile_log", "message": message, "level": level, "ts": _time.time()})
+
+        self._install_proxy_router(sink=sink)
         sink({"phase": "pipeline_start"})
+        sink({"phase": "compile_step", "step": "normalize", "status": "running"})
+        _log("Loading session events…")
 
         sess = registry.get(session_id)
         raw = sess.snapshot_events() if sess else read_session_events(session_id)
         if not raw:
             raise _CommandError("no_events", "No recorded events for this session.")
-        normalized = run_pipeline(raw)
+
+        _log(f"Running normalization pipeline on {len(raw)} events…")
+        try:
+            normalized = run_pipeline(raw)
+        except (CloudUnreachable, QuotaExceeded) as exc:
+            _log(str(exc), level="error")
+            sink({"phase": "compile_error", "message": str(exc), "failed_step": "normalize"})
+            raise _CommandError("cloud_unreachable", str(exc)) from exc
+        except Exception as exc:
+            _log(str(exc), level="error")
+            sink({"phase": "compile_error", "message": str(exc), "failed_step": "normalize"})
+            raise
+
+        _log(f"Pipeline produced {len(normalized)} normalized events")
         sink({"phase": "pipeline_done", "event_count": len(normalized)})
+        for step in ("normalize", "dedupe", "enrich"):
+            sink({"phase": "compile_step", "step": step, "status": "done"})
+        sink({"phase": "compile_step", "step": "selectors", "status": "running"})
 
         skill_id = f"skill_{session_id}"
         existing = read_skill(skill_id)
         version = int((existing.get("meta") or {}).get("version") or 0) + 1 if existing else 1
 
+        _log("Starting compiler — generating selectors, assertions, recovery blocks…")
         sink({"phase": "compiler_start"})
-        package = compile_skill_package(
-            normalized,
-            skill_id=skill_id,
-            source_session_id=session_id,
-            title=title,
-            version=version,
-        )
+        try:
+            package = compile_skill_package(
+                normalized,
+                skill_id=skill_id,
+                source_session_id=session_id,
+                title=title,
+                version=version,
+            )
+        except (CloudUnreachable, QuotaExceeded) as exc:
+            _log(str(exc), level="error")
+            sink({"phase": "compile_error", "message": str(exc), "failed_step": "selectors"})
+            raise _CommandError("cloud_unreachable", str(exc)) from exc
+        except Exception as exc:
+            _log(str(exc), level="error")
+            sink({"phase": "compile_error", "message": str(exc), "failed_step": "selectors"})
+            raise
+
         write_skill(skill_id, package.model_dump(mode="json"))
         step_count = len(package.skills[0].steps)
         sink({"phase": "compiler_done", "step_count": step_count})
+        for step in ("selectors", "assertions", "recovery", "package"):
+            sink({"phase": "compile_step", "step": step, "status": "done"})
+            _log(f"Completed: {step}")
+        if plugin is not None and workflow is not None:
+            workflow.skill_id = skill_id
+            workflow.status = "compiled"
+            save_plugin(plugin)
+        _log(f"Skill packaged: {skill_id} (version {version}, {step_count} steps)")
+        sink({"phase": "compile_done", "skill_id": skill_id, "version": version, "step_count": step_count})
         return {"skill_id": skill_id, "version": version, "step_count": step_count}
 
     def cmd_create_plugin(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
@@ -428,9 +607,7 @@ class Backend:
         from conxa_core.storage.plugin_store import delete_plugin
 
         plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
-        if not delete_plugin(plugin_id):
-            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
-        return {"deleted": True}
+        return {"deleted": bool(delete_plugin(plugin_id))}
 
     def cmd_delete_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         from conxa_core.storage.plugin_store import remove_workflow
@@ -531,6 +708,9 @@ class Backend:
         block["steps"] = steps
         skills[0] = block
         doc["skills"] = skills
+        meta = dict(doc.get("meta") or {})
+        meta["version"] = int(meta.get("version", 1)) + 1
+        doc["meta"] = meta
         revalidation = revalidate_step(step)
         write_skill(skill_id, doc)
         return self._skill_response(skill_id, doc, revalidation)
