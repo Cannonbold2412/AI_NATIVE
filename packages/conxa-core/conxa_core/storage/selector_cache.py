@@ -7,6 +7,7 @@ TTL controlled by settings.selector_cache_ttl_days.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -36,23 +37,28 @@ def make_cache_key(dom_hash: str, element_bbox: dict[str, Any] | None, model: st
     return f"{dom_hash}:{_bbox_key(element_bbox)}:{model or 'default'}"
 
 
+def _cache_file_path(key: str) -> Path:
+    safe_key = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return _cache_dir() / f"{safe_key}.json"
+
+
 def _ttl_seconds() -> int:
     return max(1, int(settings.selector_cache_ttl_days)) * 86400
 
 
 def _read_cache_file(key: str) -> dict[str, Any] | None:
-    path = _cache_dir() / f"{key}.json"
-    if not path.is_file():
-        return None
     try:
+        path = _cache_file_path(key)
+        if not path.is_file():
+            return None
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
 
 
 def _write_cache_file(key: str, entry: dict[str, Any]) -> None:
-    path = _cache_dir() / f"{key}.json"
     try:
+        path = _cache_file_path(key)
         path.write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError:
         pass
@@ -103,11 +109,14 @@ def invalidate(dom_hash: str) -> int:
     count = 0
     base = _cache_dir()
     if base.is_dir():
-        for path in base.glob(f"{dom_hash}:*.json"):
+        for path in base.glob("*.json"):
             try:
+                entry = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(entry, dict) or entry.get("dom_hash") != dom_hash:
+                    continue
                 path.unlink()
                 count += 1
-            except OSError:
+            except (OSError, json.JSONDecodeError):
                 pass
     return count
 

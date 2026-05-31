@@ -15,6 +15,7 @@ from sqlalchemy import create_engine, text
 from conxa_core.config import settings
 
 _engine = None
+_WINDOWS_RESERVED_FILENAME_CHARS = frozenset('<>:"\\|?*')
 
 
 def _get_engine():
@@ -27,6 +28,23 @@ def _get_engine():
 
 def _fs_path(namespace: str, key: str) -> _Path:
     """Filesystem path for a (namespace, key) pair used when no DB is configured."""
+    import hashlib
+    safe_ns = namespace.replace("/", os.sep)
+    # Hash the key to produce a filename that is safe on all platforms (Windows
+    # forbids ':' in filenames; keys like selector_cache use ':' as a separator).
+    safe_key = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return _Path(settings.data_dir) / "kv" / safe_ns / f"{safe_key}.json"
+
+
+def _legacy_fs_path(namespace: str, key: str) -> _Path | None:
+    """Pre-hash filesystem path used by older local kv stores."""
+    if (
+        not key
+        or any(sep and sep in key for sep in (os.sep, os.altsep))
+        or "\x00" in key
+        or any(ch in _WINDOWS_RESERVED_FILENAME_CHARS for ch in key)
+    ):
+        return None
     safe_ns = namespace.replace("/", os.sep)
     return _Path(settings.data_dir) / "kv" / safe_ns / f"{key}.json"
 
@@ -74,7 +92,10 @@ def db_get(namespace: str, key: str) -> Any | None:
     engine = _get_engine()
     if engine is None:
         p = _fs_path(namespace, key)
-        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+        legacy = _legacy_fs_path(namespace, key)
+        return json.loads(legacy.read_text(encoding="utf-8")) if legacy and legacy.exists() else None
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT data FROM kv_store WHERE namespace = :ns AND key = :key"),
@@ -89,6 +110,9 @@ def db_set(namespace: str, key: str, data: Any) -> None:
         p = _fs_path(namespace, key)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(data), encoding="utf-8")
+        legacy = _legacy_fs_path(namespace, key)
+        if legacy and legacy != p:
+            legacy.unlink(missing_ok=True)
         return
     with engine.connect() as conn:
         conn.execute(
@@ -108,6 +132,9 @@ def db_delete(namespace: str, key: str) -> None:
     if engine is None:
         p = _fs_path(namespace, key)
         p.unlink(missing_ok=True)
+        legacy = _legacy_fs_path(namespace, key)
+        if legacy and legacy != p:
+            legacy.unlink(missing_ok=True)
         return
     with engine.connect() as conn:
         conn.execute(

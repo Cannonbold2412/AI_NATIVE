@@ -7,6 +7,7 @@ Layout:
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -130,11 +131,16 @@ def save_plugin(plugin: Plugin) -> Plugin:
 
 
 def delete_plugin(plugin_id: str) -> bool:
+    plugin = get_plugin(plugin_id)
+    plugin_dir = _plugins_dir() / plugin_id
     db_delete("plugins", plugin_id)
     path = _plugin_path(plugin_id)
+    existed = plugin is not None or path.is_file() or plugin_dir.exists()
     if path.is_file():
         path.unlink()
-    return True
+    if plugin_dir.is_dir():
+        shutil.rmtree(plugin_dir)
+    return existed
 
 
 def set_plugin_auth(plugin_id: str, session_id: str, storage_state_path: str, protected_url: str | None = None) -> Plugin | None:
