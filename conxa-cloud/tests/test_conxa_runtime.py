@@ -45,6 +45,23 @@ class TestResolveRuntimeDir:
         assert result is not None
         assert (result / "server.js").is_file()
 
+    def test_dev_fallback_candidates_include_workspace_runtime(self, tmp_path: Path) -> None:
+        """Nested Build Studio source should still discover the workspace runtime/ dir."""
+        from conxa_compile.conxa_runtime import _dev_runtime_candidates, _is_runtime_dir
+
+        source = tmp_path / "workspace" / "conxa-builder" / "python" / "conxa_compile" / "conxa_runtime.py"
+        source.parent.mkdir(parents=True)
+        source.touch()
+        runtime = tmp_path / "workspace" / "runtime"
+        runtime.mkdir()
+        (runtime / "server.js").touch()
+        (runtime / "package.json").touch()
+
+        candidates = _dev_runtime_candidates(source)
+
+        assert runtime in candidates
+        assert _is_runtime_dir(runtime)
+
     def test_returns_none_when_nothing_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("CONXA_DIR", raising=False)
         from conxa_compile.conxa_runtime import resolve_runtime_dir
@@ -56,8 +73,9 @@ class TestResolveRuntimeDir:
             # by ensuring the installed path doesn't exist
             pass
         # Pragmatic: if runtime/ exists in repo, skip this test
-        repo_root = Path(__file__).resolve().parent.parent
-        if (repo_root / "runtime" / "server.js").is_file():
+        from conxa_compile.conxa_runtime import _dev_runtime_candidates
+
+        if any((candidate / "server.js").is_file() for candidate in _dev_runtime_candidates(Path(__file__))):
             pytest.skip("Dev runtime present — cannot test None case")
         if sys.platform == "win32":
             installed = Path(r"C:\Program Files\Conxa")

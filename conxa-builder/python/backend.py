@@ -54,6 +54,68 @@ def _is_rejected_protected_url(url: str) -> bool:
     return any(token in haystack for token in ("login", "signin", "sign-in", "auth", "callback", "oauth"))
 
 
+def _runtime_result_text(result: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for item in result.get("content") or []:
+        if isinstance(item, dict) and item.get("type") == "text":
+            text = str(item.get("text") or "").strip()
+            if text:
+                parts.append(text)
+    return "\n".join(parts).strip()
+
+
+def _plugin_company_slug(plugin: Any) -> str:
+    build = getattr(plugin, "build", None)
+    output_path = str(getattr(build, "output_path", "") or "")
+    if output_path:
+        plugin_json = Path(output_path) / "plugin.json"
+        if plugin_json.is_file():
+            try:
+                payload = json.loads(plugin_json.read_text(encoding="utf-8"))
+                slug = str(payload.get("slug") or "").strip()
+                if slug:
+                    return slug
+            except Exception:
+                pass
+        folder = Path(output_path).name
+        if folder.endswith("-plugin"):
+            return folder[:-7]
+        if folder:
+            return folder
+    return str(getattr(plugin, "slug", "") or getattr(plugin, "id", "")).strip()
+
+
+def _stage_runtime_auth(plugin: Any, company: str, data_dir: Path) -> None:
+    auth = getattr(plugin, "auth", None)
+    storage_state_path = Path(str(getattr(auth, "storage_state_path", "") or ""))
+    if not storage_state_path.is_file():
+        return
+
+    import shutil
+    from datetime import datetime, timezone
+
+    sessions_dir = data_dir / "cache" / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(storage_state_path, sessions_dir / f"{company}_raw_state.json")
+
+    protected_url = str(getattr(plugin, "protected_url", "") or getattr(plugin, "target_url", "") or "").strip()
+    if protected_url:
+        meta_path = sessions_dir / f"{company}_auth_meta.json"
+        meta = {}
+        if meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                meta = {}
+        meta.update(
+            {
+                "protected_url": protected_url,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 # --- stdout protocol ---------------------------------------------------------
 
 _stdout_lock = threading.Lock()
@@ -61,7 +123,7 @@ _stdout_lock = threading.Lock()
 
 def _write(obj: dict[str, Any]) -> None:
     with _stdout_lock:
-        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.write(json.dumps(obj, ensure_ascii=True) + "\n")
         sys.stdout.flush()
 
 
@@ -477,15 +539,26 @@ class Backend:
         from services.installer_builder import build_installer
 
         plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
-        company_slug = _safe_id(payload.get("company_slug"), "company_slug")
+        plugin = _get_plugin(plugin_id)
+        if plugin is None:
+            raise _CommandError("plugin_not_found", f"No plugin {plugin_id}")
+        company_slug = str(payload.get("company_slug") or "").strip()
+        if company_slug:
+            company_slug = _safe_id(company_slug, "company_slug")
+        else:
+            company_slug = _plugin_company_slug(plugin)
+            if not company_slug:
+                raise _CommandError("invalid_plugin", "Built plugin is missing a runtime company slug.")
 
-        # Invariant: auth.json must never enter the installer input.
+        # Invariant: auth.json must never enter the installer input. Captured
+        # auth lives under the plugin state dir, but the installer stages only
+        # the built skill pack.
         from conxa_core.config import settings as _settings
-        plugin_dir = Path(_settings.data_dir) / "plugins" / plugin_id
-        if plugin_dir.exists() and any(plugin_dir.rglob("auth.json")):
+        skill_pack_dir = Path(_settings.data_dir) / "skill-packs" / company_slug
+        if skill_pack_dir.exists() and any(skill_pack_dir.rglob("auth.json")):
             raise _CommandError(
                 "auth_file_in_build_input",
-                "Refusing to build: auth.json found under the plugin directory.",
+                "Refusing to build: auth.json found under the built skill pack.",
             )
 
         return build_installer(
@@ -495,16 +568,27 @@ class Backend:
     def cmd_test_workflow(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:
         """Run a built workflow end-to-end against the local Conxa runtime.
 
-        Validates the workflow is built and compiled, then drives the shared
-        Node runtime. The runtime is an MCP stdio server (``server.js``) with no
-        single-skill CLI executor, so execution is not yet wired here — fail with
-        a clear, actionable error rather than a cryptic ``unknown_command``.
+        Validates the workflow is built and compiled, stages the built skill pack
+        and captured auth session into a local test runtime, then calls the
+        shared MCP runtime's ``execute_skill`` tool over stdio.
         """
-        from conxa_compile.conxa_runtime import resolve_runtime_dir
-        from conxa_core.storage.plugin_store import get_plugin
+        from conxa_compile.conxa_runtime import (
+            RuntimeToolError,
+            call_runtime_tool,
+            ensure_chromium_installed,
+            resolve_runtime_dir,
+            sync_skill_pack,
+        )
+        from conxa_core.config import settings as _settings
+        from conxa_core.storage.plugin_store import (
+            get_plugin,
+            set_workflow_test_error,
+            set_workflow_test_result,
+        )
 
         plugin_id = _safe_id(payload.get("plugin_id"), "plugin_id")
         workflow_id = _safe_id(payload.get("workflow_id"), "workflow_id")
+        inputs = payload.get("inputs") if isinstance(payload.get("inputs"), dict) else {}
 
         plugin = get_plugin(plugin_id)
         if plugin is None:
@@ -527,13 +611,59 @@ class Backend:
                 "Conxa runtime not found. Install the runtime (or set CONXA_DIR) to test workflows.",
             )
 
-        raise _CommandError(
-            "test_runtime_unavailable",
-            "Workflow test execution is not yet wired in the Build Studio backend. "
-            "The shared runtime exposes MCP tools (execute_plan) over stdio rather than a "
-            "single-skill CLI; running a single workflow headlessly needs a dedicated runtime "
-            "entrypoint before this command can stream results.",
-        )
+        company = _plugin_company_slug(plugin)
+        if not company:
+            raise _CommandError("invalid_plugin", "Built plugin is missing a runtime company slug.")
+
+        data_dir = Path(_settings.data_dir)
+        source_dir = data_dir / "skill-packs" / company
+        if not source_dir.is_dir():
+            raise _CommandError(
+                "skill_pack_not_built",
+                f"Built skill pack not found: skill-packs/{company}. Run Build Plugin again.",
+            )
+
+        try:
+            sink({"kind": "workflow_test", "message": "Staging skill pack for the runtime…"})
+            sync_skill_pack(company, source_dir, runtime_dir, data_dir=data_dir)
+            _stage_runtime_auth(plugin, company, data_dir)
+
+            sink({"kind": "workflow_test", "message": "Checking Playwright browser runtime…"})
+            ensure_chromium_installed(
+                runtime_dir / "chromium",
+                runtime_dir,
+                log_sink=lambda msg: sink({"kind": "workflow_test", "message": msg}),
+            )
+
+            sink({"kind": "workflow_test", "message": f"Running {workflow.name!r}…"})
+            result = call_runtime_tool(
+                runtime_dir,
+                "execute_skill",
+                {
+                    "skill": workflow.slug,
+                    "company": company,
+                    "inputs": inputs,
+                    "watch": not bool(payload.get("headless")),
+                },
+                env={
+                    "CONXA_DATA_DIR": str(data_dir),
+                    "PLAYWRIGHT_BROWSERS_PATH": str(runtime_dir / "chromium"),
+                },
+            )
+        except (RuntimeToolError, RuntimeError) as exc:
+            message = str(exc)
+            set_workflow_test_error(plugin_id, workflow_id, message)
+            raise _CommandError("workflow_test_failed", message) from exc
+
+        message = _runtime_result_text(result)
+        if not message.startswith("Done."):
+            failure = message or "Runtime test failed without a result message."
+            set_workflow_test_error(plugin_id, workflow_id, failure)
+            raise _CommandError("workflow_test_failed", failure)
+
+        set_workflow_test_result(plugin_id, workflow_id, status="passed", inputs=inputs)
+        sink({"kind": "workflow_test", "message": message})
+        return {"status": "passed", "message": message, "company": company, "skill": workflow.slug}
 
     def cmd_publish(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         import base64
@@ -703,7 +833,7 @@ class Backend:
         steps = list(block.get("steps") or [])
         if step_index < 0 or step_index >= len(steps):
             raise _CommandError("step_not_found", f"Step {step_index} out of range")
-        step = {**dict(steps[step_index]), **patch}
+        step = _deep_merge(dict(steps[step_index]), patch)
         steps[step_index] = step
         block["steps"] = steps
         skills[0] = block
@@ -982,94 +1112,61 @@ class Backend:
     # ─── skill packages ──────────────────────────────────────────────────────
 
     def cmd_list_skill_packages(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from pathlib import Path
-        from conxa_core.config import settings
+        from conxa_core.storage.skill_packages import (
+            list_skill_package_summaries,
+            skill_package_root_dir,
+        )
 
-        packs_dir = Path(settings.data_dir) / "skill-packs"
+        root = skill_package_root_dir()
         packages = []
-        if packs_dir.is_dir():
-            for bundle_dir in sorted(packs_dir.iterdir()):
-                if not bundle_dir.is_dir() or not (bundle_dir / "pack.json").is_file():
-                    continue
-                workflows = []
-                all_files: list[str] = []
-                for skill_dir in sorted(bundle_dir.iterdir()):
-                    if not skill_dir.is_dir():
-                        continue
-                    skill_files = sorted(f.name for f in skill_dir.iterdir() if f.is_file())
-                    all_files.extend(f"{skill_dir.name}/{fn}" for fn in skill_files)
-                    if skill_files:
-                        workflows.append({
-                            "workflow_slug": skill_dir.name,
-                            "modified_at": skill_dir.stat().st_mtime,
-                            "files": skill_files,
-                        })
-                packages.append({
-                    "package_name": bundle_dir.name,
-                    "modified_at": bundle_dir.stat().st_mtime,
-                    "workflows": workflows,
-                    "files": all_files,
-                })
-        return {"packages": packages, "bundle_root": "skill_package"}
+        for package in list_skill_package_summaries():
+            package_name = str(package.get("package_name") or "")
+            package_folder = f"{package_name}-plugin"
+            packages.append(
+                {
+                    **package,
+                    "package_folder": package_folder,
+                    "package_path": str(root / package_folder),
+                }
+            )
+        return {"packages": packages, "bundle_root": str(root)}
 
     def cmd_list_skill_package_files(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from pathlib import Path
-        from conxa_core.config import settings
+        from conxa_core.storage.skill_packages import read_skill_package_bundle_files
 
         package_name = str(payload.get("package_name") or "").strip()
         if not package_name:
             raise _CommandError("invalid_input", "package_name is required")
-        bundle_dir = Path(settings.data_dir) / "skill-packs" / package_name
-        if not bundle_dir.is_dir():
+        files = read_skill_package_bundle_files(package_name)
+        if files is None:
             raise _CommandError("package_not_found", f"No package {package_name}")
-        files: dict[str, str] = {}
-        for fpath in sorted(bundle_dir.rglob("*")):
-            if fpath.is_file():
-                rel = fpath.relative_to(bundle_dir).as_posix()
-                try:
-                    files[rel] = fpath.read_text(encoding="utf-8")
-                except Exception:
-                    files[rel] = ""
         return {"package_name": package_name, "files": files}
 
     def cmd_delete_skill_package(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        import shutil
-        from pathlib import Path
-        from conxa_core.config import settings
+        from conxa_core.storage.skill_packages import delete_skill_package_bundle
 
         package_name = str(payload.get("package_name") or "").strip()
         if not package_name:
             raise _CommandError("invalid_input", "package_name is required")
-        bundle_dir = Path(settings.data_dir) / "skill-packs" / package_name
-        if not bundle_dir.is_dir():
+        if not delete_skill_package_bundle(package_name):
             raise _CommandError("package_not_found", f"No package {package_name}")
-        shutil.rmtree(bundle_dir)
         return {"package_name": package_name, "deleted": True}
 
     def cmd_rename_skill_package(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
-        from pathlib import Path
-        from conxa_core.config import settings
+        from conxa_core.storage.skill_packages import rename_skill_package_bundle
 
         package_name = str(payload.get("package_name") or "").strip()
         new_name = str(payload.get("new_name") or "").strip()
         if not package_name or not new_name:
             raise _CommandError("invalid_input", "package_name and new_name are required")
-        packs_dir = Path(settings.data_dir) / "skill-packs"
-        bundle_dir = packs_dir / package_name
-        new_dir = packs_dir / new_name
-        if not bundle_dir.is_dir():
+        try:
+            rename_skill_package_bundle(package_name, new_name)
+        except FileNotFoundError:
             raise _CommandError("package_not_found", f"No package {package_name}")
-        if new_dir.exists():
-            raise _CommandError("already_exists", f"Package {new_name} already exists")
-        bundle_dir.rename(new_dir)
-        pack_json = new_dir / "pack.json"
-        if pack_json.is_file():
-            try:
-                pack = json.loads(pack_json.read_text(encoding="utf-8"))
-                pack["company"] = new_name
-                pack_json.write_text(json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8")
-            except Exception:
-                pass
+        except ValueError as exc:
+            message = str(exc)
+            code = "already_exists" if "already exists" in message else "invalid_input"
+            raise _CommandError(code, message)
         return {"package_name": new_name, "previous_name": package_name}
 
     def cmd_set_skill_pack_bundle_root(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
@@ -1200,6 +1297,17 @@ class _CommandError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def _deep_merge(base: dict, patch: dict) -> dict:
+    """Recursively merge patch into base, preserving unpatched nested keys."""
+    result = dict(base)
+    for k, v in patch.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
 
 
 def _safe_id(value: object, field: str) -> str:

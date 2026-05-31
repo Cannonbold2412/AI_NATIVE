@@ -209,9 +209,21 @@ def _stage_runtime_binary(dest: Path, log: Callable[[str], None] | None = None) 
         if log:
             log(msg)
 
-    repo_root   = Path(__file__).parent.parent.parent
-    local_exe   = repo_root / "runtime" / "dist" / "runtime-win.exe"
-    local_node  = repo_root / "runtime" / "node_modules" / "keytar" / "build" / "Release" / "keytar.node"
+    builder_root = Path(__file__).parent.parent.parent
+    repo_root = builder_root.parent
+    runtime_roots = [builder_root / "runtime", repo_root / "runtime"]
+    local_exe = next(
+        (root / "dist" / "runtime-win.exe" for root in runtime_roots if (root / "dist" / "runtime-win.exe").is_file()),
+        runtime_roots[0] / "dist" / "runtime-win.exe",
+    )
+    local_node = next(
+        (
+            root / "node_modules" / "keytar" / "build" / "Release" / "keytar.node"
+            for root in runtime_roots
+            if (root / "node_modules" / "keytar" / "build" / "Release" / "keytar.node").is_file()
+        ),
+        runtime_roots[0] / "node_modules" / "keytar" / "build" / "Release" / "keytar.node",
+    )
 
     if local_exe.is_file():
         _info(f"Copying local runtime.exe from {local_exe}")
