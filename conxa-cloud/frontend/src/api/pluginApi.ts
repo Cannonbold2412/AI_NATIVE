@@ -366,7 +366,26 @@ export type TrackingRunSummary = {
   server_ts: number
 }
 
-export type TrackingRunsResponse = { runs: TrackingRunSummary[]; total: number }
+export type TrackingCompany = {
+  company: string
+  workspace_id: string
+  run_count: number
+  last_seen: number
+}
+
+export type TrackingCompaniesResponse = {
+  companies: TrackingCompany[]
+  total: number
+  workspace_id: string
+}
+
+export type TrackingRunsResponse = {
+  runs: TrackingRunSummary[]
+  total: number
+  workspace_id?: string
+  total_all_workspaces?: number
+  hidden_workspace_runs?: number
+}
 
 export type TrackingRunDetail = {
   run_id: string
@@ -387,6 +406,10 @@ export function fetchTrackingRuns(
   return apiFetch(`/tracking/${encodeURIComponent(company)}/runs?limit=${limit}&offset=${offset}`).then(
     (r) => json<TrackingRunsResponse>(r),
   )
+}
+
+export function fetchTrackingCompanies(): Promise<TrackingCompaniesResponse> {
+  return apiFetch('/tracking/companies').then((r) => json<TrackingCompaniesResponse>(r))
 }
 
 export function fetchTrackingRun(company: string, runId: string): Promise<TrackingRunDetail> {

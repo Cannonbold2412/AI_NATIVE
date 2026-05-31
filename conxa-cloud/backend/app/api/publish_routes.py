@@ -106,6 +106,7 @@ def _tracking_token(slug: str, workspace_id: str, version: str) -> str:
         slug,
         {
             "token": token,
+            "company": slug,
             "version": version,
             "workspace_id": workspace_id,
             "updated_at": time.time(),
@@ -145,7 +146,9 @@ def _upsert_published_plugin(body: PublishBody, workspace_id: str) -> None:
     else:
         plugin = existing.model_copy(
             update={
+                "slug": body.slug,
                 "name": name,
+                "workspace_id": workspace_id,
                 "target_url": target_url or existing.target_url,
                 "protected_url": protected_url or existing.protected_url,
                 "status": "ready",

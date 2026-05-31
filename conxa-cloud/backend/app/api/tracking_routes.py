@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from conxa_core.db import db_append, db_get, db_list_kv
 from conxa_core.config import settings
+from conxa_core.storage.plugin_store import list_plugins
 from app.services.saas import Principal, ensure_principal, principal_from_request
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
@@ -104,6 +105,65 @@ def _run_summary(run_id: str, batches: list[dict]) -> dict:
     }
 
 
+def _company_run_stats(company: str, workspace_id: str) -> tuple[int, float]:
+    run_count = 0
+    last_seen = 0.0
+    for _run_id, batches in db_list_kv(f"tracking/{company}"):
+        scoped = _batches_for_workspace(batches, workspace_id)
+        if not scoped:
+            continue
+        run_count += 1
+        for batch in scoped:
+            try:
+                last_seen = max(last_seen, float(batch.get("server_ts") or 0))
+            except (TypeError, ValueError):
+                continue
+    return run_count, last_seen
+
+
+def _tracking_company_rows(principal: Principal) -> list[dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+
+    for key, record in db_list_kv("tracking_tokens"):
+        if not isinstance(record, dict):
+            continue
+        workspace_id = str(record.get("workspace_id") or "")
+        if workspace_id and workspace_id != principal.workspace_id:
+            continue
+        company = str(record.get("company") or key or "").strip()
+        if not company:
+            continue
+        run_count, last_seen = _company_run_stats(company, principal.workspace_id)
+        rows[company] = {
+            "company": company,
+            "workspace_id": workspace_id or principal.workspace_id,
+            "run_count": run_count,
+            "last_seen": last_seen or float(record.get("updated_at") or 0),
+        }
+
+    for plugin in list_plugins(workspace_id=principal.workspace_id):
+        company = str(plugin.slug or plugin.name or "").strip()
+        if not company:
+            continue
+        current = rows.get(company)
+        if current is None:
+            run_count, last_seen = _company_run_stats(company, principal.workspace_id)
+            rows[company] = {
+                "company": company,
+                "workspace_id": principal.workspace_id,
+                "run_count": run_count,
+                "last_seen": last_seen or float(plugin.updated_at or 0),
+            }
+        elif not current.get("last_seen"):
+            current["last_seen"] = float(plugin.updated_at or 0)
+
+    return sorted(
+        rows.values(),
+        key=lambda row: (float(row.get("last_seen") or 0), str(row.get("company") or "")),
+        reverse=True,
+    )
+
+
 @public_router.post("/{company}/events", status_code=202)
 @router.post("/{company}/events", status_code=202)
 async def ingest_events(company: str, request: Request) -> dict[str, Any]:
@@ -134,6 +194,19 @@ async def ingest_events(company: str, request: Request) -> dict[str, Any]:
     }
     db_append(f"tracking/{company}", run_id, [enriched])
     return {"ok": True}
+
+
+@router.get("/companies")
+def list_tracking_companies(
+    principal: Principal = Depends(current_principal),
+) -> dict[str, Any]:
+    """Return companies with workspace-visible tracking or plugin metadata."""
+    companies = _tracking_company_rows(principal)
+    return {
+        "companies": companies,
+        "total": len(companies),
+        "workspace_id": principal.workspace_id,
+    }
 
 
 @router.get("/{company}/runs")

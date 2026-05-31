@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchPlugins,
+  fetchTrackingCompanies,
   fetchTrackingRun,
   fetchTrackingRuns,
   normalizePluginList,
@@ -352,9 +353,19 @@ export function DashboardPage() {
     queryFn: fetchPlugins,
     staleTime: 60_000,
   })
+  const { data: trackingCompaniesData } = useQuery({
+    queryKey: ['tracking-companies'],
+    queryFn: fetchTrackingCompanies,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
   const plugins   = normalizePluginList(pluginsData)
-  const companies = Array.from(new Set(plugins.map((p) => toCompanySlug(p.name || '')).filter(Boolean)))
-  const activeCompany = company || companies[0] || ''
+  const trackingCompanies = (trackingCompaniesData?.companies ?? [])
+    .map((entry) => entry.company)
+    .filter(Boolean)
+  const pluginCompanies = plugins.map((p) => p.slug || toCompanySlug(p.name || '')).filter(Boolean)
+  const companies = Array.from(new Set([...trackingCompanies, ...pluginCompanies]))
+  const activeCompany = company && companies.includes(company) ? company : companies[0] || ''
 
   const { data, isFetching, refetch, dataUpdatedAt } = useQuery({
     queryKey:        ['tracking-runs', activeCompany],
@@ -417,8 +428,8 @@ export function DashboardPage() {
         {!activeCompany ? (
           <div className="rounded-xl border border-white/8 bg-white/[0.02] px-6 py-16 text-center">
             <Activity className="mx-auto mb-3 size-8 text-zinc-700" />
-            <p className="text-sm font-medium text-zinc-400">No plugins found</p>
-            <p className="mt-1 text-xs text-zinc-600">Build an installer to start seeing execution data.</p>
+            <p className="text-sm font-medium text-zinc-400">No tracking data found for this workspace</p>
+            <p className="mt-1 text-xs text-zinc-600">Run an installed skill to start seeing execution data.</p>
           </div>
         ) : (
           <>

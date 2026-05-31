@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from conxa_core.config import settings
 from conxa_core.db import db_get, db_set
-from conxa_core.storage.plugin_store import list_plugins
+from conxa_core.storage.plugin_store import create_plugin, list_plugins
 from app.main import app
 from app.services import llm_metering
 
@@ -109,6 +109,40 @@ def test_publish_and_sync_roundtrip():
     assert d.status_code == 200
     assert d.json()["current_version"] == "0.3.0"
 
+    companies = client.get("/api/v1/tracking/companies")
+    assert companies.status_code == 200
+    assert any(row["company"] == "acme-test" for row in companies.json()["companies"])
+
+
+def test_publish_upsert_updates_existing_plugin_slug(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+    existing = create_plugin(
+        name="Render",
+        target_url="https://dashboard.render.com",
+        workspace_id="wrk_local",
+    )
+    assert existing.slug != "render"
+
+    r = client.post(
+        "/api/v1/plugins/publish",
+        json={
+            "slug": "render",
+            "display_name": "Render",
+            "target_url": "https://dashboard.render.com",
+            "skill_pack_version": "1.0.0",
+            "skills": [],
+            "files": [],
+        },
+    )
+
+    assert r.status_code == 200, r.text
+    plugins = [p for p in list_plugins(workspace_id="wrk_local") if p.name == "Render"]
+    assert len(plugins) == 1
+    assert plugins[0].id == existing.id
+    assert plugins[0].slug == "render"
+    assert plugins[0].workspace_id == "wrk_local"
+
 
 def test_skill_pack_delta_is_public_when_cloud_auth_required(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "auth_required", True)
@@ -186,6 +220,61 @@ def test_tracking_runs_report_workspace_mismatch(monkeypatch, tmp_path):
     assert body["workspace_id"] == "wrk_local"
     assert body["total_all_workspaces"] == 1
     assert body["hidden_workspace_runs"] == 1
+
+
+def test_tracking_companies_discovers_token_backed_events_without_plugin(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    db_set(
+        "tracking_tokens",
+        "token-only-company",
+        {
+            "token": "token-only-secret",
+            "company": "token-only-company",
+            "workspace_id": "wrk_local",
+            "version": "1.0.0",
+            "updated_at": 10,
+        },
+    )
+
+    accepted = client.post(
+        "/api/tracking/token-only-company/events",
+        json={"rid": "run-token-only", "pid": "skill-a", "evts": [{"e": "wf_start", "ts": 1}]},
+        headers={"X-Tracking-Token": "token-only-secret"},
+    )
+    assert accepted.status_code == 202
+
+    companies = client.get("/api/v1/tracking/companies")
+    assert companies.status_code == 200
+    row = next((r for r in companies.json()["companies"] if r["company"] == "token-only-company"), None)
+    assert row is not None
+    assert row["workspace_id"] == "wrk_local"
+    assert row["run_count"] == 1
+    assert row["last_seen"] > 0
+
+
+def test_tracking_companies_hides_other_workspace(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    db_set(
+        "tracking_tokens",
+        "other-workspace-company",
+        {
+            "token": "other-workspace-secret",
+            "company": "other-workspace-company",
+            "workspace_id": "wrk_other",
+            "version": "1.0.0",
+        },
+    )
+
+    accepted = client.post(
+        "/api/tracking/other-workspace-company/events",
+        json={"rid": "run-other", "pid": "skill-b", "evts": [{"e": "wf_start", "ts": 1}]},
+        headers={"X-Tracking-Token": "other-workspace-secret"},
+    )
+    assert accepted.status_code == 202
+
+    companies = client.get("/api/v1/tracking/companies")
+    assert companies.status_code == 200
+    assert all(row["company"] != "other-workspace-company" for row in companies.json()["companies"])
 
 
 def test_publish_rejects_path_traversal():
