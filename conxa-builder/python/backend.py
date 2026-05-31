@@ -22,6 +22,7 @@ import os
 import sys
 import threading
 import traceback
+import urllib.error
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 from typing import Any, Callable
@@ -319,6 +320,19 @@ class Backend:
         try:
             with urllib.request.urlopen(req, timeout=180) as resp:
                 uploaded = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 413:
+                result = dict(result)
+                result["cloud_upload_error"] = "installer_upload_too_large"
+                sink(
+                    {
+                        "kind": "installer_build",
+                        "message": "Installer upload skipped: cloud rejected the file as too large. The local installer still contains cloud tracking.",
+                        "warning": True,
+                    }
+                )
+                return result
+            raise _CommandError("installer_upload_failed", f"Installer upload failed: {exc}") from exc
         except Exception as exc:
             raise _CommandError("installer_upload_failed", f"Installer upload failed: {exc}") from exc
         result = dict(result)

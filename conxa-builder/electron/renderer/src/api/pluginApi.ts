@@ -99,6 +99,7 @@ export type InstallerBuildResult = {
   runtime_version: string
   cloud_download_url?: string
   cloud_sha256?: string
+  cloud_upload_error?: string
 }
 
 export type TrackingEvent = {

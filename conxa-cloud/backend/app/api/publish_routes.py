@@ -242,7 +242,7 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
     slug = _validate_slug(slug)
     _assert_owner(slug, principal.workspace_id)
 
-    max_bytes = 250 * 1024 * 1024
+    max_bytes = settings.build_artifact_upload_max_bytes
     cl = request.headers.get("content-length")
     if cl and cl.isdigit() and int(cl) > max_bytes:
         raise HTTPException(status_code=413, detail="installer_too_large")

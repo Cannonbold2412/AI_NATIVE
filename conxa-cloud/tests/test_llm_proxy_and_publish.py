@@ -168,6 +168,16 @@ def test_installer_upload_and_public_download():
     assert dl.headers["X-Conxa-SHA256"] == sha
 
 
+def test_installer_upload_allows_build_artifact_larger_than_json_cap():
+    payload = b"MZ" + (b"x" * (settings.max_json_body_bytes + 1024))
+    up = client.post(
+        "/api/v1/plugins/big-dl-test/installer/upload?filename=Big-Setup.exe&version=1.2.0",
+        content=payload,
+    )
+    assert up.status_code == 200, up.text
+    assert up.json()["size"] == len(payload)
+
+
 def test_installer_download_missing_is_404():
     r = client.get("/api/v1/installers/nope-not-here")
     assert r.status_code == 404

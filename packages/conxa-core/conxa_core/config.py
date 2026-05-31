@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     cors_preview_origin_regex: str = r"https://.*\.vercel\.app"
     max_json_body_bytes: int = 1_000_000
+    build_artifact_upload_max_bytes: int = 250 * 1024 * 1024
 
     # Clerk authentication. Local development leaves this disabled; production
     # deployments should set SKILL_AUTH_REQUIRED=true and the Clerk values below.

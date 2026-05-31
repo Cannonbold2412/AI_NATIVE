@@ -8,6 +8,8 @@ services:
     startCommand: bash start.sh
     healthCheckPath: /healthz
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
       - key: SKILL_AUTH_REQUIRED
         value: true
       - key: SKILL_DATABASE_URL

@@ -30,6 +30,11 @@ PUBLIC_PATH_PREFIXES = (
     "/api/v1/updates/",
 )
 
+BUILD_ARTIFACT_UPLOAD_PATHS = (
+    "/api/v1/plugins/publish",
+    "/installer/upload",
+)
+
 
 def _request_id(request: Request) -> str:
     rid = request.headers.get("x-request-id", "").strip()
@@ -45,6 +50,13 @@ def _is_public_path(path: str, method: str = "GET") -> bool:
     if method.upper() == "POST" and normalized.endswith("/events"):
         return any(normalized.startswith(p) for p in PUBLIC_TRACKING_EVENT_PREFIXES)
     return False
+
+
+def _body_limit_for_path(path: str) -> int:
+    normalized = path.rstrip("/") or "/"
+    if normalized.endswith(BUILD_ARTIFACT_UPLOAD_PATHS) or normalized == "/api/v1/plugins/publish":
+        return settings.build_artifact_upload_max_bytes
+    return settings.max_json_body_bytes
 
 
 def _bearer_token(request: Request) -> str:
@@ -101,7 +113,7 @@ class ProductionRequestMiddleware(BaseHTTPMiddleware):
                 size = int(content_length)
             except ValueError:
                 size = 0
-            if size > settings.max_json_body_bytes:
+            if size > _body_limit_for_path(request.url.path):
                 return JSONResponse(
                     {"detail": "request_body_too_large", "request_id": rid},
                     status_code=413,
