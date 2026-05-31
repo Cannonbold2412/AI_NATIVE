@@ -43,6 +43,8 @@ export type SkillPackageWorkflowSummary = {
 
 export type SkillPackageSummary = {
   package_name: string
+  package_folder?: string
+  package_path?: string
   modified_at: number
   workflows: SkillPackageWorkflowSummary[]
   files: string[]

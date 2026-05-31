@@ -191,6 +191,17 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "renderer", "dist", "index.html"));
   }
 
+  // The application menu is suppressed (Menu.setApplicationMenu(null)), which also
+  // strips the default F12 / Ctrl+Shift+I DevTools accelerators. Re-register them in dev.
+  if (IS_DEV) {
+    mainWindow.webContents.on("before-input-event", (_event, input) => {
+      const isToggle =
+        input.key === "F12" ||
+        (input.control && input.shift && input.key.toLowerCase() === "i");
+      if (isToggle) mainWindow.webContents.toggleDevTools();
+    });
+  }
+
   const sendMaximizeState = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("window:maximized", mainWindow.isMaximized());

@@ -51,7 +51,7 @@ import {
 } from 'lucide-react'
 
 const ROOT_FILE_ORDER = [
-  'plugin.config.json', 'README.md', 'CLAUDE.md', 'Claude.md', 'index.md', 'LICENSE',
+  'plugin.json', 'plugin.config.json', 'README.md', 'CLAUDE.md', 'Claude.md', 'index.md', 'LICENSE',
   'schema.json', 'package.json', 'index.js', 'skill.json', 'README.md', 'index.json',
 ]
 const SKILL_FILE_ORDER = ['SKILL.md', 'execution.json', 'recovery.json', 'input.json', 'manifest.json']
@@ -414,12 +414,14 @@ export function SkillPackagesPage() {
       : new Blob([activeSource]).size
     : 0
 
-  async function handleOpenFolder(packageName: string) {
-    setOpeningFolder(packageName)
+  async function handleOpenFolder(pkg: SkillPackageSummary) {
+    setOpeningFolder(pkg.package_name)
     try {
       const sep = bundleRoot.includes('\\') ? '\\' : '/'
-      const folderPath = bundleRoot ? `${bundleRoot}${sep}${packageName}` : packageName
-      await window.conxa.openExternal(`file://${folderPath}`)
+      const folderPath = pkg.package_path
+        ?? (bundleRoot ? `${bundleRoot}${sep}${pkg.package_folder ?? pkg.package_name}` : pkg.package_folder ?? pkg.package_name)
+      const fileUrl = `file:///${folderPath.replace(/\\/g, '/')}`
+      await window.conxa.openExternal(fileUrl)
     } catch (err) {
       toast.error(errorMessage(err, 'Could not open package folder.'))
     } finally {
@@ -764,7 +766,7 @@ export function SkillPackagesPage() {
                                     className="cursor-pointer text-zinc-400 hover:bg-white/[0.08] hover:text-white"
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      void handleOpenFolder(pkg.package_name)
+                                      void handleOpenFolder(pkg)
                                     }}
                                     disabled={busy}
                                   >
