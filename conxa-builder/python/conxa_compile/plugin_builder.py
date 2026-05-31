@@ -811,11 +811,16 @@ def _write_skill_packs_format(
     from conxa_core.config import settings
 
     company      = bundle_slug
-    api_base     = (conxa_api_url or os.environ.get("CONXA_API_URL", "https://api.conxa.io")).rstrip("/")
+    api_base     = (
+        conxa_api_url
+        or os.environ.get("CONXA_API_URL")
+        or os.environ.get("CONXA_CLOUD_API")
+        or "https://apis.conxa.in"
+    ).rstrip("/")
     tracking_base = os.environ.get("CONXA_TRACKING_API_URL", api_base).rstrip("/")
     tracking_events_url = os.environ.get("CONXA_TRACKING_EVENTS_URL", "").strip()
     if not tracking_events_url:
-        tracking_events_url = f"{tracking_base}/tracking/{company}/events"
+        tracking_events_url = f"{tracking_base}/api/tracking/{company}/events"
     skill_packs  = settings.data_dir / "skill-packs" / company
 
     skill_packs.mkdir(parents=True, exist_ok=True)
@@ -924,7 +929,7 @@ def _write_skill_packs_format(
     # In local dev (no secret, no explicit URL overrides), point to the local API server
     # so the dashboard at localhost receives run data immediately.
     _explicit_url  = os.environ.get("CONXA_TRACKING_EVENTS_URL", "").strip()
-    _explicit_base = os.environ.get("CONXA_API_URL", "").strip()
+    _explicit_base = (os.environ.get("CONXA_API_URL", "") or os.environ.get("CONXA_CLOUD_API", "")).strip()
     if not _tracking_secret and not _explicit_url and not _explicit_base:
         tracking_events_url = f"http://127.0.0.1:{settings.port}/api/tracking/{company}/events"
 

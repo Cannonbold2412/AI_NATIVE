@@ -251,6 +251,9 @@ export function BuildInstallerPage() {
                     {installerOutputPath ? (
                       <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">{installerOutputPath}</p>
                     ) : null}
+                    {currentResult?.cloud_download_url ? (
+                      <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">{currentResult.cloud_download_url}</p>
+                    ) : null}
                   </div>
                 ) : null}
                 {activeError ? (

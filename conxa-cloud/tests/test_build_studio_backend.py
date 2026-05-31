@@ -81,6 +81,84 @@ def test_proxy_router_injection_swaps_singleton(backend, monkeypatch):
     assert isinstance(core_llm.get_router(), LLMProxyClient)
 
 
+def test_installer_publish_rewrites_pack_with_cloud_tracking(backend, monkeypatch, tmp_path):
+    import urllib.request
+
+    b, _out = backend
+    from conxa_core.config import settings
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    b._cloud_api = "https://apis.conxa.in"
+    b._auth = SimpleNamespace(get_token=lambda: "studio-token")
+
+    packs_dir = tmp_path / "skill-packs" / "render"
+    packs_dir.mkdir(parents=True)
+    (packs_dir / "pack.json").write_text(
+        json.dumps(
+            {
+                "company": "render",
+                "company_display": "Render",
+                "skill_pack_version": "0.1.0",
+                "target_url": "https://dashboard.render.com",
+                "protected_url": "https://dashboard.render.com/",
+                "skills": ["delete-a-service"],
+                "tracking": {"tracking_url": "http://127.0.0.1:8000/api/tracking/render/events"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    skill_dir = packs_dir / "delete-a-service"
+    skill_dir.mkdir()
+    (skill_dir / "execution.json").write_text("[]", encoding="utf-8")
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "tracking": {
+                        "enabled": True,
+                        "tracking_url": "https://internal.example/api/tracking/render/events",
+                        "tracking_token": "cloud-token",
+                        "company_id": "render",
+                        "schema_version": 1,
+                        "protocol_version": 1,
+                    },
+                    "workspace_id": "wrk_123",
+                    "published_at": 123.0,
+                }
+            ).encode("utf-8")
+
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["auth"] = req.headers.get("Authorization")
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    logs: list[dict] = []
+
+    b._publish_skill_pack_for_installer(
+        company_slug="render",
+        plugin=SimpleNamespace(name="Render", target_url="https://dashboard.render.com", protected_url="https://dashboard.render.com/"),
+        sink=logs.append,
+    )
+
+    rewritten = json.loads((packs_dir / "pack.json").read_text(encoding="utf-8"))
+    assert seen["url"] == "https://apis.conxa.in/api/v1/plugins/publish"
+    assert seen["auth"] == "Bearer studio-token"
+    assert rewritten["tracking"]["tracking_url"] == "https://apis.conxa.in/api/tracking/render/events"
+    assert rewritten["tracking"]["tracking_token"] == "cloud-token"
+    assert rewritten["sync_endpoint"] == "https://apis.conxa.in/api/v1/skill-packs/render/delta"
+
+
 def test_auth_stop_recording_marks_plugin_ready(backend, monkeypatch, tmp_path):
     b, _out = backend
     globals_ = b.cmd_stop_recording.__globals__

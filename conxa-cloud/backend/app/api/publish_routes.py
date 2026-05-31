@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import secrets
 import time
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from conxa_core.config import settings
 from conxa_core.db import db_get, db_set
+from conxa_core.storage.plugin_store import create_plugin, list_plugins, save_plugin
 from app.services.saas import ensure_principal, principal_from_request
 
 router = APIRouter(prefix="/plugins", tags=["publish"])
@@ -44,6 +46,9 @@ class PublishFile(BaseModel):
 
 class PublishBody(BaseModel):
     slug: str = Field(..., min_length=1, max_length=64)
+    display_name: str = Field(default="", max_length=128)
+    target_url: str = Field(default="")
+    protected_url: str = Field(default="")
     skill_pack_version: str = Field(..., min_length=1, max_length=32)
     skills: list[str] = Field(default_factory=list)
     files: list[PublishFile] = Field(default_factory=list)
@@ -90,6 +95,65 @@ def _assert_owner(slug: str, workspace_id: str) -> None:
         db_set(_OWNERS_NS, slug, {"workspace_id": workspace_id, "claimed_at": time.time()})
 
 
+def _tracking_token(slug: str, workspace_id: str, version: str) -> str:
+    existing = db_get("tracking_tokens", slug)
+    if isinstance(existing, dict) and existing.get("token"):
+        token = str(existing["token"])
+    else:
+        token = secrets.token_urlsafe(32)
+    db_set(
+        "tracking_tokens",
+        slug,
+        {
+            "token": token,
+            "version": version,
+            "workspace_id": workspace_id,
+            "updated_at": time.time(),
+        },
+    )
+    return token
+
+
+def _api_base(request: Request) -> str:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+    if forwarded_proto and forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def _upsert_published_plugin(body: PublishBody, workspace_id: str) -> None:
+    name = body.display_name.strip() or body.slug
+    target_url = body.target_url.strip() or "https://example.com"
+    protected_url = body.protected_url.strip()
+    existing = next(
+        (
+            plugin
+            for plugin in list_plugins(workspace_id=workspace_id)
+            if plugin.slug == body.slug or plugin.name.lower() == name.lower()
+        ),
+        None,
+    )
+    if existing is None:
+        plugin = create_plugin(
+            name=name,
+            target_url=target_url,
+            protected_url=protected_url,
+            workspace_id=workspace_id,
+        )
+        plugin = plugin.model_copy(update={"slug": body.slug, "status": "ready"})
+    else:
+        plugin = existing.model_copy(
+            update={
+                "name": name,
+                "target_url": target_url or existing.target_url,
+                "protected_url": protected_url or existing.protected_url,
+                "status": "ready",
+            }
+        )
+    save_plugin(plugin)
+
+
 # ---------------------------------------------------------------------------
 # Publish skill pack data
 # ---------------------------------------------------------------------------
@@ -103,6 +167,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
 
     packs_dir = _skill_packs_dir(slug)
     packs_dir.mkdir(parents=True, exist_ok=True)
+    pack_path = packs_dir / "pack.json"
 
     written = 0
     for f in body.files:
@@ -118,22 +183,47 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
         tmp.replace(target)
         written += 1
 
-    pack = {
-        "skill_pack_version": body.skill_pack_version,
-        "skills": list(body.skills),
-        "workspace_id": principal.workspace_id,
-        "published_at": time.time(),
+    published_at = time.time()
+    tracking = {
+        "enabled": True,
+        "tracking_url": f"{_api_base(request)}/api/tracking/{slug}/events",
+        "tracking_token": _tracking_token(slug, principal.workspace_id, body.skill_pack_version),
+        "company_id": slug,
+        "schema_version": 1,
+        "protocol_version": 1,
     }
-    pack_path = packs_dir / "pack.json"
+    if pack_path.is_file():
+        try:
+            pack = json.loads(pack_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pack = {}
+    else:
+        pack = {}
+    pack.update(
+        {
+            "company": pack.get("company") or slug,
+            "company_display": body.display_name.strip() or pack.get("company_display") or slug,
+            "skill_pack_version": body.skill_pack_version,
+            "skills": list(body.skills),
+            "workspace_id": principal.workspace_id,
+            "published_at": published_at,
+            "sync_endpoint": f"{_api_base(request)}/api/v1/skill-packs/{slug}/delta",
+            "tracking": tracking,
+        }
+    )
     tmp = pack_path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(pack_path)
+    _upsert_published_plugin(body, principal.workspace_id)
 
     return {
         "slug": slug,
         "version": body.skill_pack_version,
         "files_written": written,
         "sync_url": f"/api/v1/skill-packs/{slug}/delta",
+        "tracking": tracking,
+        "workspace_id": principal.workspace_id,
+        "published_at": published_at,
     }
 
 

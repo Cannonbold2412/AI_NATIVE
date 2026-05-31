@@ -120,7 +120,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 // On cold start: if a pending update is ready, apply it via update.bat and exit
 // so the next invocation picks up the new binary. Otherwise, check the cloud
 // manifest and download in the background (applied on the next cold start).
-const CONXA_API = process.env.CONXA_API_URL || "https://api.conxa.in";
+const CONXA_API = process.env.CONXA_API_URL || "https://apis.conxa.in";
 const RUNTIME_UPDATE_CACHE = path.join(CACHE_DIR, "runtime-update-cache.json");
 const RUNTIME_UPDATE_PENDING = path.join(CACHE_DIR, "runtime-update-pending.json");
 
@@ -648,6 +648,7 @@ async function _handleTool(name, args) {
       plugin_id:       primary.entry.slug,
       plugin_version:  primary.entry.manifest?.version || "0",
       company_id:      primary.entry.company,
+      log,
     });
     const _runId      = `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const _runTracker = _tracker.forRun(_runId, { uid: "", wid: "" });
@@ -844,7 +845,7 @@ function _handleAuthCallback(callbackUrl) {
 }
 
 async function _phonehome() {
-  const CONXA_API = process.env.CONXA_API_URL || "https://api.conxa.io";
+  const CONXA_API = process.env.CONXA_API_URL || "https://apis.conxa.in";
   const companies = [...new Set(Object.values(skillIndex).map(s => s.company))];
   const body = JSON.stringify({
     runtime_version: RUNTIME_VERSION,

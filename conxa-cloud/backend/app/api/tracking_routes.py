@@ -9,6 +9,7 @@ GET  /api/v1/tracking/{company}/runs/{run_id} — single run event timeline
 from __future__ import annotations
 
 import time
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -27,19 +28,32 @@ def current_principal(request: Request) -> Principal:
     return principal
 
 
-def _verify_token(company: str, token: str) -> bool:
+def _verify_token(company: str, token: str) -> dict[str, Any] | None:
     """Verify the tracking token for a company.
 
-    In local dev (no secret configured) all tokens are accepted so plugins
-    work without any configuration.  In production the token is stored in
-    kv_store at build time and compared here.
+    Published packs get a server-issued token stored in kv_store. Local dev
+    without a stored token or secret still accepts telemetry for convenience.
     """
-    if not settings.tracking_hmac_secret:
-        return True  # local dev — skip verification
     stored = db_get("tracking_tokens", company)
-    if not stored:
-        return False
-    return stored.get("token", "") == token
+    if isinstance(stored, dict) and stored.get("token"):
+        expected = str(stored.get("token") or "")
+        if token and secrets.compare_digest(expected, token):
+            return stored
+        return None
+    if not settings.tracking_hmac_secret:
+        return {"workspace_id": ""}
+    return None
+
+
+def _batches_for_workspace(value: Any, workspace_id: str) -> list[dict]:
+    batches: list[dict] = value if isinstance(value, list) else [value] if isinstance(value, dict) else []
+    if not workspace_id:
+        return batches
+    return [
+        batch
+        for batch in batches
+        if not batch.get("workspace_id") or batch.get("workspace_id") == workspace_id
+    ]
 
 
 def _run_summary(run_id: str, batches: list[dict]) -> dict:
@@ -73,7 +87,7 @@ def _run_summary(run_id: str, batches: list[dict]) -> dict:
             failure_code = evt.get("fc")
 
     return {
-        "run_id":         run_id,
+        "run_id":         meta.get("run_id", run_id),
         "plugin_id":      meta.get("plugin_id", ""),
         "plugin_ver":     meta.get("plugin_ver", ""),
         "runtime_ver":    meta.get("runtime_ver", ""),
@@ -95,7 +109,8 @@ def _run_summary(run_id: str, batches: list[dict]) -> dict:
 async def ingest_events(company: str, request: Request) -> dict[str, Any]:
     """Accept a compact event batch from the runtime. Fast 202 — never blocks execution."""
     token = request.headers.get("x-tracking-token", "")
-    if not _verify_token(company, token):
+    token_record = _verify_token(company, token)
+    if token_record is None:
         raise HTTPException(status_code=401, detail="invalid_tracking_token")
 
     body = await request.json()
@@ -112,6 +127,7 @@ async def ingest_events(company: str, request: Request) -> dict[str, Any]:
         "runtime_ver": body.get("rv", ""),
         "uid":         body.get("uid", ""),
         "wid":         body.get("wid", ""),
+        "workspace_id": token_record.get("workspace_id", ""),
         "server_ts":   time.time(),
         "events":      body.get("evts", []),
         "schema_v":    body.get("sv", 1),
@@ -125,17 +141,15 @@ def list_runs(
     company: str,
     limit: int = 50,
     offset: int = 0,
-    _principal: Principal = Depends(current_principal),
+    principal: Principal = Depends(current_principal),
 ) -> dict[str, Any]:
     """Return paginated run summaries for a company."""
     pairs = db_list_kv(f"tracking/{company}")
     summaries = []
     for run_id, batches in pairs:
-        if isinstance(batches, list) and batches:
-            summaries.append(_run_summary(run_id, batches))
-        elif isinstance(batches, dict):
-            # single-item stored as dict (file-backend edge case)
-            summaries.append(_run_summary(run_id, [batches]))
+        scoped = _batches_for_workspace(batches, principal.workspace_id)
+        if scoped:
+            summaries.append(_run_summary(run_id, scoped))
 
     # newest first by server_ts
     summaries.sort(key=lambda s: s.get("server_ts", 0), reverse=True)
@@ -146,14 +160,16 @@ def list_runs(
 def get_run_timeline(
     company: str,
     run_id: str,
-    _principal: Principal = Depends(current_principal),
+    principal: Principal = Depends(current_principal),
 ) -> dict[str, Any]:
     """Return the flattened event timeline for a single run."""
     data = db_get(f"tracking/{company}", run_id)
     if not data:
         raise HTTPException(status_code=404, detail="run_not_found")
 
-    batches: list[dict] = data if isinstance(data, list) else [data]
+    batches = _batches_for_workspace(data, principal.workspace_id)
+    if not batches:
+        raise HTTPException(status_code=404, detail="run_not_found")
     events: list[dict] = []
     for b in batches:
         events.extend(b.get("events", []))
@@ -168,5 +184,6 @@ def get_run_timeline(
         "runtime_ver": meta.get("runtime_ver", ""),
         "uid":         meta.get("uid", ""),
         "wid":         meta.get("wid", ""),
+        "workspace_id": meta.get("workspace_id", ""),
         "timeline":    events,
     }

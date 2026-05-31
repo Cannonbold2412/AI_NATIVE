@@ -67,6 +67,8 @@ Section "SkillPacks" SEC_SKILLS
   SetOutPath "${SKILL_DIR}"
   ; Copy company skill pack — preserves other companies' directories
   File /r "${STAGING_DIR}\skill-packs\${COMPANY_SLUG}\*.*"
+  ; Force runtime.exe to rescan the newly installed pack instead of using stale AppData cache.
+  Delete "$APPDATA\Conxa\cache\manifests.json"
 SectionEnd
 
 ; ── Deep-link registration ─────────────────────────────────────────────────────

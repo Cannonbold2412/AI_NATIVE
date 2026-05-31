@@ -31,6 +31,12 @@ function mapErrorToCode(err) {
 function createTracker(trackingConfig, runtimeContext) {
   const cfg = trackingConfig  || {};
   const ctx = runtimeContext  || {};
+  const log = typeof ctx.log === "function" ? ctx.log : null;
+
+  function _warn(msg, extra) {
+    if (!log) return;
+    try { log("warn", msg, extra || {}); } catch (_) {}
+  }
 
   // Disabled: return a no-op tracker so callers never branch
   if (!cfg.enabled) {
@@ -86,6 +92,7 @@ function createTracker(trackingConfig, runtimeContext) {
       try {
         trackingUrl = new url.URL(cfg.tracking_url);
       } catch (_) {
+        _warn("tracking_invalid_url", { url: cfg.tracking_url || "" });
         return resolve();
       }
 
@@ -105,14 +112,25 @@ function createTracker(trackingConfig, runtimeContext) {
 
       try {
         const req = lib.request(options, (res) => {
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            _warn("tracking_http_status", { status: res.statusCode, host: trackingUrl.hostname, path: trackingUrl.pathname });
+          }
           res.resume();
           resolve();
         });
-        req.on("error", resolve);
-        req.setTimeout(5000, () => { req.destroy(); resolve(); });
+        req.on("error", (err) => {
+          _warn("tracking_request_failed", { host: trackingUrl.hostname, error: err && err.message ? err.message : String(err) });
+          resolve();
+        });
+        req.setTimeout(5000, () => {
+          _warn("tracking_request_timeout", { host: trackingUrl.hostname, path: trackingUrl.pathname });
+          req.destroy();
+          resolve();
+        });
         req.write(payload);
         req.end();
       } catch (_) {
+        _warn("tracking_request_failed", { host: trackingUrl.hostname, error: "request_setup_failed" });
         resolve();
       }
     });

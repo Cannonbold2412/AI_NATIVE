@@ -5,7 +5,7 @@ const path   = require("path");
 const https  = require("https");
 
 const SERVICE    = "conxa";
-const CONXA_API  = process.env.CONXA_API_URL || "https://api.conxa.in";
+const CONXA_API  = process.env.CONXA_API_URL || "https://apis.conxa.in";
 
 // keytar loaded at runtime (native .node file alongside exe or regular require)
 let _keytar = null;

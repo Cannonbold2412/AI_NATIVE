@@ -97,6 +97,8 @@ export type InstallerBuildResult = {
   plugin_id: string
   version: string
   runtime_version: string
+  cloud_download_url?: string
+  cloud_sha256?: string
 }
 
 export type TrackingEvent = {

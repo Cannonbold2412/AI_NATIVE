@@ -23,7 +23,7 @@ import sys
 import threading
 import traceback
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlencode, urlparse
 from typing import Any, Callable
 
 # Make this `python` dir importable (for the local `services` package and the
@@ -193,6 +193,139 @@ class Backend:
             on_api_call=_on_api_call,
         )
         core_llm.set_router(client)
+
+    def _cloud_api_base(self) -> str:
+        return (self._cloud_api or "https://apis.conxa.in").rstrip("/")
+
+    def _auto_publish_enabled(self) -> bool:
+        if os.environ.get("CONXA_DISABLE_AUTO_PUBLISH") == "1":
+            return False
+        parsed = urlparse(self._cloud_api_base())
+        return parsed.hostname not in {"127.0.0.1", "localhost", ""}
+
+    def _cloud_token(self) -> str:
+        try:
+            token = self._auth_service().get_token()
+        except Exception as exc:
+            raise _CommandError(
+                "cloud_auth_required",
+                "Sign in to Conxa Build Studio before building a cloud-connected installer.",
+            ) from exc
+        if not token:
+            raise _CommandError(
+                "cloud_auth_required",
+                "Sign in to Conxa Build Studio before building a cloud-connected installer.",
+            )
+        return token
+
+    def _publish_skill_pack_for_installer(
+        self,
+        *,
+        company_slug: str,
+        plugin: Any,
+        sink: Callable[[dict[str, Any]], None],
+    ) -> None:
+        """Publish the built skill pack and rewrite local pack.json with cloud tracking."""
+        from conxa_core.config import settings as _settings
+        import base64
+        import urllib.request
+
+        if not self._auto_publish_enabled():
+            sink({"kind": "installer_build", "message": "Cloud publish skipped for local API base"})
+            return
+
+        data_dir = Path(_settings.data_dir)
+        packs_dir = data_dir / "skill-packs" / company_slug
+        pack_path = packs_dir / "pack.json"
+        if not pack_path.is_file():
+            raise _CommandError("pack_not_built", f"No built skill pack for {company_slug}")
+
+        pack = json.loads(pack_path.read_text(encoding="utf-8"))
+        files: list[dict[str, str]] = []
+        for fpath in sorted(packs_dir.rglob("*")):
+            if fpath.is_file():
+                files.append(
+                    {
+                        "path": fpath.relative_to(packs_dir).as_posix(),
+                        "content_base64": base64.b64encode(fpath.read_bytes()).decode("ascii"),
+                    }
+                )
+
+        cloud_api = self._cloud_api_base()
+        body = json.dumps(
+            {
+                "slug": company_slug,
+                "display_name": str(getattr(plugin, "name", "") or company_slug),
+                "target_url": str(getattr(plugin, "target_url", "") or pack.get("target_url") or ""),
+                "protected_url": str(getattr(plugin, "protected_url", "") or pack.get("protected_url") or ""),
+                "skill_pack_version": str(pack.get("skill_pack_version") or "0.1.0"),
+                "skills": list(pack.get("skills") or []),
+                "files": files,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(f"{cloud_api}/api/v1/plugins/publish", data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", f"Bearer {self._cloud_token()}")
+        sink({"kind": "installer_build", "message": f"Publishing {company_slug} skill pack to Conxa Cloud..."})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                published = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            raise _CommandError("cloud_publish_failed", f"Cloud publish failed: {exc}") from exc
+
+        tracking = dict(published.get("tracking") or {})
+        tracking["tracking_url"] = f"{cloud_api}/api/tracking/{company_slug}/events"
+        if not tracking.get("tracking_token"):
+            raise _CommandError("cloud_publish_failed", "Cloud publish did not return a tracking token.")
+
+        pack["tracking"] = tracking
+        pack["sync_endpoint"] = f"{cloud_api}/api/v1/skill-packs/{company_slug}/delta"
+        pack["published"] = {
+            "cloud_api": cloud_api,
+            "workspace_id": str(published.get("workspace_id") or ""),
+            "published_at": published.get("published_at"),
+        }
+        pack_path.write_text(json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8")
+        sink({"kind": "installer_build", "message": "Cloud tracking embedded in pack.json"})
+
+    def _upload_installer_for_download(
+        self,
+        *,
+        company_slug: str,
+        result: dict[str, Any],
+        sink: Callable[[dict[str, Any]], None],
+    ) -> dict[str, Any]:
+        import urllib.request
+
+        if not self._auto_publish_enabled():
+            return result
+
+        installer_path = Path(str(result.get("installer_path") or ""))
+        if not installer_path.is_file():
+            raise _CommandError("installer_upload_failed", f"Installer not found: {installer_path}")
+
+        cloud_api = self._cloud_api_base()
+        params = urlencode(
+            {
+                "filename": str(result.get("filename") or installer_path.name),
+                "version": str(result.get("version") or "0.0.0"),
+            }
+        )
+        url = f"{cloud_api}/api/v1/plugins/{quote(company_slug)}/installer/upload?{params}"
+        req = urllib.request.Request(url, data=installer_path.read_bytes(), method="POST")
+        req.add_header("Content-Type", "application/octet-stream")
+        req.add_header("Authorization", f"Bearer {self._cloud_token()}")
+        sink({"kind": "installer_build", "message": "Uploading installer to Conxa Cloud..."})
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                uploaded = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            raise _CommandError("installer_upload_failed", f"Installer upload failed: {exc}") from exc
+        result = dict(result)
+        result["cloud_download_url"] = f"{cloud_api}{uploaded.get('download_url', '')}"
+        result["cloud_sha256"] = uploaded.get("sha256", "")
+        sink({"kind": "installer_build", "message": "Installer uploaded to Conxa Cloud"})
+        return result
 
     # -- command handlers ----------------------------------------------------
 
@@ -561,9 +694,10 @@ class Backend:
                 "Refusing to build: auth.json found under the built skill pack.",
             )
 
-        return build_installer(
-            plugin_id, company_slug=company_slug, realtime_sink=_event_sink(rid)
-        )
+        sink = _event_sink(rid)
+        self._publish_skill_pack_for_installer(company_slug=company_slug, plugin=plugin, sink=sink)
+        result = build_installer(plugin_id, company_slug=company_slug, realtime_sink=sink)
+        return self._upload_installer_for_download(company_slug=company_slug, result=result, sink=sink)
 
     def cmd_test_workflow(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:
         """Run a built workflow end-to-end against the local Conxa runtime.

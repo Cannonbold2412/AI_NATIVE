@@ -8,6 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conxa_core.config import settings
+from conxa_core.db import db_get
+from conxa_core.storage.plugin_store import list_plugins
 from app.main import app
 from app.services import llm_metering
 
@@ -73,21 +75,72 @@ def test_proxy_enforces_quota(monkeypatch):
 
 def test_publish_and_sync_roundtrip():
     files = [
+        {
+            "path": "pack.json",
+            "content_base64": base64.b64encode(
+                b'{"company":"acme-test","tracking":{"tracking_url":"http://127.0.0.1:8000/api/tracking/acme-test/events"}}'
+            ).decode(),
+        },
         {"path": "deploy/execution.json", "content_base64": base64.b64encode(b'{"steps":[]}').decode()},
     ]
     r = client.post(
         "/api/v1/plugins/publish",
-        json={"slug": "acme-test", "skill_pack_version": "0.3.0", "skills": ["deploy"], "files": files},
+        json={
+            "slug": "acme-test",
+            "display_name": "Acme Test",
+            "target_url": "https://acme.test",
+            "protected_url": "https://acme.test/app",
+            "skill_pack_version": "0.3.0",
+            "skills": ["deploy"],
+            "files": files,
+        },
     )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["slug"] == "acme-test"
-    assert body["files_written"] == 1
+    assert body["files_written"] == 2
+    assert body["tracking"]["tracking_url"].endswith("/api/tracking/acme-test/events")
+    assert body["tracking"]["tracking_token"]
+    assert db_get("tracking_tokens", "acme-test")["workspace_id"] == "wrk_local"
+    assert any(p.slug == "acme-test" for p in list_plugins(workspace_id="wrk_local"))
 
     # The delta endpoint should now serve the published pack.
     d = client.get("/api/v1/skill-packs/acme-test/delta?since=0")
     assert d.status_code == 200
     assert d.json()["current_version"] == "0.3.0"
+
+
+def test_tracking_ingest_requires_published_token_and_lists_runs():
+    pub = client.post(
+        "/api/v1/plugins/publish",
+        json={"slug": "track-test", "skill_pack_version": "1.0.0", "skills": [], "files": []},
+    )
+    assert pub.status_code == 200, pub.text
+    token = pub.json()["tracking"]["tracking_token"]
+
+    denied = client.post(
+        "/api/tracking/track-test/events",
+        json={"rid": "run-denied", "evts": [{"e": "wf_start", "ts": 1}]},
+        headers={"X-Tracking-Token": "wrong"},
+    )
+    assert denied.status_code == 401
+
+    accepted = client.post(
+        "/api/tracking/track-test/events",
+        json={
+            "rid": "run-ok",
+            "pid": "delete-a-service",
+            "pv": "1.0.0",
+            "rv": "1.0.0",
+            "evts": [{"e": "wf_start", "ts": 1}, {"e": "wf_ok", "ts": 2, "dur": 10, "tot": 2, "rec": 0}],
+        },
+        headers={"X-Tracking-Token": token},
+    )
+    assert accepted.status_code == 202
+
+    runs = client.get("/api/v1/tracking/track-test/runs")
+    assert runs.status_code == 200
+    assert runs.json()["runs"][0]["run_id"] == "run-ok"
 
 
 def test_publish_rejects_path_traversal():
