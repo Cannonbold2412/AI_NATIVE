@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import urllib.parse
 from typing import Any
 
 from conxa_compile.compiler.action_semantics import action_name
@@ -10,7 +9,7 @@ from conxa_compile.compiler.build import _default_confidence_protocol, _merge_co
 from conxa_compile.compiler.decision_layer import rank_merged_anchors
 from conxa_compile.compiler.recovery_policy import merge_recovery_strategies_for_wait_shape
 from conxa_core.config import settings
-from conxa_compile.editor.assets import resolve_skill_asset
+from conxa_compile.editor.assets import asset_url, resolve_skill_asset
 from conxa_compile.editor.step_view import skill_step_for_destructive_check
 from conxa_compile.llm.anchor_vision_llm import VisionAnchorGenerationError, generate_anchors_for_step_or_raise
 from conxa_compile.policy.bundle import PolicyBundle, get_policy_bundle
@@ -33,8 +32,6 @@ def screenshot_items_for_skill(
     from conxa_core.storage.session_events import read_session_events
 
     events = read_session_events(session_id)
-    base = asset_base_url.rstrip("/")
-    sid_q = urllib.parse.quote(skill_id, safe="")
     out: list[dict[str, Any]] = []
 
     for idx, ev in enumerate(events):
@@ -56,8 +53,7 @@ def screenshot_items_for_skill(
         except (TypeError, ValueError):
             sequence = idx + 1
 
-        qs = urllib.parse.urlencode({"path": persisted_full})
-        preview_url = f"{base}/skills/{sid_q}/assets?{qs}"
+        preview_url = asset_url(persisted_full, asset_base_url=asset_base_url, skill_id=skill_id)
 
         out.append(
             {

@@ -31,12 +31,14 @@ class StepEditorDTO(BaseModel):
     action_type: str = ""
     action_payload: dict[str, Any] = Field(default_factory=dict)
     action_spec: dict[str, Any] = Field(default_factory=dict)
+    semantic_description: str = ""
     intent: str = ""
     final_intent: str = ""
     url: str = ""
     frame: dict[str, Any] = Field(default_factory=dict)
     target: dict[str, Any] = Field(default_factory=dict)
     selectors: dict[str, Any] = Field(default_factory=dict)
+    compiled_selectors: list[str] = Field(default_factory=list)
     anchors_signals: list[dict[str, Any]] = Field(default_factory=list)
     anchors_recovery: list[dict[str, Any]] = Field(default_factory=list)
     validation: dict[str, Any] = Field(default_factory=dict)

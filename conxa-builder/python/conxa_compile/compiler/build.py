@@ -844,13 +844,17 @@ def _build_compile_report(steps: list[SkillStep]) -> dict[str, Any]:
 
     from conxa_core.llm import get_router
     router = get_router()
-    if not router.pool:
-        raise RuntimeError(
-            "LLM router has no providers configured. Compile cannot produce a "
-            "trustworthy report without LLM verification. Set at least one "
-            "*_API_KEYS + *_ENABLED=true in .env."
-        )
-    router_stats = router.stats()
+    if hasattr(router, "pool"):
+        if not router.pool:
+            raise RuntimeError(
+                "LLM router has no providers configured. Compile cannot produce a "
+                "trustworthy report without LLM verification. Set at least one "
+                "*_API_KEYS + *_ENABLED=true in .env."
+            )
+        router_stats = router.stats()
+    else:
+        # Proxy client (Build Studio) — no local provider pool; stats not applicable.
+        router_stats = {"provider": "cloud_proxy"}
 
     return {
         "status": status,

@@ -69,8 +69,11 @@ def _fallback(inp: SemanticLLMInput) -> SemanticLLMOutput:
 
 
 def _call_provider(inp: SemanticLLMInput) -> SemanticLLMOutput | None:
-    if not settings.llm_text_endpoint:
-        return None
+    from conxa_core.llm import get_router
+    try:
+        get_router()
+    except RuntimeError:
+        return None  # no router configured — use deterministic fallback
     payload = {
         "task": "semantic_enrichment",
         "model": settings.llm_text_model or None,
@@ -96,7 +99,10 @@ def enrich_semantic(inp: SemanticLLMInput) -> SemanticLLMOutput:
             return SemanticLLMOutput.model_validate(cache[k])
         except Exception:
             pass
-    out = _call_provider(inp) or _fallback(inp)
+    try:
+        out = _call_provider(inp) or _fallback(inp)
+    except Exception:
+        out = _fallback(inp)
     cache[k] = out.model_dump(mode="json")
     _write_cache(cache)
     return out

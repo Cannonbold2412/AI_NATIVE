@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import urllib.parse
 from typing import Any
 
 from conxa_compile.anchors.schema import normalize_anchor_list
@@ -25,6 +24,7 @@ from conxa_compile.editor.action_registry import (
     default_action_value,
     is_supported_action,
 )
+from conxa_compile.editor.assets import asset_url
 from conxa_compile.editor.describe import describe_step
 from conxa_compile.editor.dto import StepEditorDTO, StepFlags, StepScreenshotDTO, SuggestionItem, WorkflowResponse
 from conxa_compile.editor.step_view import skill_step_for_destructive_check
@@ -124,6 +124,17 @@ def _step_url(step: dict[str, Any]) -> str:
     return str(context.get("page_url") or "").strip()
 
 
+def _compiled_selectors(step: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in step.get("compiled_selectors") or []:
+        selector = str(raw or "").strip()
+        if selector and selector not in seen:
+            out.append(selector)
+            seen.add(selector)
+    return out
+
+
 def _persisted_visual_path(rel: str, source_session_id: str) -> str:
     r = rel.strip().replace("\\", "/")
     if not r or ".." in r:
@@ -148,8 +159,7 @@ def _screenshot_dto(
         persisted = _persisted_visual_path(rel, source_session_id)
         if not persisted:
             return None
-        q = urllib.parse.urlencode({"path": persisted})
-        return f"{asset_base_url}/skills/{urllib.parse.quote(skill_id, safe='')}/assets?{q}"
+        return asset_url(persisted, asset_base_url=asset_base_url, skill_id=skill_id)
 
     return StepScreenshotDTO(
         full_url=u(str(visual.get("full_screenshot") or "")),
@@ -324,12 +334,14 @@ def step_to_dto(
         action_type=str(action_name(step)),
         action_payload=dict(step.get("action") or {}) if isinstance(step.get("action"), dict) else {"action": action_name(step)},
         action_spec=action_spec_dict(action_name(step)),
+        semantic_description=describe_step(step, step_index),
         intent=intent_top,
         final_intent=final_intent,
         url=_step_url(step),
         frame=dict(step.get("frame") or {}),
         target=dict(step.get("target") or {}),
         selectors=dict(signals.get("selectors") or {}),
+        compiled_selectors=_compiled_selectors(step),
         anchors_signals=[] if is_url_check else normalize_anchor_list(signals.get("anchors") or []),
         anchors_recovery=[] if is_url_check else normalize_anchor_list(recovery.get("anchors") or []),
         validation={
