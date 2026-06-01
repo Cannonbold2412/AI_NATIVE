@@ -335,9 +335,12 @@ def test_org_dashboard_sees_same_user_personal_publish(monkeypatch, tmp_path):
 
     diagnostics = client.get("/api/v1/tracking/diagnostics", headers=org_headers)
     assert diagnostics.status_code == 200
-    assert diagnostics.json()["workspace_id"] == "org_same"
-    assert diagnostics.json()["personal_workspace_id"] == "personal_user_same"
-    assert diagnostics.json()["same_user_personal_company_count"] == 1
+    diagnostics_body = diagnostics.json()
+    assert diagnostics_body["workspace_id"] == "org_same"
+    assert diagnostics_body["personal_workspace_id"] == "personal_user_same"
+    assert diagnostics_body["identity_source"] == "trusted_proxy"
+    assert diagnostics_body["proxy_identity_trusted"] is True
+    assert diagnostics_body["same_user_personal_company_count"] == 1
 
 
 def test_org_dashboard_cannot_see_other_user_personal_publish(monkeypatch, tmp_path):

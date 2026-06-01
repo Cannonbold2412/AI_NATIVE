@@ -73,6 +73,19 @@ class ProductRoutesTests(unittest.TestCase):
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["workspace"]["id"], "wrk_local")
 
+    def test_missing_proxy_secret_does_not_trust_proxy_headers(self) -> None:
+        client = self._client()
+        me = client.get(
+            "/api/v1/me",
+            headers={
+                "x-conxa-user-id": "user_123",
+                "x-conxa-org-id": "org_123",
+            },
+        )
+
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["workspace"]["id"], "wrk_local")
+
     def test_billing_subscription_local_fallback(self) -> None:
         client = self._client()
         res = client.get("/api/v1/billing/subscription")

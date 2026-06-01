@@ -393,6 +393,8 @@ export function DashboardPage() {
   const stats = useAnalytics(runs)
 
   const lastUpdated = dataUpdatedAt ? fmtRelative(dataUpdatedAt) : null
+  const diagnosticWorkspaceId = diagnosticsData?.workspace_id || meData?.workspace?.id || ''
+  const isPersonalWorkspace = diagnosticWorkspaceId.startsWith('personal_')
   const refreshDashboard = () => {
     void queryClient.invalidateQueries({ queryKey: ['tracking-companies'] })
     void queryClient.invalidateQueries({ queryKey: ['tracking-diagnostics'] })
@@ -460,6 +462,16 @@ export function DashboardPage() {
             {diagnosticsData ? (
               <p className="mt-1 text-[11px] text-zinc-700">
                 Visible plugins: {diagnosticsData.plugin_count} · Visible companies: {diagnosticsData.visible_company_count}
+              </p>
+            ) : null}
+            {diagnosticsData ? (
+              <p className="mt-1 text-[11px] text-zinc-700">
+                Identity: {diagnosticsData.identity_source} · Proxy trusted: {diagnosticsData.proxy_identity_trusted ? 'yes' : 'no'}
+              </p>
+            ) : null}
+            {isPersonalWorkspace ? (
+              <p className="mx-auto mt-3 max-w-md text-xs text-amber-300/80">
+                The backend is using a personal workspace. If you expected organization plugins or runs, configure the shared API proxy secret for the frontend and backend.
               </p>
             ) : null}
           </div>

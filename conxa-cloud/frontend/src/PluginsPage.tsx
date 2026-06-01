@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createPlugin, deletePlugin, fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
+import { fetchMe } from '@/api/productApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -140,8 +141,11 @@ type StatusFilter = typeof STATUS_FILTERS[number]
 export function PluginsPage() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['plugins'], queryFn: fetchPlugins, staleTime: 10_000 })
+  const meQuery = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: 60_000 })
   const refetch = () => qc.invalidateQueries({ queryKey: ['plugins'] })
   const plugins = normalizePluginList(q.data)
+  const workspace = meQuery.data?.workspace
+  const isPersonalWorkspace = Boolean(workspace?.id?.startsWith('personal_'))
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -207,6 +211,16 @@ export function PluginsPage() {
               <p className="max-w-xs text-xs text-zinc-500">
                 Build and install a plugin from Build Studio, then refresh this page after the cloud publish finishes.
               </p>
+              {workspace ? (
+                <p className="max-w-md text-[11px] text-zinc-600">
+                  Workspace: {workspace.name || workspace.slug} ({workspace.id})
+                </p>
+              ) : null}
+              {isPersonalWorkspace ? (
+                <p className="max-w-md text-xs text-amber-300/80">
+                  The backend is using a personal workspace. If this should show organization plugins, configure the shared API proxy secret for the frontend and backend.
+                </p>
+              ) : null}
               <CreatePluginDialog onCreated={refetch} />
             </CardContent>
           </Card>

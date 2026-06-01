@@ -19,6 +19,7 @@ Skill compiler single-flow editor: record actions, compile JSON, human-in-the-lo
    - `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`
    - `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
    - `API_ORIGIN`
+   - `CONXA_API_PROXY_SECRET`
 3. **This app**: `npm install` then `npm run dev`.
 4. **Open** `http://127.0.0.1:3000/` and run the flow in this order:
    - Start recording from a URL.
@@ -27,10 +28,12 @@ Skill compiler single-flow editor: record actions, compile JSON, human-in-the-lo
    - Recompile from session for the final package.
 
 The Next route handler under `app/api/v1/[...path]/route.ts` proxies `/api/v1/*` requests to `API_ORIGIN` and forwards the current Clerk session token.
+It also forwards a trusted server-only identity header set when `CONXA_API_PROXY_SECRET` matches the backend `SKILL_API_PROXY_SHARED_SECRET`; this lets the backend resolve the active Clerk organization workspace reliably.
 
 ### API base URL (production)
 
 - Set `API_ORIGIN` to your backend origin **without** a trailing slash, for example `https://api.example.com`.
+- Set `CONXA_API_PROXY_SECRET` to the same high-entropy value configured as `SKILL_API_PROXY_SHARED_SECRET` on the backend. Do not prefix it with `NEXT_PUBLIC_`.
 - The frontend always uses same-origin `/api/v1/*` calls; the Next handler forwards them upstream.
 
 ## Source layout (high level)

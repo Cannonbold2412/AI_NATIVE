@@ -383,6 +383,8 @@ export type TrackingDiagnosticsResponse = {
   workspace_id: string
   user_id: string
   personal_workspace_id: string
+  identity_source: 'trusted_proxy' | 'clerk_jwt' | 'local'
+  proxy_identity_trusted: boolean
   visible_workspace_ids: string[]
   visible_company_count: number
   plugin_count: number

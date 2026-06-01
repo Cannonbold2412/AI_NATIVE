@@ -42,6 +42,8 @@ class Principal:
     email: str | None = None
     name: str | None = None
     auth_provider: str = "local"
+    identity_source: str = "local"
+    proxy_identity_trusted: bool = False
 
     def public_user(self) -> dict[str, Any]:
         return {
@@ -183,6 +185,8 @@ def principal_from_request(request: Request) -> Principal:
                 workspace_name=proxy_identity.get("org_name") or "Workspace",
                 role=proxy_identity.get("org_role") or "basic_member",
                 auth_provider="clerk",
+                identity_source="trusted_proxy",
+                proxy_identity_trusted=True,
             )
         return Principal(
             user_id=LOCAL_USER_ID,
@@ -199,6 +203,7 @@ def principal_from_request(request: Request) -> Principal:
     org_id = str(proxy_identity.get("org_id") or auth.get("org_id") or personal_workspace_id(subject))
     workspace_slug = _slug_from_org_id(org_id)
     org_role = str(proxy_identity.get("org_role") or auth.get("org_role") or claims.get("org_role") or "basic_member")
+    identity_source = "trusted_proxy" if proxy_identity else "clerk_jwt"
     return Principal(
         user_id=subject,
         workspace_id=org_id,
@@ -208,6 +213,8 @@ def principal_from_request(request: Request) -> Principal:
         email=str(claims.get("email") or claims.get("primary_email_address") or "") or None,
         name=str(claims.get("name") or claims.get("full_name") or "") or None,
         auth_provider="clerk",
+        identity_source=identity_source,
+        proxy_identity_trusted=bool(proxy_identity),
     )
 
 

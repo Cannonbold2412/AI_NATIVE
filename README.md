@@ -317,11 +317,14 @@ The runtime exposes these tools to Claude via stdio MCP:
   `docker build -f conxa-cloud/backend/Dockerfile .`). The schema is created by `init_db()`
   on startup; `GET /readyz` gates the deploy (checks the DB), `GET /healthz` is liveness.
   Required env: `SKILL_AUTH_REQUIRED=true`, Clerk issuer/JWKS/audience, `SKILL_DATABASE_URL`,
-  `CORS_ORIGINS`, Razorpay key/secret/webhook secret, LLM provider keys. **With
+  `SKILL_API_PROXY_SHARED_SECRET`, `CORS_ORIGINS`, Razorpay key/secret/webhook secret, LLM provider keys. **With
   `SKILL_AUTH_REQUIRED=true` the backend refuses to start if any of these are unset** (no
   silent filesystem-DB fallback). The cloud no longer records or compiles — no Playwright.
 - **Frontend**: Vercel, project root `conxa-cloud/frontend`. Set `API_ORIGIN`,
-  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`.
+  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and server-only
+  `CONXA_API_PROXY_SECRET`. The proxy secret must match backend
+  `SKILL_API_PROXY_SHARED_SECRET` so dashboard/plugin API calls use the active
+  Clerk organization workspace instead of falling back to a personal workspace.
 
 ### Build Studio (`.exe`)
 
