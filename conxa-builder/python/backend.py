@@ -363,6 +363,10 @@ class Backend:
     def cmd_ping(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         return {"ok": True, "pid": os.getpid()}
 
+    def cmd_deps_status(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        """Fast offline check — returns which deps are already present."""
+        return _bootstrap_pkg.check_status()
+
     def cmd_bootstrap(self, _payload: dict[str, Any], rid: str) -> dict[str, Any]:
         return _bootstrap_pkg.ensure_all(self._cloud_api, on_event=_event_sink(rid))
 

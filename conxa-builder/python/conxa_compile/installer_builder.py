@@ -24,13 +24,14 @@ from typing import Any, Callable
 
 from conxa_core.config import settings
 
-RUNTIME_CDN_URL   = os.getenv("CONXA_RUNTIME_CDN_URL", "https://github.com/Cannonbold2412/AI_NATIVE/releases/download")
+_GITHUB_REPO      = os.getenv("CONXA_GITHUB_REPO", "Cannonbold2412/AI_NATIVE")
+RUNTIME_CDN_URL   = os.getenv("CONXA_RUNTIME_CDN_URL", f"https://github.com/{_GITHUB_REPO}/releases/download")
 RUNTIME_VERSION   = os.getenv("CONXA_RUNTIME_VERSION", "v1.0.0")
 SIGNTOOL_PATH     = os.getenv("CONXA_SIGNTOOL_PATH", "signtool.exe")
 SIGN_CERT_SHA1    = os.getenv("CONXA_SIGN_CERT_SHA1", "")
 MAKENSIS_PATH     = os.getenv("MAKENSIS_PATH", "makensis")
 
-# Common Windows installation paths for NSIS
+# System NSIS paths — checked last so the bootstrap-managed copy always wins.
 _NSIS_WINDOWS_PATHS = [
     r"C:\Program Files (x86)\NSIS\makensis.exe",
     r"C:\Program Files\NSIS\makensis.exe",
@@ -38,13 +39,35 @@ _NSIS_WINDOWS_PATHS = [
 
 
 def _find_makensis() -> str | None:
-    """Return the makensis executable path, or None if not found."""
-    candidate = shutil.which(MAKENSIS_PATH)
-    if candidate:
-        return candidate
+    """Return the makensis executable path, or None if not found.
+
+    Priority:
+      1. MAKENSIS_PATH env var (set by bootstrap.ensure_nsis to the managed copy)
+      2. bootstrap cache location (~/.conxa/deps/nsis/makensis.exe)
+      3. System PATH
+      4. Well-known Windows install locations (last resort)
+    """
+    # 1. Explicit env var — bootstrap.ensure_nsis sets this to the managed copy.
+    env_val = os.getenv("MAKENSIS_PATH", "")
+    if env_val and os.path.isfile(env_val):
+        return env_val
+
+    # 2. Bootstrap cache location (in case env var was not propagated).
+    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa")
+    cached = os.path.join(base, "deps", "nsis", "makensis.exe")
+    if os.path.isfile(cached):
+        return cached
+
+    # 3. System PATH (e.g. CI where choco installs NSIS globally).
+    on_path = shutil.which("makensis")
+    if on_path:
+        return on_path
+
+    # 4. Well-known Windows installation directories.
     for path in _NSIS_WINDOWS_PATHS:
         if os.path.isfile(path):
             return path
+
     return None
 
 

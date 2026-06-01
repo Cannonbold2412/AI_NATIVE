@@ -92,13 +92,19 @@ def ensure_nsis(manifest: dict[str, Any], on_event: EventSink | None = None) -> 
     with zipfile.ZipFile(archive) as z:
         z.extractall(nsis_dir)
     archive.unlink(missing_ok=True)
-    # makensis.exe may be nested; locate it.
+    # makensis.exe may be nested inside a version subdirectory (e.g. nsis-3.10/).
+    # Find it and copy it to the canonical top-level location so subsequent
+    # check_status() and _find_makensis() calls find it reliably.
     found = next((p for p in nsis_dir.rglob("makensis.exe")), None)
     if not found:
         raise RuntimeError("makensis.exe not found in NSIS archive")
-    os.environ["MAKENSIS_PATH"] = str(found)
+    canonical = nsis_dir / "makensis.exe"
+    if not canonical.is_file():
+        import shutil as _shutil
+        _shutil.copy2(found, canonical)
+    os.environ["MAKENSIS_PATH"] = str(canonical)
     _emit(on_event, dep="nsis", status="ready")
-    return found
+    return canonical
 
 
 def ensure_chromium(on_event: EventSink | None = None) -> None:
@@ -147,9 +153,11 @@ def ensure_runtime(manifest: dict[str, Any], on_event: EventSink | None = None) 
         _emit(on_event, dep="runtime", status="ready", version=version)
         return runtime_dir
 
-    url, sha = spec.get("url"), spec.get("sha256")
+    # The manifest uses win_url/win_sha256 (platform-specific keys).
+    url = spec.get("win_url") or spec.get("url")
+    sha = spec.get("win_sha256") or spec.get("sha256")
     if not url:
-        raise RuntimeError("deps manifest missing runtime.url")
+        raise RuntimeError("deps manifest missing runtime.win_url")
     _download(url, exe, on_event, "runtime")
     if sha and _sha256(exe) != sha:
         exe.unlink(missing_ok=True)
@@ -160,6 +168,34 @@ def ensure_runtime(manifest: dict[str, Any], on_event: EventSink | None = None) 
     os.environ["CONXA_RUNTIME_LOCAL_DIR"] = str(runtime_dir)
     _emit(on_event, dep="runtime", status="ready", version=version)
     return runtime_dir
+
+
+def check_status() -> dict[str, Any]:
+    """Fast, offline check of which deps are already present. No downloads."""
+    deps = _deps_dir()
+
+    nsis_ready = (deps / "nsis" / "makensis.exe").is_file()
+
+    chromium_dir = deps / "chromium"
+    chromium_ready = chromium_dir.is_dir() and any(
+        d.is_dir() and d.name.startswith("chromium-") for d in chromium_dir.iterdir()
+    ) if chromium_dir.is_dir() else False
+
+    runtime_dir = deps / "runtime"
+    runtime_ready = False
+    if runtime_dir.is_dir():
+        for ver_dir in runtime_dir.iterdir():
+            if (ver_dir / "runtime-win.exe").is_file():
+                runtime_ready = True
+                break
+
+    all_ready = nsis_ready and chromium_ready and runtime_ready
+    return {
+        "nsis": nsis_ready,
+        "chromium": chromium_ready,
+        "runtime": runtime_ready,
+        "all_ready": all_ready,
+    }
 
 
 def fetch_manifest(cloud_api: str) -> dict[str, Any]:

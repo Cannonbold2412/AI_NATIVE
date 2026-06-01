@@ -7,6 +7,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("conxa", {
+  /** True when running from the packaged installer; false in `npm run dev`. */
+  isPackaged: !process.defaultApp,
+
   /** Invoke a backend command. Resolves to { ok, result } | { ok:false, code, message }. */
   cmd: (type, payload) => ipcRenderer.invoke("python:cmd", { type, payload }),
 

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { cmd } from '@/lib/ipc'
 import { AuthContext, performLogout, type Identity } from '@/contexts/AuthContext'
 import { AppChrome } from '@/components/layout/AppChrome'
 import { LoginOverlay } from '@/components/LoginOverlay'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { BootstrapScreen } from '@/pages/BootstrapScreen'
 
 // Pages
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -43,14 +44,32 @@ function DeepLinkHandler() {
 }
 
 export function App() {
+  // 'checking' = deps status not yet known, 'needed' = bootstrap required, 'ready' = deps ok
+  const [depsState, setDepsState] = useState<'checking' | 'needed' | 'ready'>('checking')
   const [identity, setIdentity] = useState<Identity | null | 'checking'>('checking')
 
   useEffect(() => {
+    // Skip the bootstrap gate entirely in dev (deps managed by the developer via scripts/setup.ps1).
+    if (!window.conxa.isPackaged) {
+      setDepsState('ready')
+      return
+    }
+    cmd<{ all_ready: boolean }>('deps_status')
+      .then((r) => setDepsState(r.all_ready ? 'ready' : 'needed'))
+      .catch(() => setDepsState('ready')) // if status check fails, proceed and let features fail individually
+  }, [])
+
+  useEffect(() => {
+    if (depsState !== 'ready') return
     cmd<{ identity: Identity | null }>('whoami')
       .then((r) => setIdentity(r?.identity ?? null))
       .catch(() => setIdentity(null))
-  }, [])
+  }, [depsState])
 
+  const handleBootstrapComplete = useCallback(() => setDepsState('ready'), [])
+
+  if (depsState === 'checking') return <SplashScreen />
+  if (depsState === 'needed') return <BootstrapScreen onComplete={handleBootstrapComplete} />
   if (identity === 'checking') return <SplashScreen />
 
   const resolvedIdentity = identity as Identity | null

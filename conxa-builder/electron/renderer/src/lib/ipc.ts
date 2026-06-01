@@ -22,6 +22,7 @@ export interface BackendEvent {
 declare global {
   interface Window {
     conxa: {
+      isPackaged: boolean;
       cmd: <T = unknown>(type: string, payload?: unknown) => Promise<CmdResponse<T>>;
       onEvent: (handler: (event: BackendEvent) => void) => () => void;
       openExternal: (url: string) => Promise<void>;

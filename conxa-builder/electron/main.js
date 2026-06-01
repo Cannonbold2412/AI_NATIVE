@@ -78,8 +78,14 @@ function startBackend() {
         process.env.CONXA_CLERK_DOMAIN || "https://clerk.conxa.in",
       CONXA_CLERK_CLIENT_ID:
         process.env.CONXA_CLERK_CLIENT_ID || "Z7O8UdIVowd3Aegx",
-      CONXA_CLERK_CLIENT_SECRET:
-        process.env.CONXA_CLERK_CLIENT_SECRET || "6m0kGz57pwu46rWtQIGNkitLfJE8Xagu",
+      // CONXA_CLERK_CLIENT_SECRET is optional: auth_service uses PKCE (public client)
+      // so the secret is not required for the token exchange. If Clerk is configured
+      // as a confidential client, set this env var in the shell before `npm run dev`,
+      // or set it as a GitHub Actions secret and pass it to the build step.
+      // Never commit a default value here.
+      ...(process.env.CONXA_CLERK_CLIENT_SECRET
+        ? { CONXA_CLERK_CLIENT_SECRET: process.env.CONXA_CLERK_CLIENT_SECRET }
+        : {}),
       CONXA_CLOUD_API:
         process.env.CONXA_CLOUD_API || "https://apis.conxa.in",
       PYTHONPATH: [

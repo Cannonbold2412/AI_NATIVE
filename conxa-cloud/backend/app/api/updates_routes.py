@@ -25,15 +25,20 @@ _NSIS_URL = os.environ.get(
 )
 _NSIS_SHA256 = os.environ.get("CONXA_NSIS_SHA256", "")
 
+# The actual repo hosting release artifacts. Override via env on Render once a
+# dedicated org/repo is established. Default points at the monorepo where CI
+# publishes runtime and studio releases.
+_GITHUB_REPO = os.environ.get("CONXA_GITHUB_REPO", "Cannonbold2412/AI_NATIVE")
+
 _RUNTIME_VERSION = os.environ.get("CONXA_RUNTIME_VERSION", "v1.0.0")
 _RUNTIME_WIN_URL = os.environ.get(
     "CONXA_RUNTIME_WIN_URL",
-    f"https://github.com/conxa-ai/runtime/releases/download/{_RUNTIME_VERSION}/runtime-win.exe",
+    f"https://github.com/{_GITHUB_REPO}/releases/download/{_RUNTIME_VERSION}/runtime-win.exe",
 )
 _RUNTIME_WIN_SHA256 = os.environ.get("CONXA_RUNTIME_WIN_SHA256", "")
 _RUNTIME_KEYTAR_URL = os.environ.get(
     "CONXA_KEYTAR_WIN_URL",
-    f"https://github.com/conxa-ai/runtime/releases/download/{_RUNTIME_VERSION}/keytar.node",
+    f"https://github.com/{_GITHUB_REPO}/releases/download/{_RUNTIME_VERSION}/keytar.node",
 )
 _RUNTIME_KEYTAR_SHA256 = os.environ.get("CONXA_KEYTAR_WIN_SHA256", "")
 
@@ -44,7 +49,7 @@ _CHROMIUM_REVISION = os.environ.get("CONXA_CHROMIUM_REVISION", "1148460")
 _STUDIO_VERSION = os.environ.get("CONXA_STUDIO_VERSION", "v1.0.0")
 _STUDIO_WIN_URL = os.environ.get(
     "CONXA_STUDIO_WIN_URL",
-    f"https://github.com/conxa-ai/conxa-build-studio/releases/download/{_STUDIO_VERSION}/conxa-build-studio-setup.exe",
+    f"https://github.com/{_GITHUB_REPO}/releases/download/{_STUDIO_VERSION}/conxa-build-studio-setup.exe",
 )
 _STUDIO_WIN_SHA256 = os.environ.get("CONXA_STUDIO_WIN_SHA256", "")
 

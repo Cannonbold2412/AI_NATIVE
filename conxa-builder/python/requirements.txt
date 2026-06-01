@@ -13,3 +13,6 @@ Pillow>=10.4.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 imageio-ffmpeg>=0.5.1
+
+# OS credential storage — used by auth_service.py to store Clerk tokens securely
+keyring>=25.0.0

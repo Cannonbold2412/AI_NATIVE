@@ -120,6 +120,26 @@ docs/
 
 ## Common Commands
 
+### Developer setup (first-time)
+
+```powershell
+# Windows — run once after cloning
+.\scripts\setup.ps1
+```
+
+```bash
+# macOS / Linux — run once after cloning
+./scripts/setup.sh
+```
+
+Both scripts install: conxa-core, Build Studio Python deps, Playwright Chromium, Electron node_modules, runtime node_modules.
+
+After setup, start the dev server:
+
+```bash
+cd conxa-builder/electron && npm run dev
+```
+
 ### Cloud backend
 
 ```bash
