@@ -1,4 +1,5 @@
 import { CreateOrganization } from '@clerk/nextjs'
+import { clerkAppearance } from '@/lib/clerkAppearance'
 
 export default function OnboardingPage() {
   return (
@@ -9,7 +10,11 @@ export default function OnboardingPage() {
           Set up your Conxa organization to start building and packaging plugins.
         </p>
       </div>
-      <CreateOrganization afterCreateOrganizationUrl="/dashboard" skipInvitationScreen />
+      <CreateOrganization
+        afterCreateOrganizationUrl="/dashboard"
+        appearance={clerkAppearance}
+        skipInvitationScreen
+      />
     </div>
   )
 }

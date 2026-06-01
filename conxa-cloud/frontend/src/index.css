@@ -6,6 +6,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: dark;
+
   /* Status colors */
   --status-ok: oklch(0.74 0.17 160);      /* emerald-400 */
   --status-warn: oklch(0.78 0.15 75);     /* amber-400 */

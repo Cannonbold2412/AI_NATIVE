@@ -2,6 +2,7 @@
 
 import { OrganizationProfile } from '@clerk/nextjs'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { clerkAppearance } from '@/lib/clerkAppearance'
 
 export function TeamPage() {
   return (
@@ -11,7 +12,9 @@ export function TeamPage() {
         <OrganizationProfile
           routing="hash"
           appearance={{
+            ...clerkAppearance,
             elements: {
+              ...clerkAppearance.elements,
               rootBox: 'w-full',
               card: 'bg-transparent border border-white/8 shadow-none',
               navbar: 'hidden',

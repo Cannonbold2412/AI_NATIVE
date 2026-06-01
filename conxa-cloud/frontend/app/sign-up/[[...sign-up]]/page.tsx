@@ -1,9 +1,10 @@
 import { SignUp } from '@clerk/nextjs'
+import { clerkAppearance } from '@/lib/clerkAppearance'
 
 export default function SignUpPage() {
   return (
     <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-[#0a0c0f] px-4 py-8">
-      <SignUp />
+      <SignUp appearance={clerkAppearance} />
     </main>
   )
 }
