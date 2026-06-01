@@ -379,6 +379,17 @@ export type TrackingCompaniesResponse = {
   workspace_id: string
 }
 
+export type TrackingDiagnosticsResponse = {
+  workspace_id: string
+  user_id: string
+  personal_workspace_id: string
+  visible_workspace_ids: string[]
+  visible_company_count: number
+  plugin_count: number
+  same_user_personal_company_count: number
+  hidden_same_user_personal_count: number
+}
+
 export type TrackingRunsResponse = {
   runs: TrackingRunSummary[]
   total: number
@@ -410,6 +421,10 @@ export function fetchTrackingRuns(
 
 export function fetchTrackingCompanies(): Promise<TrackingCompaniesResponse> {
   return apiFetch('/tracking/companies').then((r) => json<TrackingCompaniesResponse>(r))
+}
+
+export function fetchTrackingDiagnostics(): Promise<TrackingDiagnosticsResponse> {
+  return apiFetch('/tracking/diagnostics').then((r) => json<TrackingDiagnosticsResponse>(r))
 }
 
 export function fetchTrackingRun(company: string, runId: string): Promise<TrackingRunDetail> {

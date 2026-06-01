@@ -38,6 +38,41 @@ class ProductRoutesTests(unittest.TestCase):
         self.assertEqual(dashboard.json()["workspace"]["slug"], "local")
         self.assertIn("stats", dashboard.json())
 
+    def test_trusted_proxy_headers_define_active_org(self) -> None:
+        client = self._client()
+        with patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"):
+            me = client.get(
+                "/api/v1/me",
+                headers={
+                    "x-conxa-proxy-secret": "proxy-secret",
+                    "x-conxa-user-id": "user_123",
+                    "x-conxa-org-id": "org_123",
+                    "x-conxa-org-role": "admin",
+                    "x-conxa-org-name": "Kiran's Organization",
+                },
+            )
+
+        self.assertEqual(me.status_code, 200)
+        body = me.json()
+        self.assertEqual(body["user"]["id"], "user_123")
+        self.assertEqual(body["workspace"]["id"], "org_123")
+        self.assertEqual(body["workspace"]["role"], "admin")
+
+    def test_invalid_proxy_secret_cannot_spoof_org(self) -> None:
+        client = self._client()
+        with patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"):
+            me = client.get(
+                "/api/v1/me",
+                headers={
+                    "x-conxa-proxy-secret": "wrong-secret",
+                    "x-conxa-user-id": "user_123",
+                    "x-conxa-org-id": "org_123",
+                },
+            )
+
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["workspace"]["id"], "wrk_local")
+
     def test_billing_subscription_local_fallback(self) -> None:
         client = self._client()
         res = client.get("/api/v1/billing/subscription")

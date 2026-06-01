@@ -8,12 +8,17 @@ from unittest.mock import patch
 import pytest
 
 from conxa_core.models.plugin import Plugin
+from conxa_core.config import settings
 from conxa_core.storage import plugin_store
 
 
 @pytest.fixture()
 def tmp_plugins_dir(tmp_path: Path):
-    with patch.object(plugin_store, "_plugins_dir", return_value=tmp_path):
+    with (
+        patch.object(settings, "data_dir", tmp_path),
+        patch.object(settings, "database_url", ""),
+        patch.object(plugin_store, "_plugins_dir", return_value=tmp_path),
+    ):
         yield tmp_path
 
 

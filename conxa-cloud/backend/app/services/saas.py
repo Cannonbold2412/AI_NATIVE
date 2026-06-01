@@ -9,6 +9,7 @@ database-backed repository.
 from __future__ import annotations
 
 import json
+import secrets
 import threading
 import time
 from dataclasses import dataclass
@@ -135,9 +136,54 @@ def _slug_from_org_id(org_id: str) -> str:
     return text or "workspace"
 
 
+def personal_workspace_id(user_id: str) -> str:
+    return f"personal_{user_id}"
+
+
+def visible_workspace_ids_for(principal: Principal) -> list[str]:
+    ids = [principal.workspace_id]
+    personal_id = personal_workspace_id(principal.user_id)
+    if principal.auth_provider == "clerk" and principal.workspace_id != personal_id:
+        ids.append(personal_id)
+    return ids
+
+
+def _trusted_proxy_identity(request: Request, subject: str = "") -> dict[str, str]:
+    expected = settings.api_proxy_shared_secret.strip()
+    if not expected:
+        return {}
+    provided = request.headers.get("x-conxa-proxy-secret", "").strip()
+    if not provided or not secrets.compare_digest(provided, expected):
+        return {}
+    user_id = request.headers.get("x-conxa-user-id", "").strip()
+    if not user_id:
+        return {}
+    if subject and user_id != subject:
+        return {}
+    return {
+        "user_id": user_id,
+        "org_id": request.headers.get("x-conxa-org-id", "").strip(),
+        "org_role": request.headers.get("x-conxa-org-role", "").strip(),
+        "org_name": request.headers.get("x-conxa-org-name", "").strip(),
+    }
+
+
 def principal_from_request(request: Request) -> Principal:
     auth = getattr(request.state, "auth", None)
+    proxy_identity = _trusted_proxy_identity(request)
     if not isinstance(auth, dict) or not auth.get("subject"):
+        if proxy_identity:
+            subject = proxy_identity["user_id"]
+            org_id = proxy_identity.get("org_id") or personal_workspace_id(subject)
+            workspace_slug = _slug_from_org_id(org_id)
+            return Principal(
+                user_id=subject,
+                workspace_id=org_id,
+                workspace_slug=workspace_slug,
+                workspace_name=proxy_identity.get("org_name") or "Workspace",
+                role=proxy_identity.get("org_role") or "basic_member",
+                auth_provider="clerk",
+            )
         return Principal(
             user_id=LOCAL_USER_ID,
             workspace_id=LOCAL_WORKSPACE_ID,
@@ -149,14 +195,15 @@ def principal_from_request(request: Request) -> Principal:
 
     claims = auth.get("claims") if isinstance(auth.get("claims"), dict) else {}
     subject = str(auth["subject"])
-    org_id = str(auth.get("org_id") or f"personal_{subject}")
+    proxy_identity = _trusted_proxy_identity(request, subject)
+    org_id = str(proxy_identity.get("org_id") or auth.get("org_id") or personal_workspace_id(subject))
     workspace_slug = _slug_from_org_id(org_id)
-    org_role = str(auth.get("org_role") or claims.get("org_role") or "basic_member")
+    org_role = str(proxy_identity.get("org_role") or auth.get("org_role") or claims.get("org_role") or "basic_member")
     return Principal(
         user_id=subject,
         workspace_id=org_id,
         workspace_slug=workspace_slug,
-        workspace_name=str(claims.get("org_name") or claims.get("azp") or "Workspace"),
+        workspace_name=str(proxy_identity.get("org_name") or claims.get("org_name") or claims.get("azp") or "Workspace"),
         role=org_role,
         email=str(claims.get("email") or claims.get("primary_email_address") or "") or None,
         name=str(claims.get("name") or claims.get("full_name") or "") or None,

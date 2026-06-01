@@ -58,7 +58,14 @@ def _migrate_workspace(raw: dict) -> dict:
     return raw
 
 
-def create_plugin(name: str, target_url: str, protected_url: str = "", protected_url_marker_text: str = "", workspace_id: str = "") -> Plugin:
+def create_plugin(
+    name: str,
+    target_url: str,
+    protected_url: str = "",
+    protected_url_marker_text: str = "",
+    workspace_id: str = "",
+    owner_user_id: str = "local",
+) -> Plugin:
     import re
     slug_base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "plugin"
     plugin_id = str(uuid.uuid4())
@@ -67,6 +74,7 @@ def create_plugin(name: str, target_url: str, protected_url: str = "", protected
         id=plugin_id,
         slug=f"{slug_base}-{plugin_id[:8]}",
         name=name,
+        owner_user_id=owner_user_id,
         workspace_id=workspace_id or LOCAL_WORKSPACE_ID,
         target_url=target_url,
         protected_url=protected_url,

@@ -17,7 +17,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from conxa_core.db import db_append, db_get, db_list_kv
 from conxa_core.config import settings
 from conxa_core.storage.plugin_store import list_plugins
-from app.services.saas import Principal, ensure_principal, principal_from_request
+from app.services.saas import (
+    Principal,
+    ensure_principal,
+    personal_workspace_id,
+    principal_from_request,
+    visible_workspace_ids_for,
+)
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 public_router = APIRouter(prefix="/api/tracking", tags=["tracking"])
@@ -46,6 +52,26 @@ def _verify_token(company: str, token: str) -> dict[str, Any] | None:
     return None
 
 
+def _owner_from_record(record: dict[str, Any]) -> str:
+    owner = str(record.get("owner_user_id") or "")
+    if owner:
+        return owner
+    workspace_id = str(record.get("workspace_id") or "")
+    if workspace_id.startswith("personal_"):
+        return workspace_id.removeprefix("personal_")
+    return ""
+
+
+def _record_visible_to_principal(record: dict[str, Any], principal: Principal) -> bool:
+    workspace_id = str(record.get("workspace_id") or "")
+    if not workspace_id or workspace_id == principal.workspace_id:
+        return True
+    if workspace_id == personal_workspace_id(principal.user_id):
+        owner = _owner_from_record(record)
+        return not owner or owner == principal.user_id
+    return False
+
+
 def _batches_for_workspace(value: Any, workspace_id: str) -> list[dict]:
     batches: list[dict] = value if isinstance(value, list) else [value] if isinstance(value, dict) else []
     if not workspace_id:
@@ -54,6 +80,16 @@ def _batches_for_workspace(value: Any, workspace_id: str) -> list[dict]:
         batch
         for batch in batches
         if not batch.get("workspace_id") or batch.get("workspace_id") == workspace_id
+    ]
+
+
+def _batches_for_principal(value: Any, principal: Principal) -> list[dict]:
+    batches: list[dict] = value if isinstance(value, list) else [value] if isinstance(value, dict) else []
+    visible_ids = set(visible_workspace_ids_for(principal))
+    return [
+        batch
+        for batch in batches
+        if not batch.get("workspace_id") or batch.get("workspace_id") in visible_ids
     ]
 
 
@@ -105,11 +141,11 @@ def _run_summary(run_id: str, batches: list[dict]) -> dict:
     }
 
 
-def _company_run_stats(company: str, workspace_id: str) -> tuple[int, float]:
+def _company_run_stats(company: str, principal: Principal) -> tuple[int, float]:
     run_count = 0
     last_seen = 0.0
     for _run_id, batches in db_list_kv(f"tracking/{company}"):
-        scoped = _batches_for_workspace(batches, workspace_id)
+        scoped = _batches_for_principal(batches, principal)
         if not scoped:
             continue
         run_count += 1
@@ -127,13 +163,13 @@ def _tracking_company_rows(principal: Principal) -> list[dict[str, Any]]:
     for key, record in db_list_kv("tracking_tokens"):
         if not isinstance(record, dict):
             continue
-        workspace_id = str(record.get("workspace_id") or "")
-        if workspace_id and workspace_id != principal.workspace_id:
+        if not _record_visible_to_principal(record, principal):
             continue
+        workspace_id = str(record.get("workspace_id") or "")
         company = str(record.get("company") or key or "").strip()
         if not company:
             continue
-        run_count, last_seen = _company_run_stats(company, principal.workspace_id)
+        run_count, last_seen = _company_run_stats(company, principal)
         rows[company] = {
             "company": company,
             "workspace_id": workspace_id or principal.workspace_id,
@@ -141,13 +177,18 @@ def _tracking_company_rows(principal: Principal) -> list[dict[str, Any]]:
             "last_seen": last_seen or float(record.get("updated_at") or 0),
         }
 
-    for plugin in list_plugins(workspace_id=principal.workspace_id):
+    visible_workspace_ids = set(visible_workspace_ids_for(principal))
+    for plugin in list_plugins():
+        if plugin.workspace_id != principal.workspace_id and not (
+            plugin.workspace_id in visible_workspace_ids and plugin.owner_user_id == principal.user_id
+        ):
+            continue
         company = str(plugin.slug or plugin.name or "").strip()
         if not company:
             continue
         current = rows.get(company)
         if current is None:
-            run_count, last_seen = _company_run_stats(company, principal.workspace_id)
+            run_count, last_seen = _company_run_stats(company, principal)
             rows[company] = {
                 "company": company,
                 "workspace_id": principal.workspace_id,
@@ -162,6 +203,38 @@ def _tracking_company_rows(principal: Principal) -> list[dict[str, Any]]:
         key=lambda row: (float(row.get("last_seen") or 0), str(row.get("company") or "")),
         reverse=True,
     )
+
+
+def _tracking_diagnostics(principal: Principal) -> dict[str, Any]:
+    visible_workspace_ids = set(visible_workspace_ids_for(principal))
+    visible_companies = _tracking_company_rows(principal)
+    same_user_personal = 0
+    hidden_same_user_personal = 0
+    for _key, record in db_list_kv("tracking_tokens"):
+        if not isinstance(record, dict):
+            continue
+        workspace_id = str(record.get("workspace_id") or "")
+        owner = _owner_from_record(record)
+        if workspace_id == personal_workspace_id(principal.user_id) and (not owner or owner == principal.user_id):
+            same_user_personal += 1
+            if workspace_id not in visible_workspace_ids:
+                hidden_same_user_personal += 1
+    plugin_count = 0
+    for plugin in list_plugins():
+        if plugin.workspace_id == principal.workspace_id or (
+            plugin.workspace_id in visible_workspace_ids and plugin.owner_user_id == principal.user_id
+        ):
+            plugin_count += 1
+    return {
+        "workspace_id": principal.workspace_id,
+        "user_id": principal.user_id,
+        "personal_workspace_id": personal_workspace_id(principal.user_id),
+        "visible_workspace_ids": list(visible_workspace_ids),
+        "visible_company_count": len(visible_companies),
+        "plugin_count": plugin_count,
+        "same_user_personal_company_count": same_user_personal,
+        "hidden_same_user_personal_count": hidden_same_user_personal,
+    }
 
 
 @public_router.post("/{company}/events", status_code=202)
@@ -188,6 +261,7 @@ async def ingest_events(company: str, request: Request) -> dict[str, Any]:
         "uid":         body.get("uid", ""),
         "wid":         body.get("wid", ""),
         "workspace_id": token_record.get("workspace_id", ""),
+        "owner_user_id": token_record.get("owner_user_id", ""),
         "server_ts":   time.time(),
         "events":      body.get("evts", []),
         "schema_v":    body.get("sv", 1),
@@ -209,6 +283,14 @@ def list_tracking_companies(
     }
 
 
+@router.get("/diagnostics")
+def tracking_diagnostics(
+    principal: Principal = Depends(current_principal),
+) -> dict[str, Any]:
+    """Return safe workspace-scoping diagnostics for dashboard visibility."""
+    return _tracking_diagnostics(principal)
+
+
 @router.get("/{company}/runs")
 def list_runs(
     company: str,
@@ -221,7 +303,7 @@ def list_runs(
     summaries = []
     hidden_workspace_runs = 0
     for run_id, batches in pairs:
-        scoped = _batches_for_workspace(batches, principal.workspace_id)
+        scoped = _batches_for_principal(batches, principal)
         if scoped:
             summaries.append(_run_summary(run_id, scoped))
         else:
@@ -249,7 +331,7 @@ def get_run_timeline(
     if not data:
         raise HTTPException(status_code=404, detail="run_not_found")
 
-    batches = _batches_for_workspace(data, principal.workspace_id)
+    batches = _batches_for_principal(data, principal)
     if not batches:
         raise HTTPException(status_code=404, detail="run_not_found_for_workspace")
     events: list[dict] = []

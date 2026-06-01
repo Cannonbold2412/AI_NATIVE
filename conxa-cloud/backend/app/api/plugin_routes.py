@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from conxa_core.config import settings
 from conxa_core.models.plugin import Plugin
-from app.services.saas import principal_from_request, ensure_principal
+from app.services.saas import principal_from_request, ensure_principal, visible_workspace_ids_for
 from conxa_core.storage.plugin_store import (
     create_plugin,
     delete_plugin,
@@ -35,9 +35,26 @@ class CreatePluginBody(BaseModel):
     protected_url_marker_text: str = Field(default="")
 
 
-def _plugin_or_404(plugin_id: str, workspace_id: str) -> Plugin:
-    plugin = get_plugin(plugin_id, workspace_id=workspace_id)
+def _visible_plugins(principal) -> list[Plugin]:
+    visible_ids = set(visible_workspace_ids_for(principal))
+    plugins: list[Plugin] = []
+    for plugin in list_plugins():
+        if plugin.workspace_id == principal.workspace_id:
+            plugins.append(plugin)
+            continue
+        if plugin.workspace_id in visible_ids and plugin.owner_user_id == principal.user_id:
+            plugins.append(plugin)
+    return sorted(plugins, key=lambda p: p.updated_at, reverse=True)
+
+
+def _plugin_or_404(plugin_id: str, principal) -> Plugin:
+    plugin = get_plugin(plugin_id)
     if plugin is None:
+        raise HTTPException(status_code=404, detail="Plugin not found.")
+    visible_ids = set(visible_workspace_ids_for(principal))
+    if plugin.workspace_id != principal.workspace_id and not (
+        plugin.workspace_id in visible_ids and plugin.owner_user_id == principal.user_id
+    ):
         raise HTTPException(status_code=404, detail="Plugin not found.")
     return plugin
 
@@ -52,6 +69,7 @@ def post_create_plugin(body: CreatePluginBody, request: Request) -> dict[str, An
         protected_url=body.protected_url,
         protected_url_marker_text=body.protected_url_marker_text,
         workspace_id=principal.workspace_id,
+        owner_user_id=principal.user_id,
     )
     return {"plugin": plugin.model_dump(mode="json")}
 
@@ -59,21 +77,21 @@ def post_create_plugin(body: CreatePluginBody, request: Request) -> dict[str, An
 @router.get("")
 def get_list_plugins(request: Request) -> dict[str, Any]:
     principal = principal_from_request(request)
-    plugins = list_plugins(workspace_id=principal.workspace_id)
+    plugins = _visible_plugins(principal)
     return {"plugins": [p.model_dump(mode="json") for p in plugins]}
 
 
 @router.get("/{plugin_id}")
 def get_plugin_detail(plugin_id: str, request: Request) -> dict[str, Any]:
     principal = principal_from_request(request)
-    plugin = _plugin_or_404(plugin_id, principal.workspace_id)
+    plugin = _plugin_or_404(plugin_id, principal)
     return {"plugin": plugin.model_dump(mode="json")}
 
 
 @router.delete("/{plugin_id}")
 def delete_plugin_endpoint(plugin_id: str, request: Request) -> dict[str, Any]:
     principal = principal_from_request(request)
-    plugin = _plugin_or_404(plugin_id, principal.workspace_id)
+    plugin = _plugin_or_404(plugin_id, principal)
     # Remove built output if present.
     if plugin.build and plugin.build.output_path:
         out_path = Path(plugin.build.output_path)

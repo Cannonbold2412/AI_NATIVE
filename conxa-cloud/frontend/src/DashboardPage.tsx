@@ -1,16 +1,18 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   fetchPlugins,
   fetchTrackingCompanies,
+  fetchTrackingDiagnostics,
   fetchTrackingRun,
   fetchTrackingRuns,
   normalizePluginList,
   type TrackingEvent,
   type TrackingRunSummary,
 } from '@/api/pluginApi'
+import { fetchMe } from '@/api/productApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -345,9 +347,15 @@ function TimelineDrawer({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
+  const queryClient = useQueryClient()
   const [selectedRun, setSelectedRun] = useState<TrackingRunSummary | null>(null)
   const [company, setCompany] = useState<string>('')
 
+  const { data: meData } = useQuery({
+    queryKey: ['me'],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  })
   const { data: pluginsData } = useQuery({
     queryKey: ['plugins'],
     queryFn: fetchPlugins,
@@ -359,6 +367,12 @@ export function DashboardPage() {
     staleTime: 30_000,
     refetchInterval: 30_000,
   })
+  const { data: diagnosticsData } = useQuery({
+    queryKey: ['tracking-diagnostics'],
+    queryFn: fetchTrackingDiagnostics,
+    staleTime: 30_000,
+    enabled: (trackingCompaniesData?.companies ?? []).length === 0,
+  })
   const plugins   = normalizePluginList(pluginsData)
   const trackingCompanies = (trackingCompaniesData?.companies ?? [])
     .map((entry) => entry.company)
@@ -367,7 +381,7 @@ export function DashboardPage() {
   const companies = Array.from(new Set([...trackingCompanies, ...pluginCompanies]))
   const activeCompany = company && companies.includes(company) ? company : companies[0] || ''
 
-  const { data, isFetching, refetch, dataUpdatedAt } = useQuery({
+  const { data, isFetching, dataUpdatedAt } = useQuery({
     queryKey:        ['tracking-runs', activeCompany],
     queryFn:         () => fetchTrackingRuns(activeCompany),
     enabled:         !!activeCompany,
@@ -379,6 +393,14 @@ export function DashboardPage() {
   const stats = useAnalytics(runs)
 
   const lastUpdated = dataUpdatedAt ? fmtRelative(dataUpdatedAt) : null
+  const refreshDashboard = () => {
+    void queryClient.invalidateQueries({ queryKey: ['tracking-companies'] })
+    void queryClient.invalidateQueries({ queryKey: ['tracking-diagnostics'] })
+    void queryClient.invalidateQueries({ queryKey: ['plugins'] })
+    if (activeCompany) {
+      void queryClient.invalidateQueries({ queryKey: ['tracking-runs', activeCompany] })
+    }
+  }
 
   return (
     <div className="h-full overflow-y-auto">
@@ -393,7 +415,7 @@ export function DashboardPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => refetch()}
+              onClick={refreshDashboard}
               disabled={isFetching}
               className="gap-1.5 border border-white/8"
             >
@@ -430,6 +452,16 @@ export function DashboardPage() {
             <Activity className="mx-auto mb-3 size-8 text-zinc-700" />
             <p className="text-sm font-medium text-zinc-400">No tracking data found for this workspace</p>
             <p className="mt-1 text-xs text-zinc-600">Run an installed skill to start seeing execution data.</p>
+            {meData?.workspace?.id ? (
+              <p className="mt-3 text-[11px] text-zinc-700">
+                Workspace: {meData.workspace.name || meData.workspace.slug} ({meData.workspace.id})
+              </p>
+            ) : null}
+            {diagnosticsData ? (
+              <p className="mt-1 text-[11px] text-zinc-700">
+                Visible plugins: {diagnosticsData.plugin_count} · Visible companies: {diagnosticsData.visible_company_count}
+              </p>
+            ) : null}
           </div>
         ) : (
           <>

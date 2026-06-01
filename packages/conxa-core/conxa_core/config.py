@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     clerk_jwks_url: str = ""
     clerk_authorized_parties: str = ""
     clerk_audience: str = ""
+    api_proxy_shared_secret: str = ""
 
     # Metered LLM proxy used by Build Studio. Quota is per org per calendar month
     # (input + output tokens). 0 disables enforcement. The proxy only accepts

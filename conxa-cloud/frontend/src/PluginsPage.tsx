@@ -203,9 +203,9 @@ export function PluginsPage() {
           <Card className="border-white/8 bg-white/[0.03] shadow-none">
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
               <Globe className="size-8 text-zinc-600" />
-              <p className="text-sm font-medium text-zinc-300">No plugins yet</p>
+              <p className="text-sm font-medium text-zinc-300">No cloud-published plugins for this workspace</p>
               <p className="max-w-xs text-xs text-zinc-500">
-                Create a plugin for any web app. Record login once, then build multiple workflows on top.
+                Build and install a plugin from Build Studio, then refresh this page after the cloud publish finishes.
               </p>
               <CreatePluginDialog onCreated={refetch} />
             </CardContent>

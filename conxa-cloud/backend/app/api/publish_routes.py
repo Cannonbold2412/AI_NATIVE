@@ -95,7 +95,7 @@ def _assert_owner(slug: str, workspace_id: str) -> None:
         db_set(_OWNERS_NS, slug, {"workspace_id": workspace_id, "claimed_at": time.time()})
 
 
-def _tracking_token(slug: str, workspace_id: str, version: str) -> str:
+def _tracking_token(slug: str, workspace_id: str, version: str, owner_user_id: str) -> str:
     existing = db_get("tracking_tokens", slug)
     if isinstance(existing, dict) and existing.get("token"):
         token = str(existing["token"])
@@ -109,6 +109,7 @@ def _tracking_token(slug: str, workspace_id: str, version: str) -> str:
             "company": slug,
             "version": version,
             "workspace_id": workspace_id,
+            "owner_user_id": owner_user_id,
             "updated_at": time.time(),
         },
     )
@@ -123,7 +124,7 @@ def _api_base(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-def _upsert_published_plugin(body: PublishBody, workspace_id: str) -> None:
+def _upsert_published_plugin(body: PublishBody, workspace_id: str, owner_user_id: str) -> None:
     name = body.display_name.strip() or body.slug
     target_url = body.target_url.strip() or "https://example.com"
     protected_url = body.protected_url.strip()
@@ -141,6 +142,7 @@ def _upsert_published_plugin(body: PublishBody, workspace_id: str) -> None:
             target_url=target_url,
             protected_url=protected_url,
             workspace_id=workspace_id,
+            owner_user_id=owner_user_id,
         )
         plugin = plugin.model_copy(update={"slug": body.slug, "status": "ready"})
     else:
@@ -149,6 +151,7 @@ def _upsert_published_plugin(body: PublishBody, workspace_id: str) -> None:
                 "slug": body.slug,
                 "name": name,
                 "workspace_id": workspace_id,
+                "owner_user_id": owner_user_id,
                 "target_url": target_url or existing.target_url,
                 "protected_url": protected_url or existing.protected_url,
                 "status": "ready",
@@ -190,7 +193,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
     tracking = {
         "enabled": True,
         "tracking_url": f"{_api_base(request)}/api/tracking/{slug}/events",
-        "tracking_token": _tracking_token(slug, principal.workspace_id, body.skill_pack_version),
+        "tracking_token": _tracking_token(slug, principal.workspace_id, body.skill_pack_version, principal.user_id),
         "company_id": slug,
         "schema_version": 1,
         "protocol_version": 1,
@@ -217,7 +220,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
     tmp = pack_path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(pack_path)
-    _upsert_published_plugin(body, principal.workspace_id)
+    _upsert_published_plugin(body, principal.workspace_id, principal.user_id)
 
     return {
         "slug": slug,

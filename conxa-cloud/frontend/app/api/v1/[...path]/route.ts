@@ -14,8 +14,20 @@ const HOP_BY_HOP_HEADERS = new Set([
   'upgrade',
 ])
 
+const INTERNAL_PROXY_HEADERS = new Set([
+  'x-conxa-proxy-secret',
+  'x-conxa-user-id',
+  'x-conxa-org-id',
+  'x-conxa-org-role',
+  'x-conxa-org-name',
+])
+
 function upstreamOrigin() {
   return (process.env.API_ORIGIN || '').replace(/\/$/, '')
+}
+
+function apiProxySecret() {
+  return (process.env.CONXA_API_PROXY_SECRET || '').trim()
 }
 
 async function proxy(request: Request, path: string[]) {
@@ -24,14 +36,15 @@ async function proxy(request: Request, path: string[]) {
     return Response.json({ detail: 'api_origin_not_configured' }, { status: 500 })
   }
 
-  const { getToken } = await auth()
+  const { getToken, userId, orgId, orgRole, orgSlug } = await auth()
   const upstreamUrl = new URL(`${origin}/api/v1/${path.join('/')}`)
   const currentUrl = new URL(request.url)
   upstreamUrl.search = currentUrl.search
 
   const headers = new Headers()
   request.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+    const lower = key.toLowerCase()
+    if (!HOP_BY_HOP_HEADERS.has(lower) && !INTERNAL_PROXY_HEADERS.has(lower)) {
       headers.set(key, value)
     }
   })
@@ -40,6 +53,14 @@ async function proxy(request: Request, path: string[]) {
   const token = await getToken()
   if (token) {
     headers.set('authorization', `Bearer ${token}`)
+  }
+  const proxySecret = apiProxySecret()
+  if (proxySecret && userId) {
+    headers.set('x-conxa-proxy-secret', proxySecret)
+    headers.set('x-conxa-user-id', userId)
+    if (orgId) headers.set('x-conxa-org-id', orgId)
+    if (orgRole) headers.set('x-conxa-org-role', orgRole)
+    if (orgSlug) headers.set('x-conxa-org-name', orgSlug)
   }
 
   const method = request.method.toUpperCase()

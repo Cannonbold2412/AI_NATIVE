@@ -20,8 +20,10 @@ STUDIO_HEADER = {"X-Conxa-Client": settings.llm_proxy_client_header}
 @pytest.fixture(autouse=True)
 def _reset_quota():
     original = settings.llm_proxy_monthly_token_quota
+    original_proxy_secret = settings.api_proxy_shared_secret
     yield
     settings.llm_proxy_monthly_token_quota = original
+    settings.api_proxy_shared_secret = original_proxy_secret
 
 
 # --- LLM proxy ---------------------------------------------------------------
@@ -275,6 +277,103 @@ def test_tracking_companies_hides_other_workspace(monkeypatch, tmp_path):
     companies = client.get("/api/v1/tracking/companies")
     assert companies.status_code == 200
     assert all(row["company"] != "other-workspace-company" for row in companies.json()["companies"])
+
+
+def test_org_dashboard_sees_same_user_personal_publish(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+    monkeypatch.setattr(settings, "api_proxy_shared_secret", "proxy-secret")
+    personal_headers = {
+        "x-conxa-proxy-secret": "proxy-secret",
+        "x-conxa-user-id": "user_same",
+    }
+    org_headers = {
+        "x-conxa-proxy-secret": "proxy-secret",
+        "x-conxa-user-id": "user_same",
+        "x-conxa-org-id": "org_same",
+    }
+
+    pub = client.post(
+        "/api/v1/plugins/publish",
+        json={
+            "slug": "personal-visible",
+            "display_name": "Personal Visible",
+            "target_url": "https://example.test",
+            "skill_pack_version": "1.0.0",
+            "skills": [],
+            "files": [],
+        },
+        headers=personal_headers,
+    )
+    assert pub.status_code == 200, pub.text
+    token_record = db_get("tracking_tokens", "personal-visible")
+    assert token_record["workspace_id"] == "personal_user_same"
+    assert token_record["owner_user_id"] == "user_same"
+
+    accepted = client.post(
+        "/api/tracking/personal-visible/events",
+        json={
+            "rid": "run-personal-visible",
+            "pid": "skill-visible",
+            "evts": [{"e": "wf_start", "ts": 1}, {"e": "wf_ok", "ts": 2, "dur": 10, "tot": 1, "rec": 0}],
+        },
+        headers={"X-Tracking-Token": pub.json()["tracking"]["tracking_token"]},
+    )
+    assert accepted.status_code == 202
+
+    plugins = client.get("/api/v1/plugins", headers=org_headers)
+    assert plugins.status_code == 200
+    assert any(plugin["slug"] == "personal-visible" for plugin in plugins.json()["plugins"])
+
+    companies = client.get("/api/v1/tracking/companies", headers=org_headers)
+    assert companies.status_code == 200
+    assert any(row["company"] == "personal-visible" for row in companies.json()["companies"])
+
+    runs = client.get("/api/v1/tracking/personal-visible/runs", headers=org_headers)
+    assert runs.status_code == 200
+    assert runs.json()["runs"][0]["run_id"] == "run-personal-visible"
+
+    diagnostics = client.get("/api/v1/tracking/diagnostics", headers=org_headers)
+    assert diagnostics.status_code == 200
+    assert diagnostics.json()["workspace_id"] == "org_same"
+    assert diagnostics.json()["personal_workspace_id"] == "personal_user_same"
+    assert diagnostics.json()["same_user_personal_company_count"] == 1
+
+
+def test_org_dashboard_cannot_see_other_user_personal_publish(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+    monkeypatch.setattr(settings, "api_proxy_shared_secret", "proxy-secret")
+
+    pub = client.post(
+        "/api/v1/plugins/publish",
+        json={
+            "slug": "personal-hidden",
+            "display_name": "Personal Hidden",
+            "target_url": "https://example.test",
+            "skill_pack_version": "1.0.0",
+            "skills": [],
+            "files": [],
+        },
+        headers={
+            "x-conxa-proxy-secret": "proxy-secret",
+            "x-conxa-user-id": "user_other",
+        },
+    )
+    assert pub.status_code == 200, pub.text
+
+    org_headers = {
+        "x-conxa-proxy-secret": "proxy-secret",
+        "x-conxa-user-id": "user_same",
+        "x-conxa-org-id": "org_same",
+    }
+    plugins = client.get("/api/v1/plugins", headers=org_headers)
+    assert plugins.status_code == 200
+    assert all(plugin["slug"] != "personal-hidden" for plugin in plugins.json()["plugins"])
+
+    companies = client.get("/api/v1/tracking/companies", headers=org_headers)
+    assert companies.status_code == 200
+    assert all(row["company"] != "personal-hidden" for row in companies.json()["companies"])
 
 
 def test_publish_rejects_path_traversal():
