@@ -44,6 +44,7 @@ class Principal:
     auth_provider: str = "local"
     identity_source: str = "local"
     proxy_identity_trusted: bool = False
+    proxy_identity_status: str = "backend_secret_missing"
 
     def public_user(self) -> dict[str, Any]:
         return {
@@ -150,29 +151,34 @@ def visible_workspace_ids_for(principal: Principal) -> list[str]:
     return ids
 
 
-def _trusted_proxy_identity(request: Request, subject: str = "") -> dict[str, str]:
+def _trusted_proxy_identity(request: Request, subject: str = "") -> tuple[dict[str, str], str]:
     expected = settings.api_proxy_shared_secret.strip()
     if not expected:
-        return {}
+        return {}, "backend_secret_missing"
     provided = request.headers.get("x-conxa-proxy-secret", "").strip()
-    if not provided or not secrets.compare_digest(provided, expected):
-        return {}
+    if not provided:
+        return {}, "proxy_secret_missing"
+    if not secrets.compare_digest(provided, expected):
+        return {}, "proxy_secret_mismatch"
     user_id = request.headers.get("x-conxa-user-id", "").strip()
     if not user_id:
-        return {}
+        return {}, "proxy_user_missing"
     if subject and user_id != subject:
-        return {}
-    return {
-        "user_id": user_id,
-        "org_id": request.headers.get("x-conxa-org-id", "").strip(),
-        "org_role": request.headers.get("x-conxa-org-role", "").strip(),
-        "org_name": request.headers.get("x-conxa-org-name", "").strip(),
-    }
+        return {}, "proxy_subject_mismatch"
+    return (
+        {
+            "user_id": user_id,
+            "org_id": request.headers.get("x-conxa-org-id", "").strip(),
+            "org_role": request.headers.get("x-conxa-org-role", "").strip(),
+            "org_name": request.headers.get("x-conxa-org-name", "").strip(),
+        },
+        "trusted",
+    )
 
 
 def principal_from_request(request: Request) -> Principal:
     auth = getattr(request.state, "auth", None)
-    proxy_identity = _trusted_proxy_identity(request)
+    proxy_identity, proxy_identity_status = _trusted_proxy_identity(request)
     if not isinstance(auth, dict) or not auth.get("subject"):
         if proxy_identity:
             subject = proxy_identity["user_id"]
@@ -187,6 +193,7 @@ def principal_from_request(request: Request) -> Principal:
                 auth_provider="clerk",
                 identity_source="trusted_proxy",
                 proxy_identity_trusted=True,
+                proxy_identity_status=proxy_identity_status,
             )
         return Principal(
             user_id=LOCAL_USER_ID,
@@ -195,11 +202,12 @@ def principal_from_request(request: Request) -> Principal:
             workspace_name="Local workspace",
             email="local@ai-native.dev",
             name="Local Developer",
+            proxy_identity_status=proxy_identity_status,
         )
 
     claims = auth.get("claims") if isinstance(auth.get("claims"), dict) else {}
     subject = str(auth["subject"])
-    proxy_identity = _trusted_proxy_identity(request, subject)
+    proxy_identity, proxy_identity_status = _trusted_proxy_identity(request, subject)
     org_id = str(proxy_identity.get("org_id") or auth.get("org_id") or personal_workspace_id(subject))
     workspace_slug = _slug_from_org_id(org_id)
     org_role = str(proxy_identity.get("org_role") or auth.get("org_role") or claims.get("org_role") or "basic_member")
@@ -215,6 +223,7 @@ def principal_from_request(request: Request) -> Principal:
         auth_provider="clerk",
         identity_source=identity_source,
         proxy_identity_trusted=bool(proxy_identity),
+        proxy_identity_status=proxy_identity_status,
     )
 
 

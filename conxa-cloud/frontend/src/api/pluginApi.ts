@@ -385,6 +385,13 @@ export type TrackingDiagnosticsResponse = {
   personal_workspace_id: string
   identity_source: 'trusted_proxy' | 'clerk_jwt' | 'local'
   proxy_identity_trusted: boolean
+  proxy_identity_status:
+    | 'trusted'
+    | 'backend_secret_missing'
+    | 'proxy_secret_missing'
+    | 'proxy_secret_mismatch'
+    | 'proxy_user_missing'
+    | 'proxy_subject_mismatch'
   visible_workspace_ids: string[]
   visible_company_count: number
   plugin_count: number

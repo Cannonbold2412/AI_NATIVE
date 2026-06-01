@@ -340,6 +340,7 @@ def test_org_dashboard_sees_same_user_personal_publish(monkeypatch, tmp_path):
     assert diagnostics_body["personal_workspace_id"] == "personal_user_same"
     assert diagnostics_body["identity_source"] == "trusted_proxy"
     assert diagnostics_body["proxy_identity_trusted"] is True
+    assert diagnostics_body["proxy_identity_status"] == "trusted"
     assert diagnostics_body["same_user_personal_company_count"] == 1
 
 

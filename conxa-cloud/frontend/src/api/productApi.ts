@@ -23,6 +23,14 @@ export type Workspace = {
   role: string
 }
 
+export type ProxyIdentityStatus =
+  | 'trusted'
+  | 'backend_secret_missing'
+  | 'proxy_secret_missing'
+  | 'proxy_secret_mismatch'
+  | 'proxy_user_missing'
+  | 'proxy_subject_mismatch'
+
 export type MeResponse = {
   user: {
     id: string
@@ -34,6 +42,7 @@ export type MeResponse = {
   auth_required: boolean
   identity_source?: 'trusted_proxy' | 'clerk_jwt' | 'local'
   proxy_identity_trusted?: boolean
+  proxy_identity_status?: ProxyIdentityStatus
 }
 
 export type DashboardResponse = {

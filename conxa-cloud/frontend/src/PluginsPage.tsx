@@ -155,6 +155,7 @@ export function PluginsPage() {
   const isPersonalWorkspace = diagnosticWorkspaceId.startsWith('personal_')
   const identitySource = diagnosticsQuery.data?.identity_source || meQuery.data?.identity_source
   const proxyTrusted = Boolean(diagnosticsQuery.data?.proxy_identity_trusted ?? meQuery.data?.proxy_identity_trusted)
+  const proxyStatus = diagnosticsQuery.data?.proxy_identity_status || meQuery.data?.proxy_identity_status
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -228,6 +229,11 @@ export function PluginsPage() {
               {identitySource ? (
                 <p className="max-w-md text-[11px] text-zinc-600">
                   Identity: {identitySource} · Proxy trusted: {proxyTrusted ? 'yes' : 'no'}
+                </p>
+              ) : null}
+              {proxyStatus ? (
+                <p className="max-w-md font-mono text-[11px] text-zinc-600">
+                  Proxy status: {proxyStatus}
                 </p>
               ) : null}
               {isPersonalWorkspace ? (

@@ -32,6 +32,7 @@ function apiProxySecret() {
 
 let warnedMissingProxySecret = false
 let warnedMissingOrgId = false
+let warnedMissingUserId = false
 
 async function proxy(request: Request, path: string[]) {
   const origin = upstreamOrigin()
@@ -70,6 +71,12 @@ async function proxy(request: Request, path: string[]) {
         path: upstreamUrl.pathname,
       })
     }
+  } else if (proxySecret && !userId && !warnedMissingUserId) {
+    warnedMissingUserId = true
+    console.warn('CONXA_API_PROXY_SECRET is configured, but Clerk did not provide a userId; trusted proxy identity headers were not sent.', {
+      path: upstreamUrl.pathname,
+      hasOrgId: Boolean(orgId),
+    })
   } else if (userId && !proxySecret && !warnedMissingProxySecret) {
     warnedMissingProxySecret = true
     console.warn('CONXA_API_PROXY_SECRET is not configured; backend workspace identity may fall back to Clerk JWT claims.', {

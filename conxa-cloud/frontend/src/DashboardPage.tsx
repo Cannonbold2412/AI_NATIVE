@@ -396,6 +396,7 @@ export function DashboardPage() {
   const diagnosticWorkspaceId = diagnosticsData?.workspace_id || meData?.workspace?.id || ''
   const isPersonalWorkspace = diagnosticWorkspaceId.startsWith('personal_')
   const proxyTrusted = Boolean(diagnosticsData?.proxy_identity_trusted ?? meData?.proxy_identity_trusted)
+  const proxyStatus = diagnosticsData?.proxy_identity_status || meData?.proxy_identity_status
   const refreshDashboard = () => {
     void queryClient.invalidateQueries({ queryKey: ['tracking-companies'] })
     void queryClient.invalidateQueries({ queryKey: ['tracking-diagnostics'] })
@@ -468,6 +469,11 @@ export function DashboardPage() {
             {diagnosticsData ? (
               <p className="mt-1 text-[11px] text-zinc-700">
                 Identity: {diagnosticsData.identity_source} · Proxy trusted: {diagnosticsData.proxy_identity_trusted ? 'yes' : 'no'}
+              </p>
+            ) : null}
+            {proxyStatus ? (
+              <p className="mt-1 font-mono text-[11px] text-zinc-700">
+                Proxy status: {proxyStatus}
               </p>
             ) : null}
             {isPersonalWorkspace ? (

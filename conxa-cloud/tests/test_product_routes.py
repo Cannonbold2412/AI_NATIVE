@@ -32,6 +32,7 @@ class ProductRoutesTests(unittest.TestCase):
         me = client.get("/api/v1/me")
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["workspace"]["id"], "wrk_local")
+        self.assertEqual(me.json()["proxy_identity_status"], "backend_secret_missing")
 
         dashboard = client.get("/api/v1/dashboard")
         self.assertEqual(dashboard.status_code, 200)
@@ -57,6 +58,9 @@ class ProductRoutesTests(unittest.TestCase):
         self.assertEqual(body["user"]["id"], "user_123")
         self.assertEqual(body["workspace"]["id"], "org_123")
         self.assertEqual(body["workspace"]["role"], "admin")
+        self.assertEqual(body["identity_source"], "trusted_proxy")
+        self.assertTrue(body["proxy_identity_trusted"])
+        self.assertEqual(body["proxy_identity_status"], "trusted")
 
     def test_invalid_proxy_secret_cannot_spoof_org(self) -> None:
         client = self._client()
@@ -72,19 +76,63 @@ class ProductRoutesTests(unittest.TestCase):
 
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["workspace"]["id"], "wrk_local")
+        self.assertFalse(me.json()["proxy_identity_trusted"])
+        self.assertEqual(me.json()["proxy_identity_status"], "proxy_secret_mismatch")
 
     def test_missing_proxy_secret_does_not_trust_proxy_headers(self) -> None:
         client = self._client()
-        me = client.get(
-            "/api/v1/me",
-            headers={
-                "x-conxa-user-id": "user_123",
-                "x-conxa-org-id": "org_123",
-            },
-        )
+        with patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"):
+            me = client.get(
+                "/api/v1/me",
+                headers={
+                    "x-conxa-user-id": "user_123",
+                    "x-conxa-org-id": "org_123",
+                },
+            )
 
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["workspace"]["id"], "wrk_local")
+        self.assertFalse(me.json()["proxy_identity_trusted"])
+        self.assertEqual(me.json()["proxy_identity_status"], "proxy_secret_missing")
+
+    def test_missing_proxy_user_does_not_trust_proxy_headers(self) -> None:
+        client = self._client()
+        with patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"):
+            me = client.get(
+                "/api/v1/me",
+                headers={
+                    "x-conxa-proxy-secret": "proxy-secret",
+                    "x-conxa-org-id": "org_123",
+                },
+            )
+
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["workspace"]["id"], "wrk_local")
+        self.assertFalse(me.json()["proxy_identity_trusted"])
+        self.assertEqual(me.json()["proxy_identity_status"], "proxy_user_missing")
+
+    def test_proxy_subject_mismatch_does_not_override_jwt_subject(self) -> None:
+        client = self._client()
+        with (
+            patch("conxa_core.config.settings.auth_required", True),
+            patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"),
+            patch("app.api.security.verify_clerk_jwt", return_value={"sub": "jwt_user"}),
+        ):
+            me = client.get(
+                "/api/v1/me",
+                headers={
+                    "authorization": "Bearer signed-token",
+                    "x-conxa-proxy-secret": "proxy-secret",
+                    "x-conxa-user-id": "other_user",
+                    "x-conxa-org-id": "org_123",
+                },
+            )
+
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["user"]["id"], "jwt_user")
+        self.assertEqual(me.json()["workspace"]["id"], "personal_jwt_user")
+        self.assertFalse(me.json()["proxy_identity_trusted"])
+        self.assertEqual(me.json()["proxy_identity_status"], "proxy_subject_mismatch")
 
     def test_billing_subscription_local_fallback(self) -> None:
         client = self._client()

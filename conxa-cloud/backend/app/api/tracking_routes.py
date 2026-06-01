@@ -231,6 +231,7 @@ def _tracking_diagnostics(principal: Principal) -> dict[str, Any]:
         "personal_workspace_id": personal_workspace_id(principal.user_id),
         "identity_source": principal.identity_source,
         "proxy_identity_trusted": principal.proxy_identity_trusted,
+        "proxy_identity_status": principal.proxy_identity_status,
         "visible_workspace_ids": list(visible_workspace_ids),
         "visible_company_count": len(visible_companies),
         "plugin_count": plugin_count,
