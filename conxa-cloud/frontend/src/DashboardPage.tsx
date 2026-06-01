@@ -395,6 +395,7 @@ export function DashboardPage() {
   const lastUpdated = dataUpdatedAt ? fmtRelative(dataUpdatedAt) : null
   const diagnosticWorkspaceId = diagnosticsData?.workspace_id || meData?.workspace?.id || ''
   const isPersonalWorkspace = diagnosticWorkspaceId.startsWith('personal_')
+  const proxyTrusted = Boolean(diagnosticsData?.proxy_identity_trusted ?? meData?.proxy_identity_trusted)
   const refreshDashboard = () => {
     void queryClient.invalidateQueries({ queryKey: ['tracking-companies'] })
     void queryClient.invalidateQueries({ queryKey: ['tracking-diagnostics'] })
@@ -471,7 +472,9 @@ export function DashboardPage() {
             ) : null}
             {isPersonalWorkspace ? (
               <p className="mx-auto mt-3 max-w-md text-xs text-amber-300/80">
-                The backend is using a personal workspace. If you expected organization plugins or runs, configure the shared API proxy secret for the frontend and backend.
+                {proxyTrusted
+                  ? 'The proxy secret is trusted, but Clerk did not provide an active organization. Select or create an organization, then sign in again.'
+                  : 'The backend is using a personal workspace. If you expected organization plugins or runs, configure the shared API proxy secret for the frontend and backend.'}
               </p>
             ) : null}
           </div>

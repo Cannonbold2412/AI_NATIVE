@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createPlugin, deletePlugin, fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
+import { createPlugin, deletePlugin, fetchPlugins, fetchTrackingDiagnostics, normalizePluginList, type Plugin } from '@/api/pluginApi'
 import { fetchMe } from '@/api/productApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
@@ -142,10 +142,19 @@ export function PluginsPage() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['plugins'], queryFn: fetchPlugins, staleTime: 10_000 })
   const meQuery = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: 60_000 })
+  const diagnosticsQuery = useQuery({
+    queryKey: ['tracking-diagnostics'],
+    queryFn: fetchTrackingDiagnostics,
+    staleTime: 30_000,
+    enabled: q.isSuccess && normalizePluginList(q.data).length === 0,
+  })
   const refetch = () => qc.invalidateQueries({ queryKey: ['plugins'] })
   const plugins = normalizePluginList(q.data)
   const workspace = meQuery.data?.workspace
-  const isPersonalWorkspace = Boolean(workspace?.id?.startsWith('personal_'))
+  const diagnosticWorkspaceId = diagnosticsQuery.data?.workspace_id || workspace?.id || ''
+  const isPersonalWorkspace = diagnosticWorkspaceId.startsWith('personal_')
+  const identitySource = diagnosticsQuery.data?.identity_source || meQuery.data?.identity_source
+  const proxyTrusted = Boolean(diagnosticsQuery.data?.proxy_identity_trusted ?? meQuery.data?.proxy_identity_trusted)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -216,9 +225,16 @@ export function PluginsPage() {
                   Workspace: {workspace.name || workspace.slug} ({workspace.id})
                 </p>
               ) : null}
+              {identitySource ? (
+                <p className="max-w-md text-[11px] text-zinc-600">
+                  Identity: {identitySource} · Proxy trusted: {proxyTrusted ? 'yes' : 'no'}
+                </p>
+              ) : null}
               {isPersonalWorkspace ? (
                 <p className="max-w-md text-xs text-amber-300/80">
-                  The backend is using a personal workspace. If this should show organization plugins, configure the shared API proxy secret for the frontend and backend.
+                  {proxyTrusted
+                    ? 'The proxy secret is trusted, but Clerk did not provide an active organization. Select or create an organization, then sign in again.'
+                    : 'The backend is using a personal workspace. If this should show organization plugins, configure the shared API proxy secret for the frontend and backend.'}
                 </p>
               ) : null}
               <CreatePluginDialog onCreated={refetch} />

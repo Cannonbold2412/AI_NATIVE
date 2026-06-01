@@ -32,6 +32,8 @@ export type MeResponse = {
   }
   workspace: Workspace
   auth_required: boolean
+  identity_source?: 'trusted_proxy' | 'clerk_jwt' | 'local'
+  proxy_identity_trusted?: boolean
 }
 
 export type DashboardResponse = {

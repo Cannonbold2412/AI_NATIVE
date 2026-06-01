@@ -51,6 +51,8 @@ def get_me(principal: Principal = Depends(current_principal)) -> dict[str, Any]:
         "user": principal.public_user(),
         "workspace": principal.public_workspace(),
         "auth_required": settings.auth_required,
+        "identity_source": principal.identity_source,
+        "proxy_identity_trusted": principal.proxy_identity_trusted,
     }
 
 
