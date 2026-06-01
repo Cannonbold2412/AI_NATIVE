@@ -4,6 +4,22 @@ Record real browser workflows once. Compile them into durable, self-healing skil
 
 ---
 
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [`docs/TRD.md`](docs/TRD.md) | Full technical reference — system architecture, all auth flows (with sequence diagrams), pipelines, recovery cascade, API surface, database schema, security model, known gaps |
+| [`docs/PRD.md`](docs/PRD.md) | Product — vision, personas, competitive positioning, value props, success metrics, roadmap |
+| [`docs/App-Flow.md`](docs/App-Flow.md) | End-to-end user flows with Mermaid diagrams — onboarding, record, compile, build, install, execute, recover, update |
+| [`docs/Backend-Schema.md`](docs/Backend-Schema.md) | Data models, API contracts, ERD diagrams, KV namespace map, multi-tenancy design |
+| [`docs/UI-UX-Brief.md`](docs/UI-UX-Brief.md) | Every screen in Build Studio and Cloud Dashboard — purpose, UX issues, bottlenecks, missing experiences |
+| [`docs/Implementation-Plan.md`](docs/Implementation-Plan.md) | Prioritised engineering roadmap across 4 phases — what's broken, what to fix, which files, dependencies, risks |
+| [`docs/cost_model.md`](docs/cost_model.md) | Unit economics — LLM cost per compile, hosting cost, revenue model |
+
+> **Start with `docs/TRD.md`** for a new engineer onboarding. Start with `docs/PRD.md` for product/business context.
+
+---
+
 ## What This Is
 
 Conxa is a full-stack platform for building and running AI-native automation plugins:
