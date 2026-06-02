@@ -513,6 +513,8 @@ Telemetry is compact: short event codes (`wf_start`, `wf_ok`, `wf_fail`, `step_o
 
 ### 5.8 Runtime Self-Update Flow
 
+Three files are updated atomically on every runtime release: `runtime-win.exe` (the Node pkg bundle), `keytar.node` (native module — Node-ABI-specific), and Chromium (Playwright-revision-specific). All three must stay in sync or the runtime crashes.
+
 ```mermaid
 sequenceDiagram
     participant RT as Runtime
@@ -523,26 +525,31 @@ sequenceDiagram
     alt pending update exists and runtime.exe.next present
         RT->>RT: write update.bat to tmp dir
         RT->>RT: spawn cmd.exe /C update.bat (detached)
-        Note over RT: bat: wait 3s → move exe.next → exe → delete bat
+        Note over RT: bat (runs after 3s delay, detached):<br/>1. move runtime.exe.next → runtime.exe<br/>2. if keytar.node.next exists: move → keytar.node<br/>3. runtime.exe --install-playwright (idempotent)<br/>4. delete bat
         RT->>RT: continue serving (process replaced on next cold start)
     end
     
     RT->>FS: check runtime-update-cache.json (24h TTL)
     alt cache miss or expired
         RT->>Cloud: GET /api/v1/updates/runtime-manifest
-        Cloud-->>RT: {version, url, sha256}
+        Cloud-->>RT: {version, url, sha256, keytar_url, keytar_sha256, playwright_version, chromium_revision}
         RT->>FS: write runtime-update-cache.json
     end
     
     RT->>RT: compare manifest.version vs RUNTIME_VERSION
     alt newer version available
         RT->>Cloud: GET manifest.url (download runtime-win.exe)
-        RT->>RT: SHA-256 verify download
+        RT->>RT: SHA-256 verify
         RT->>FS: write runtime.exe.next
-        RT->>FS: write runtime-update-pending.json {version, ready: true}
+        RT->>Cloud: GET manifest.keytar_url (download keytar.node)
+        RT->>RT: SHA-256 verify
+        RT->>FS: write keytar.node.next
+        RT->>FS: write runtime-update-pending.json {version, ready, has_keytar}
         Note over RT: Update applied on NEXT cold start
     end
 ```
+
+**`--install-playwright` behaviour:** Uses `playwright-core/cli` bundled inside the exe (no system npm/npx dependency). Playwright checks if the exact Chromium revision from `browsers.json` is already on disk; if so, exits immediately. Only downloads on a Playwright version bump (~120 MB).
 
 ### 5.9 Data Ownership Summary
 
@@ -808,7 +815,17 @@ If the element is expected inside a dialog, recovery first restricts the search 
 
 ### 11.3 Runtime Self-Update
 
-Checked on every cold start via `/api/v1/updates/runtime-manifest` (24h local cache). Update is downloaded in the background, written as `runtime.exe.next`. Applied on the next cold start via a `.bat` file that replaces the running binary after a 3-second delay.
+Checked on every cold start via `/api/v1/updates/runtime-manifest` (24h local cache). Three interdependent files are staged and applied together:
+
+| File | Staged as | Applied by |
+|---|---|---|
+| `runtime-win.exe` | `runtime.exe.next` | bat: `move /Y` |
+| `keytar.node` | `keytar.node.next` | bat: `move /Y` (if present) |
+| Chromium | N/A (downloaded by Playwright) | bat: `runtime.exe --install-playwright` |
+
+The bat runs detached after a 3-second delay (giving the current process time to exit). `--install-playwright` uses `playwright-core/cli` bundled inside the exe and is idempotent — it exits immediately if the correct Chromium revision is already on disk.
+
+The manifest includes `keytar_url` and `keytar_sha256` so the runtime knows which `keytar.node` build matches the new Node ABI. If the keytar download fails (network issue), the old file stays; the update still applies but token storage may break if the Node ABI changed.
 
 ---
 
