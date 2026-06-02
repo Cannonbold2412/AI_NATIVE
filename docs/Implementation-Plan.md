@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Status:** Current as of 2026-06-01  
+**Status:** Current as of 2026-06-02 (1.1, 1.2, sync-token model done)  
 **Audience:** Engineering team
 
 This plan is grounded in the actual codebase. Each item references the specific file or system that needs to change. Items are ordered by risk and dependency, not effort.
@@ -15,36 +15,49 @@ This plan is grounded in the actual codebase. Each item references the specific 
 
 ---
 
-### 1.1 Fix Runtime Auth Token Refresh (Critical)
+### ✅ 1.1 Fix Runtime Auth Token Refresh (Critical) — DONE 2026-06-02
 
-**What's broken:** `POST /api/v1/auth/refresh` in `conxa-cloud/backend/app/api/skillpack_update_routes.py:post_auth_refresh` is a stub — it echoes the submitted token back with a 30-day expiry regardless of validity. In production, any token (valid or forged) gets refreshed indefinitely.
+**What was broken:** `POST /api/v1/auth/refresh` was a stub — it echoed back any token with a 30-day expiry regardless of validity.
 
-**Fix:**
-- Validate the incoming token against Clerk JWKS before issuing a new token.
-- Return HTTP 401 on invalid/expired tokens.
-- The endpoint is used by `runtime/auth_manager.js:_doRefresh()`.
-
-**Files:** `skillpack_update_routes.py`, `security.py` (can reuse `verify_clerk_jwt`)
-
-**Risk:** Runtime installs without valid Clerk tokens will start failing sync. Need to ensure all runtime installs have a path to acquire a valid token (see 1.2).
+**What was fixed:**
+- `post_auth_refresh` now calls `verify_clerk_jwt(body.token)` in production (`SKILL_AUTH_REQUIRED=true`); returns HTTP 401 for invalid/expired tokens.
+- Response `expires_at` reflects the real JWT `exp` claim instead of a fake 30-day window.
+- Added `/api/v1/auth/refresh` and `/api/v1/auth/cli/poll` to `PUBLIC_AUTH_PATHS` in `security.py` so the middleware does not block runtime calls (which have no `Authorization` header — the token in the body is the credential).
+- Fixed URL bug in `runtime/auth_manager.js:_doRefresh()`: was calling `${CONXA_API}/auth/refresh` (missing `/api/v1/` prefix), now calls `${CONXA_API}/api/v1/auth/refresh`.
+- Local dev behaviour unchanged: token echoed back when `SKILL_AUTH_REQUIRED=false`.
 
 ---
 
-### 1.2 Implement Runtime Token Acquisition Flow
+### ✅ 1.2 Implement Runtime Token Acquisition Flow — DONE 2026-06-02
 
-**What's missing:** There is no in-product way for a newly installed runtime to acquire an auth token for a company. `auth_manager.js:getAuthChallengeUrl()` generates a challenge URL but nothing triggers the flow end-to-end.
+**What was missing:** No in-product way for a runtime to acquire a token for a company.
 
-**Fix:**
-- Add an MCP tool `setup_company(company)` that:
-  1. Gets the auth challenge URL.
-  2. Returns it to Claude for the user to open.
-  3. After the user completes auth at `app.conxa.in/auth/cli?nonce=...`, the web UI calls `POST /api/v1/auth/cli/complete`.
-  4. Runtime polls `POST /api/v1/auth/cli/poll` with the nonce until it gets a token.
-  5. Stores token via `auth_manager.setToken(company, token, expiresAt)`.
+**What was built:**
+- Added `setup_company` MCP tool to `runtime/server.js` (two-phase):
+  - Phase 1 (`setup_company(company)`): calls `getAuthChallengeUrl()`, returns `{auth_url, nonce}` for Claude to show the user.
+  - Phase 2 (`setup_company(company, nonce)`): polls `POST /api/v1/auth/cli/poll` once; on success stores token via `setToken()` and triggers a skill pack sync.
+- Changed `post_auth_cli_complete` to use a JSON body (`{nonce, token}`) instead of query params.
+- Added 10-minute TTL enforcement in `post_auth_cli_poll`; returns `{status: "expired"}` when stale.
+- `post_auth_cli_poll` now parses the token's JWT `exp` and returns the real expiry.
+- Created `conxa-cloud/frontend/app/auth/cli/page.tsx` — the browser auth page the user visits to approve access (Clerk-authenticated; calls `/api/v1/auth/cli/complete` via the Next.js proxy).
 
-**Files:** `runtime/server.js` (new tool), `runtime/auth_manager.js`, `skillpack_update_routes.py` (cli/complete + cli/poll already exist), Cloud frontend (`app/auth/cli/page.tsx` needed)
+**Superseded:** The Clerk-JWT/`setup_company` approach was replaced in the same session by the installer-embedded sync-token model below. The `setup_company` tool, `/auth/refresh`, and `/auth/cli/*` endpoints were all removed. The CLI auth page (`app/auth/cli/page.tsx`) created here was deleted.
 
-**Risk:** Low — additive change. Existing installations continue to work with whatever tokens they have.
+---
+
+### ✅ Installer-Provisioned Sync Token — DONE 2026-06-02
+
+**What was built:** End-user runtimes now pull skill-pack updates using an installer-embedded sync token — no Conxa login required.
+
+- **Cloud (`publish_routes.py`):** `_sync_token()` mints a `secrets.token_urlsafe(32)` at publish time (reused on republish), stored in `sync_tokens` KV namespace. `sync_token` embedded in cloud-side `pack.json` and returned in the publish response.
+- **Cloud (`skillpack_update_routes.py`):** `get_skill_pack_delta` now calls `_verify_sync_token(company, token)` — `secrets.compare_digest` against `db_get("sync_tokens", company)`. 401 on mismatch; skipped in local dev.
+- **Cloud (`main.py`, `security.py`):** Removed `auth_router` and `PUBLIC_AUTH_PATHS` (the `/auth/refresh` + `/auth/cli/*` endpoints are gone).
+- **Build Studio (`backend.py`):** After publish, reads `sync_token` from response and writes it into local `pack.json` before the installer is staged. Hard error if publish response lacks `sync_token`.
+- **Build Studio (`installer_builder.py`):** Guard added — fails fast if `pack.json` has no `sync_token` (catches packs built before publish).
+- **Runtime (`sync.js`):** `_doSync` reads `pack.sync_token` directly; `authManager.getToken()` call removed. `syncSkillPacks` signature simplified (no `authManager` param).
+- **Runtime (`server.js`):** `setup_company` tool and `_handleAuthCallback` removed.
+- **Runtime (`auth_manager.js`):** Clerk-token machinery (`getToken`/`setToken`/`refreshToken`/`_doRefresh`) removed. Session encryption now uses a per-machine random key (`getSessionKey(company)`) generated on first use and stored in OS keychain (`conxa-session` service) — isolates individual users' session files from the shared installer secret.
+- **Runtime (`browser.js`):** Both `authManager.getToken(company)` call sites replaced with `authManager.getSessionKey(company)`.
 
 ---
 
@@ -426,7 +439,7 @@ Phase 3 and 4 can proceed in parallel.
 
 | Risk | Phase | Severity | Mitigation |
 |---|---|---|---|
-| Runtime installations without valid tokens break after 1.1 | 1 | High | 1.2 (token acquisition flow) must ship simultaneously with 1.1 |
+| Runtime installations without valid tokens break after 1.1 | 1 | High | **Resolved** — replaced by installer-embedded sync_token; no Conxa login required |
 | RBAC enforcement breaks existing admin workflows | 1 | Medium | Roll out in audit-only mode first; log violations before enforcing |
 | Delta sync format change breaks older runtimes | 1 | Medium | Support both manifest-diff and full-pack responses based on request params |
 | macOS Playwright + keytar compatibility unknown | 2 | Medium | Test on macOS before committing to timeline |

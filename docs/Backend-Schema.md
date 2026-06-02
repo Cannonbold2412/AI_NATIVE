@@ -491,7 +491,32 @@ Response:
 }
 ```
 
-### 5.6 Backend JSON-RPC Protocol (Build Studio)
+### 5.6 Skill-Pack Delta Sync
+
+**GET /api/v1/skill-packs/{company}/delta?since={version}**
+
+Authentication: `Authorization: Bearer <sync_token>` where `sync_token` is the per-company token minted at publish time (`publish_routes._sync_token()`) and stored in the `sync_tokens` KV namespace. The token is embedded in `pack.json` at publish and ships inside the installer — the runtime reads it directly with zero user interaction.
+
+- Production (`SKILL_AUTH_REQUIRED=true`): 401 if token is missing or does not match stored token.
+- Local dev (`SKILL_AUTH_REQUIRED=false`): validation skipped.
+
+The sync_token is also returned in the publish response so the Build Studio can write it into the local pack.json before staging the installer:
+
+```json
+{
+  "slug": "acme",
+  "version": "0.3.0",
+  "sync_token": "aBcDeFgH...",
+  "sync_url": "/api/v1/skill-packs/acme/delta",
+  "tracking": {...},
+  "workspace_id": "org_...",
+  "published_at": 1717000000.0
+}
+```
+
+**KV namespace:** `sync_tokens` — keyed by slug, stores `{token, company, version, workspace_id, owner_user_id, updated_at}`.
+
+### 5.7 Backend JSON-RPC Protocol (Build Studio)
 
 **Protocol:** Newline-delimited JSON over stdin/stdout.
 

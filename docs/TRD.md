@@ -207,9 +207,7 @@ All under `/api/v1/` except health endpoints:
 | `GET /api/v1/updates/deps-manifest` | Bootstrap manifest | Public |
 | `GET /api/v1/updates/runtime-manifest` | Runtime self-update manifest | Public |
 | `GET /api/v1/updates/studio-manifest` | Studio download info | Public |
-| `POST /api/v1/auth/refresh` | Token refresh | Token in body |
-| `POST /api/v1/auth/cli/poll` | CLI auth poll | Nonce |
-| `POST /api/v1/auth/cli/complete` | CLI auth complete | Nonce |
+| `GET /api/v1/skill-packs/{company}/delta` | Skill-pack delta sync — authenticated by installer-embedded sync_token | Bearer: `pack.json.sync_token`; 401 if invalid |
 | `POST /api/v1/telemetry/runtime-start` | Runtime phone-home | Public (non-critical) |
 | `POST /api/v1/subscriptions` | Create Razorpay subscription | Clerk JWT |
 | `POST /api/v1/billing/webhook` | Razorpay webhook | Webhook secret HMAC |
@@ -402,35 +400,55 @@ Every protected API call from the Build Studio:
 4. Attaches `request.state.auth` with `subject`, `org_id`, `claims`.
 5. `principal_from_request()` in `saas.py` constructs a `Principal` object for RBAC.
 
-### 5.4 Runtime Token System (per-company)
+### 5.4 Runtime Sync Token (per-company, installer-embedded)
 
-The runtime uses a **separate token system** from the Build Studio Clerk tokens. This is a simpler per-company opaque token:
+The runtime uses an **installer-embedded sync token** for all Conxa Cloud communication (skill-pack delta fetches). End users never interact with Conxa auth — they only log into their own target platform.
+
+#### 5.4.1 Token lifecycle
+
+The sync token is a `secrets.token_urlsafe(32)` string minted **at publish time** and stored server-side in the `sync_tokens` KV namespace keyed by company slug. It is stable across republishes (reused if present) and can be rotated by deleting the KV entry.
+
+**Publish → installer flow:**
+
+```
+Build Studio publishes skill pack
+  → POST /api/v1/plugins/publish
+  → cloud mints sync_token (publish_routes._sync_token())
+  → sync_token written into cloud-side pack.json
+  → publish response returns sync_token
+  → Build Studio writes sync_token into local pack.json (backend.py)
+  → installer_builder stages pack.json verbatim into NSIS
+  → installer ships pack.json to C:\Program Files\Conxa\skill-packs\{company}\
+```
+
+`installer_builder.py` guards that `pack.json` has `sync_token` before staging — build fails fast if the pack was never published.
+
+#### 5.4.2 Runtime sync
+
+On every cold start, `sync.js:_doSync()` reads `pack.sync_token` directly from the on-disk `pack.json` and sends it as `Authorization: Bearer` to the delta endpoint. No keytar lookup, no user login.
 
 ```mermaid
 sequenceDiagram
     participant RT as Runtime (server.js)
-    participant AM as auth_manager.js
-    participant Keytar as OS Keychain
-    participant Cloud as Conxa Cloud (/auth/refresh)
+    participant S as sync.js
+    participant Cloud as Conxa Cloud
 
-    Note over RT: Runtime startup or skill execution
-    RT->>AM: getToken(company)
-    AM->>Keytar: getPassword("conxa", company)
-    Keytar-->>AM: {token, expires_at} (JSON string)
-    
-    alt token not expired (> 5 min remaining)
-        AM-->>RT: token
-    else token near expiry
-        AM->>Cloud: POST /auth/refresh {token, company}
-        Cloud-->>AM: {token, expires_at}
-        AM->>Keytar: setPassword("conxa", company, JSON)
-        AM-->>RT: new token
-    end
+    Note over RT: Cold start
+    RT->>S: syncSkillPacks(SKILL_PACKS_DIR)
+    S->>S: read pack.json → sync_token
+    S->>Cloud: GET /api/v1/skill-packs/{company}/delta?since=... (Bearer: sync_token)
+    Cloud->>Cloud: compare_digest(stored_sync_token, token)
+    Cloud-->>S: delta files (or 200 up-to-date / 401 invalid token)
+    S->>S: atomic write + SHA-256 verify updated files
 ```
 
-**CURRENT STATE:** `POST /auth/refresh` in local dev echoes back the same token with a 30-day expiry. In production this should validate against Clerk and issue a new JWT — **this validation is not implemented** (see §17).
+`GET /api/v1/skill-packs/{company}/delta` is in `PUBLIC_SKILL_PACK_SYNC_PREFIXES` so middleware does not apply — the handler validates the sync token directly. In local dev (`SKILL_AUTH_REQUIRED=false`) validation is skipped.
 
-**Session encryption:** When executing a skill, the runtime loads the Playwright `storageState` (browser cookies/localStorage). If a Conxa token is present, the state is encrypted with AES-256-GCM using a key derived via HKDF from the token (`auth_manager.js:_deriveKey()`). This means a stolen session file without the token is useless.
+#### 5.4.3 Session encryption (per-machine key)
+
+When executing a skill the runtime loads the target-platform Playwright `storageState` (browser cookies/localStorage). It is encrypted at rest with AES-256-GCM using a **per-machine** key derived via HKDF (`auth_manager.js:_deriveKey()`). The key is a 32-byte random value generated on first use per company and stored in the OS keychain via keytar (service `conxa-session`).
+
+This decouples session encryption from the sync token: a leaked installer exposes the sync token (granting read-only access to that company's skill packs) but **cannot decrypt any user's session file** since the encryption key is machine-specific.
 
 ### 5.5 Skill Publishing Flow
 
@@ -964,8 +982,7 @@ In production (`SKILL_AUTH_REQUIRED=true`), the app refuses to start without `SK
 
 ### 15.2 Security Gaps (Current State)
 
-- Runtime auth refresh (`POST /auth/refresh`) is a stub — echoes token back in local dev. No real validation in production yet.
-- Nonce store for CLI auth is in-memory (`_auth_nonces` dict) — cleared on process restart.
+- Sync token is a shared secret across all of a company's end users — a leaked installer grants read-only access to that company's data-only skill packs. Session encryption uses a separate per-machine key so individual users' sessions remain protected.
 - Skill pack delta rate limit is in-memory — not persisted across restarts.
 - No device registration or runtime instance tracking.
 - Installer download is fully public — anyone with the slug URL can download.
@@ -1025,8 +1042,7 @@ Ships inside the company-specific installer produced by Build Studio. Installs t
 | Gap | Location | Severity | Notes |
 |---|---|---|---|
 | Delta sync ships all files | `skillpack_update_routes.py` | Medium | Code comment: "simplified implementation" |
-| Auth refresh is a stub | `skillpack_update_routes.py:post_auth_refresh` | High | Returns same token + 30-day expiry in local dev |
-| CLI auth nonce in-memory | `_auth_nonces` dict | Medium | Lost on server restart |
+| Sync token is a shared installer secret | `sync_tokens` KV + pack.json | Low | Read-only, single-company scope; per-machine session encryption key mitigates session-file risk |
 | Rate limit cache in-memory | `_rate_cache` dict | Medium | Not shared across instances |
 | Stripe fields in config | `config.py:stripe_*` | Low | Orphaned; Razorpay is the wired gateway |
 | No device/runtime registration | Cloud | High | No visibility into how many runtimes are active |
