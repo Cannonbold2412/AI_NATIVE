@@ -8,13 +8,13 @@ GET  /api/v1/tracking/{company}/runs/{run_id} — single run event timeline
 
 from __future__ import annotations
 
-import time
 import secrets
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from conxa_core.db import db_append, db_get, db_list_kv
+from conxa_core.db import db_append, db_get, db_list, db_list_kv
 from conxa_core.config import settings
 from conxa_core.storage.plugin_store import list_plugins
 from app.services.saas import (
@@ -27,6 +27,9 @@ from app.services.saas import (
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 public_router = APIRouter(prefix="/api/tracking", tags=["tracking"])
+
+_DAY_MS = 86_400_000
+_RECOVERY_TYPES = ("Selector", "Text Anchor", "Text Variant", "Vision")
 
 
 def current_principal(request: Request) -> Principal:
@@ -240,6 +243,258 @@ def _tracking_diagnostics(principal: Principal) -> dict[str, Any]:
     }
 
 
+def _number(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _epoch_ms(value: Any) -> int:
+    n = _number(value)
+    if n <= 0:
+        return 0
+    return int(n if n > 10_000_000_000 else n * 1000)
+
+
+def _date_key(epoch_ms: int) -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime(epoch_ms / 1000))
+
+
+def _range_days(value: str) -> int:
+    return 30 if str(value or "").lower() == "30d" else 7
+
+
+def _visible_runtime_registrations(principal: Principal) -> list[dict[str, Any]]:
+    visible_ids = set(visible_workspace_ids_for(principal))
+    registrations: list[dict[str, Any]] = []
+    for reg in db_list("runtime_registrations"):
+        if not isinstance(reg, dict):
+            continue
+        workspace_id = str(reg.get("workspace_id") or "")
+        if not workspace_id or workspace_id not in visible_ids:
+            continue
+        registrations.append(reg)
+    return registrations
+
+
+def _visible_run_records(principal: Principal) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for row in _tracking_company_rows(principal):
+        company = str(row.get("company") or "").strip()
+        if not company:
+            continue
+        for run_id, batches in db_list_kv(f"tracking/{company}"):
+            scoped = _batches_for_principal(batches, principal)
+            if not scoped:
+                continue
+            events: list[dict[str, Any]] = []
+            for batch in scoped:
+                events.extend(batch.get("events", []))
+            summary = _run_summary(run_id, scoped)
+            records.append({"company": company, "summary": summary, "events": events})
+    records.sort(key=lambda r: _record_time_ms(r), reverse=True)
+    return records
+
+
+def _record_time_ms(record: dict[str, Any]) -> int:
+    summary = record.get("summary") or {}
+    return max(_epoch_ms(summary.get("started_at")), _epoch_ms(summary.get("server_ts")))
+
+
+def _event_recovery_type(evt: dict[str, Any]) -> str:
+    code = str(evt.get("e") or "").lower()
+    key = str(evt.get("rt") or evt.get("sc") or evt.get("tier") or evt.get("sel") or "").lower()
+    if code not in {"rec_ok", "tier_ok"}:
+        return ""
+    if code == "tier_ok" and key == "tier1_compiled" and not evt.get("sel"):
+        return ""
+    if key in {"selector", "selector_retry", "candidate_fallback", "dialog_scope", "tier1_compiled"}:
+        return "Selector"
+    if key.startswith("a11y") or key in {"text_anchor", "tier2_a11y"}:
+        return "Text Anchor"
+    if key in {"text_variant", "fuzzy", "fuzzy_dom"}:
+        return "Text Variant"
+    if key in {"vision", "vision_recovery", "tier4_vision", "llm_intent", "tier3_llm"}:
+        return "Vision"
+    return ""
+
+
+def _run_has_recovery(record: dict[str, Any]) -> bool:
+    summary = record.get("summary") or {}
+    if int(_number(summary.get("recovered_steps"))) > 0:
+        return True
+    return any(_event_recovery_type(evt) for evt in record.get("events") or [])
+
+
+def _failed_step_index(record: dict[str, Any]) -> int | None:
+    summary = record.get("summary") or {}
+    value = summary.get("failed_step_id")
+    if value is None:
+        for evt in reversed(record.get("events") or []):
+            if evt.get("e") == "step_fail" and evt.get("si") is not None:
+                value = evt.get("si")
+                break
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]:
+    days = _range_days(range_value)
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - (days * _DAY_MS)
+    last_24h_ms = now_ms - _DAY_MS
+
+    registrations = _visible_runtime_registrations(principal)
+    install_keys = {
+        str(reg.get("install_id") or f"{reg.get('company', '')}:{reg.get('platform', '')}")
+        for reg in registrations
+        if reg.get("install_id") or reg.get("company") or reg.get("platform")
+    }
+    active_install_keys = {
+        str(reg.get("install_id") or f"{reg.get('company', '')}:{reg.get('platform', '')}")
+        for reg in registrations
+        if _epoch_ms(reg.get("last_seen")) >= start_ms
+        and (reg.get("install_id") or reg.get("company") or reg.get("platform"))
+    }
+
+    all_records = _visible_run_records(principal)
+    range_records = [record for record in all_records if _record_time_ms(record) >= start_ms]
+    last_24h_records = [record for record in all_records if _record_time_ms(record) >= last_24h_ms]
+    completed_records = [r for r in range_records if (r.get("summary") or {}).get("status") in {"ok", "fail"}]
+    ok_records = [r for r in completed_records if (r.get("summary") or {}).get("status") == "ok"]
+    failed_records = [r for r in completed_records if (r.get("summary") or {}).get("status") == "fail"]
+    recovered_records = [r for r in range_records if _run_has_recovery(r)]
+    durations = [
+        int(_number((r.get("summary") or {}).get("duration_ms")))
+        for r in completed_records
+        if _number((r.get("summary") or {}).get("duration_ms")) > 0
+    ]
+
+    range_install_ids = {
+        str((r.get("summary") or {}).get("uid") or "")
+        for r in range_records
+        if (r.get("summary") or {}).get("uid")
+    }
+    active_users = len(active_install_keys | range_install_ids)
+    active_companies = len({str(r.get("company") or "") for r in range_records if r.get("company")})
+
+    recovery_counts = {name: 0 for name in _RECOVERY_TYPES}
+    for record in range_records:
+        for evt in record.get("events") or []:
+            recovery_type = _event_recovery_type(evt)
+            if recovery_type:
+                recovery_counts[recovery_type] += 1
+    # Older runtimes may only send wf_ok.rec. Keep recovered runs visible as selector saves.
+    if not any(recovery_counts.values()):
+        recovery_counts["Selector"] = sum(
+            1 for record in range_records if int(_number((record.get("summary") or {}).get("recovered_steps"))) > 0
+        )
+
+    workflow_failures: dict[str, dict[str, Any]] = {}
+    step_failures: dict[str, dict[str, Any]] = {}
+    for record in failed_records:
+        summary = record.get("summary") or {}
+        workflow = str(summary.get("plugin_id") or "Unknown workflow")
+        current = workflow_failures.setdefault(
+            workflow,
+            {"workflow": workflow, "failed_executions": 0, "last_failure_code": "", "last_seen": 0},
+        )
+        current["failed_executions"] += 1
+        current["last_failure_code"] = summary.get("failure_code") or current["last_failure_code"]
+        current["last_seen"] = max(int(current["last_seen"]), _record_time_ms(record))
+
+        step_index = _failed_step_index(record)
+        step_key = f"{workflow}:{step_index if step_index is not None else 'unknown'}"
+        step = step_failures.setdefault(
+            step_key,
+            {
+                "workflow": workflow,
+                "step_index": step_index,
+                "step_label": f"Step {step_index + 1}" if step_index is not None else "Unknown step",
+                "failed_executions": 0,
+                "last_failure_code": "",
+                "last_seen": 0,
+            },
+        )
+        step["failed_executions"] += 1
+        step["last_failure_code"] = summary.get("failure_code") or step["last_failure_code"]
+        step["last_seen"] = max(int(step["last_seen"]), _record_time_ms(record))
+
+    buckets = {
+        _date_key(now_ms - ((_range_days(range_value) - 1 - i) * _DAY_MS)): {
+            "date": _date_key(now_ms - ((_range_days(range_value) - 1 - i) * _DAY_MS)),
+            "executions": 0,
+            "successful": 0,
+            "failed": 0,
+            "recovered": 0,
+        }
+        for i in range(days)
+    }
+    for record in range_records:
+        key = _date_key(_record_time_ms(record))
+        if key not in buckets:
+            continue
+        summary = record.get("summary") or {}
+        buckets[key]["executions"] += 1
+        if summary.get("status") == "ok":
+            buckets[key]["successful"] += 1
+        if summary.get("status") == "fail":
+            buckets[key]["failed"] += 1
+        if _run_has_recovery(record):
+            buckets[key]["recovered"] += 1
+
+    total_range = len(range_records)
+    success_rate = round((len(ok_records) / len(completed_records)) * 100, 1) if completed_records else 0.0
+    recovery_rate = round((len(recovered_records) / total_range) * 100, 1) if total_range else 0.0
+
+    return {
+        "range": f"{days}d",
+        "metrics": {
+            "total_installs": len(install_keys),
+            "active_users": active_users,
+            "active_companies": active_companies,
+            "total_executions": len(all_records),
+            "executions_last_24h": len(last_24h_records),
+            "success_rate": success_rate,
+            "failed_executions": len(failed_records),
+            "recovery_rate": recovery_rate,
+            "average_execution_time": round(sum(durations) / len(durations)) if durations else 0,
+        },
+        "recovery_type_usage": [
+            {"type": name, "count": recovery_counts[name]}
+            for name in _RECOVERY_TYPES
+        ],
+        "most_failed_workflows": sorted(
+            workflow_failures.values(),
+            key=lambda row: (row["failed_executions"], row["last_seen"]),
+            reverse=True,
+        )[:6],
+        "most_failed_steps": sorted(
+            step_failures.values(),
+            key=lambda row: (row["failed_executions"], row["last_seen"]),
+            reverse=True,
+        )[:6],
+        "recent_activity": [
+            {
+                "run_id": (record.get("summary") or {}).get("run_id"),
+                "company": record.get("company"),
+                "workflow": (record.get("summary") or {}).get("plugin_id") or "Unknown workflow",
+                "status": (record.get("summary") or {}).get("status"),
+                "duration_ms": (record.get("summary") or {}).get("duration_ms") or 0,
+                "recovered_steps": (record.get("summary") or {}).get("recovered_steps") or 0,
+                "failure_code": (record.get("summary") or {}).get("failure_code"),
+                "failed_step_id": _failed_step_index(record),
+                "started_at": _record_time_ms(record),
+            }
+            for record in all_records[:12]
+        ],
+        "execution_trend": list(buckets.values()),
+    }
+
+
 @public_router.post("/{company}/events", status_code=202)
 @router.post("/{company}/events", status_code=202)
 async def ingest_events(company: str, request: Request) -> dict[str, Any]:
@@ -292,6 +547,15 @@ def tracking_diagnostics(
 ) -> dict[str, Any]:
     """Return safe workspace-scoping diagnostics for dashboard visibility."""
     return _tracking_diagnostics(principal)
+
+
+@router.get("/dashboard")
+def tracking_dashboard(
+    range: str = "7d",
+    principal: Principal = Depends(current_principal),
+) -> dict[str, Any]:
+    """Return workspace-scoped adoption, reliability, and recovery aggregates."""
+    return _dashboard_metrics(principal, range)
 
 
 @router.get("/{company}/runs")

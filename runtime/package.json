@@ -17,6 +17,7 @@
     ],
     "scripts": [
       "server.js",
+      "install_identity.js",
       "skill_loader.js",
       "sync.js",
       "auth_manager.js",

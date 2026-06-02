@@ -28,23 +28,24 @@ import { clerkAppearance } from '@/lib/clerkAppearance'
 
 const SIDEBAR_KEY = 'conxa-sidebar-collapsed'
 
-const navGroups = [
-  {
-    label: 'Operate',
-    items: [
-      { to: '/dashboard', label: 'Dashboard', icon: Home },
-      { to: '/plugins', label: 'Plugins', icon: Puzzle },
-    ],
-  },
-  {
-    label: 'Manage',
-    items: [
-      { to: '/team', label: 'Team', icon: Users },
-      { to: '/billing', label: 'Billing', icon: CreditCard },
-      { to: '/settings', label: 'Settings', icon: Settings },
-    ],
-  },
-] as const
+const operateNavGroup = {
+  label: 'Operate',
+  items: [
+    { to: '/dashboard', label: 'Dashboard', icon: Home },
+    { to: '/plugins', label: 'Plugins', icon: Puzzle },
+  ],
+} as const
+
+const manageNavGroup = {
+  label: 'Manage',
+  items: [
+    { to: '/team', label: 'Team', icon: Users },
+    { to: '/billing', label: 'Billing', icon: CreditCard },
+    { to: '/settings', label: 'Settings', icon: Settings },
+  ],
+} as const
+
+type NavGroup = typeof operateNavGroup | typeof manageNavGroup
 
 function ProductMark() {
   return (
@@ -57,11 +58,19 @@ function ProductMark() {
   )
 }
 
-function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+function SidebarNav({
+  groups,
+  collapsed,
+  onNavigate,
+}: {
+  groups: readonly NavGroup[]
+  collapsed: boolean
+  onNavigate?: () => void
+}) {
   const pathname = usePathname()
   return (
     <nav className="space-y-1.5" aria-label="Primary">
-      {navGroups.map((group) => (
+      {groups.map((group) => (
         <div key={group.label} className="space-y-1.5">
           <p className={cn('px-3 pt-3 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-600', collapsed && 'sr-only')}>
             {group.label}
@@ -131,9 +140,9 @@ function DesktopSidebar({ collapsed, setCollapsed }: { collapsed: boolean; setCo
         )}
       </div>
 
-      <div className="flex-1 space-y-6 px-3 py-4">
+      <div className="flex min-h-0 flex-1 flex-col px-3 py-4">
         {collapsed && (
-          <div className="flex justify-center">
+          <div className="mb-6 flex justify-center">
             <Button
               type="button"
               variant="ghost"
@@ -146,7 +155,10 @@ function DesktopSidebar({ collapsed, setCollapsed }: { collapsed: boolean; setCo
             </Button>
           </div>
         )}
-        <SidebarNav collapsed={collapsed} />
+        <SidebarNav groups={[operateNavGroup]} collapsed={collapsed} />
+        <div className="mt-auto border-t border-white/8 pt-3">
+          <SidebarNav groups={[manageNavGroup]} collapsed={collapsed} />
+        </div>
       </div>
     </aside>
   )
@@ -194,7 +206,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
                     <Menu className="size-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="w-[18rem] border-white/10 bg-[#0d0f12] p-0 text-zinc-100">
+                <SheetContent side="left" className="flex w-[18rem] flex-col border-white/10 bg-[#0d0f12] p-0 text-zinc-100">
                   <SheetHeader className="border-b border-white/8 px-4 py-4 text-left">
                     <div className="flex items-center gap-3">
                       <ProductMark />
@@ -204,8 +216,11 @@ export function AppChrome({ children }: { children: ReactNode }) {
                       </div>
                     </div>
                   </SheetHeader>
-                  <div className="px-3 py-4">
-                    <SidebarNav collapsed={false} onNavigate={() => setMobileOpen(false)} />
+                  <div className="flex min-h-0 flex-1 flex-col px-3 py-4">
+                    <SidebarNav groups={[operateNavGroup]} collapsed={false} onNavigate={() => setMobileOpen(false)} />
+                    <div className="mt-auto border-t border-white/8 pt-3">
+                      <SidebarNav groups={[manageNavGroup]} collapsed={false} onNavigate={() => setMobileOpen(false)} />
+                    </div>
                   </div>
                 </SheetContent>
               </Sheet>

@@ -1,184 +1,104 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState, type ComponentType } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
-  fetchPlugins,
-  fetchRuntimeRegistrations,
-  fetchTrackingCompanies,
-  fetchTrackingRun,
-  fetchTrackingRuns,
-  normalizePluginList,
-  type RuntimeRegistration,
-  type TrackingEvent,
-  type TrackingRunSummary,
+  fetchTrackingDashboard,
+  type TrackingDashboardRange,
+  type TrackingDashboardResponse,
 } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   Activity,
   AlertTriangle,
+  Building2,
   CheckCircle2,
-  CircleAlert,
-  Clock,
-  Monitor,
+  Clock3,
+  Download,
   RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  TrendingUp,
+  Users,
   Zap,
 } from 'lucide-react'
 
-// ─── Label maps ───────────────────────────────────────────────────────────────
-
-const STRATEGY_LABELS: Record<string, string> = {
-  selector_retry:     'Selector Retry',
-  candidate_fallback: 'Candidate Fallback',
-  dialog_scope:       'Dialog Scope',
-  fuzzy_dom:          'Fuzzy DOM',
-  vision_recovery:    'Vision',
-  llm_intent:         'LLM Intent',
+const EMPTY_METRICS: TrackingDashboardResponse['metrics'] = {
+  total_installs: 0,
+  active_users: 0,
+  active_companies: 0,
+  total_executions: 0,
+  executions_last_24h: 0,
+  success_rate: 0,
+  failed_executions: 0,
+  recovery_rate: 0,
+  average_execution_time: 0,
 }
 
-const TIER_LABELS: Record<string, string> = {
-  tier1_compiled: 'Tier 1 — Compiled Selector',
-  tier2_a11y:     'Tier 2 — A11y Tree',
-  tier3_llm:      'Tier 3 — LLM Recovery',
-  tier4_vision:   'Tier 4 — Vision',
-  tier5_escalate: 'Tier 5 — Escalation',
+function fmtNumber(value: number) {
+  return new Intl.NumberFormat().format(value || 0)
 }
 
-const FAILURE_LABELS: Record<string, string> = {
-  selector_missing:  'Selector Missing',
-  url_mismatch:      'URL Mismatch',
-  timeout:           'Timeout',
-  navigation_failed: 'Navigation Failed',
-  cancelled:         'Cancelled',
-  unknown:           'Unknown',
-}
-
-const EVENT_LABELS: Record<string, string> = {
-  wf_start:  'Workflow Started',
-  wf_ok:     'Workflow Success',
-  wf_fail:   'Workflow Failed',
-  step_fail: 'Step Failed',
-  tier_ok:   'Step Resolved',
-  rec_start: 'Recovery Started',
-  rec_ok:    'Recovery Succeeded',
-  rec_fail:  'Recovery Failed',
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function toCompanySlug(name: string): string {
-  let s = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-  if (!s || !/^[a-z]/.test(s)) s = `p_${s}`
-  return s.slice(0, 40)
+function fmtPercent(value: number) {
+  return `${Number(value || 0).toFixed(1).replace(/\.0$/, '')}%`
 }
 
 function fmtDuration(ms: number) {
-  if (!ms) return '—'
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
-}
-
-function fmtTs(epochMs: number) {
-  if (!epochMs) return '—'
-  return new Date(epochMs).toLocaleString([], {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-  })
+  if (!ms) return '0ms'
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`
+  return `${Math.round(ms / 60_000)}m`
 }
 
 function fmtRelative(epochMs: number) {
+  if (!epochMs) return 'No timestamp'
   const diff = Date.now() - epochMs
   if (diff < 60_000) return 'just now'
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
-  return fmtTs(epochMs)
+  return new Date(epochMs).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-// ─── Analytics ────────────────────────────────────────────────────────────────
-
-function useAnalytics(runs: TrackingRunSummary[]) {
-  return useMemo(() => {
-    const total       = runs.length
-    const ok          = runs.filter((r) => r.status === 'ok').length
-    const failed      = runs.filter((r) => r.status === 'fail').length
-    const withRec     = runs.filter((r) => r.recovered_steps > 0).length
-    const totalRec    = runs.reduce((s, r) => s + r.recovered_steps, 0)
-    const durations   = runs.filter((r) => r.duration_ms > 0).map((r) => r.duration_ms)
-    const avgDur      = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0
-
-    const failureCodes: Record<string, number> = {}
-    for (const r of runs) {
-      if (r.failure_code) failureCodes[r.failure_code] = (failureCodes[r.failure_code] || 0) + 1
-    }
-
-    const pluginMap: Record<string, { ok: number; fail: number; rec: number }> = {}
-    for (const r of runs) {
-      const pid = r.plugin_id || 'unknown'
-      if (!pluginMap[pid]) pluginMap[pid] = { ok: 0, fail: 0, rec: 0 }
-      if (r.status === 'ok')   pluginMap[pid].ok++
-      if (r.status === 'fail') pluginMap[pid].fail++
-      pluginMap[pid].rec += r.recovered_steps
-    }
-
-    return {
-      total, ok, failed, withRec, totalRec,
-      avgDur: Math.round(avgDur),
-      successRate: total ? Math.round((ok / total) * 100) : 0,
-      failureCodes: Object.entries(failureCodes).sort((a, b) => b[1] - a[1]),
-      pluginStats: Object.entries(pluginMap).sort((a, b) => (b[1].ok + b[1].fail) - (a[1].ok + a[1].fail)),
-      sparkline: runs.slice().reverse().slice(0, 40).reverse(),
-    }
-  }, [runs])
+function rangeLabel(range: TrackingDashboardRange) {
+  return range === '30d' ? 'Last 30 days' : 'Last 7 days'
 }
-
-function computeStrategyStats(timeline: TrackingEvent[]) {
-  const ok:   Record<string, number> = {}
-  const fail: Record<string, number> = {}
-  for (const e of timeline) {
-    // tier_ok events use the `tier` field; rec_ok/rec_fail use `sc`
-    const key = e.tier || e.sc
-    if (!key) continue
-    if (e.e === 'tier_ok' || e.e === 'rec_ok')   ok[key]   = (ok[key]   || 0) + 1
-    if (e.e === 'rec_fail')                       fail[key] = (fail[key] || 0) + 1
-  }
-  const keys = Array.from(new Set([...Object.keys(ok), ...Object.keys(fail)]))
-  return keys.map((sc) => ({ sc, ok: ok[sc] || 0, fail: fail[sc] || 0 }))
-}
-
-// ─── KPI card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, sub, icon: Icon, tone = 'neutral',
+  label,
+  value,
+  sub,
+  icon: Icon,
+  tone = 'neutral',
 }: {
   label: string
-  value: string | number
-  sub?: string
-  icon: React.FC<{ className?: string }>
+  value: string
+  sub: string
+  icon: ComponentType<{ className?: string }>
   tone?: 'good' | 'warn' | 'bad' | 'neutral'
 }) {
-  const accent =
-    tone === 'good' ? 'text-emerald-400' :
-    tone === 'warn' ? 'text-amber-400' :
-    tone === 'bad'  ? 'text-red-400' :
-    'text-zinc-200'
-  const iconBg =
-    tone === 'good' ? 'bg-emerald-500/10 text-emerald-400' :
-    tone === 'warn' ? 'bg-amber-500/10 text-amber-400' :
-    tone === 'bad'  ? 'bg-red-500/10 text-red-400' :
-    'bg-white/5 text-zinc-400'
+  const toneClass =
+    tone === 'good' ? 'text-emerald-300' :
+      tone === 'warn' ? 'text-amber-300' :
+        tone === 'bad' ? 'text-red-300' :
+          'text-zinc-100'
+  const iconClass =
+    tone === 'good' ? 'bg-emerald-500/10 text-emerald-300' :
+      tone === 'warn' ? 'bg-amber-500/10 text-amber-300' :
+        tone === 'bad' ? 'bg-red-500/10 text-red-300' :
+          'bg-white/[0.04] text-zinc-400'
 
   return (
     <Card className="border-white/8 bg-white/[0.025] shadow-none">
-      <CardContent className="flex items-start justify-between gap-3 p-4">
-        <div>
-          <p className="text-xs text-zinc-500">{label}</p>
-          <p className={`mt-1 text-2xl font-semibold tabular-nums leading-none ${accent}`}>{value}</p>
-          {sub && <p className="mt-1 text-[11px] text-zinc-600">{sub}</p>}
+      <CardContent className="flex min-h-[7rem] items-start justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-zinc-500">{label}</p>
+          <p className={`mt-2 text-2xl font-semibold leading-none tabular-nums ${toneClass}`}>{value}</p>
+          <p className="mt-2 text-[11px] leading-snug text-zinc-600">{sub}</p>
         </div>
-        <div className={`rounded-lg p-2 ${iconBg}`}>
+        <div className={`rounded-lg p-2 ${iconClass}`}>
           <Icon className="size-4" />
         </div>
       </CardContent>
@@ -186,294 +106,236 @@ function KpiCard({
   )
 }
 
-// ─── Run sparkline (last 40 runs as mini bars) ────────────────────────────────
-
-function RunSparkline({ runs }: { runs: TrackingRunSummary[] }) {
-  if (runs.length === 0) return null
-  return (
-    <div className="flex h-10 items-end gap-0.5">
-      {runs.map((r) => {
-        const color =
-          r.status === 'ok'   ? 'bg-emerald-500' :
-          r.status === 'fail' ? 'bg-red-500' :
-          'bg-zinc-700'
-        const height =
-          r.duration_ms > 0
-            ? Math.max(20, Math.min(100, (r.duration_ms / 10000) * 100))
-            : 40
-        return (
-          <div
-            key={r.run_id}
-            title={`${r.status} · ${fmtDuration(r.duration_ms)}`}
-            className={`w-2 min-w-[6px] flex-1 rounded-sm ${color} opacity-80 transition-opacity hover:opacity-100`}
-            style={{ height: `${height}%` }}
-          />
-        )
-      })}
-    </div>
-  )
+function StatusBadge({ status }: { status: string }) {
+  if (status === 'ok') {
+    return <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-300">success</Badge>
+  }
+  if (status === 'fail') {
+    return <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-[10px] text-red-300">failed</Badge>
+  }
+  return <Badge variant="outline" className="border-zinc-500/30 bg-zinc-500/10 text-[10px] text-zinc-400">running</Badge>
 }
 
-// ─── Strategy effectiveness bars ─────────────────────────────────────────────
-
-function StrategyBar({ sc, ok, fail }: { sc: string; ok: number; fail: number }) {
-  const total = ok + fail
-  const pct   = total ? Math.round((ok / total) * 100) : 0
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-zinc-300">{TIER_LABELS[sc] ?? STRATEGY_LABELS[sc] ?? sc}</span>
-        <span className="tabular-nums text-zinc-500">{pct}% ok <span className="text-zinc-700">({total})</span></span>
-      </div>
-      <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: TrackingRunSummary['status'] }) {
-  if (status === 'ok')
-    return <Badge variant="outline" className="text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">ok</Badge>
-  if (status === 'fail')
-    return <Badge variant="outline" className="text-[10px] border-red-500/30 bg-red-500/10 text-red-300">fail</Badge>
-  return <Badge variant="outline" className="text-[10px] border-zinc-500/30 bg-zinc-500/10 text-zinc-400">running</Badge>
-}
-
-// ─── Timeline drawer ──────────────────────────────────────────────────────────
-
-function TimelineDrawer({
-  company, runId, run, open, onClose,
-}: {
-  company: string
-  runId: string
-  run: TrackingRunSummary | undefined
-  open: boolean
-  onClose: () => void
-}) {
-  const { data, isFetching } = useQuery({
-    queryKey: ['tracking-run-detail', company, runId],
-    queryFn: () => fetchTrackingRun(company, runId),
-    enabled: open && !!runId,
-    staleTime: 60_000,
-  })
-
-  const strategyStats = data ? computeStrategyStats(data.timeline) : []
-
-  return (
-    <Sheet open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <SheetContent className="w-full max-w-md overflow-y-auto border-white/8 bg-zinc-950 p-0">
-        <div className="border-b border-white/8 p-5">
-          <SheetHeader>
-            <SheetTitle className="text-sm font-semibold text-zinc-100">Run Detail</SheetTitle>
-          </SheetHeader>
-          {run && (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <div className="rounded-md bg-white/[0.03] p-2 text-center">
-                <p className="text-[10px] text-zinc-600">Status</p>
-                <StatusBadge status={run.status} />
-              </div>
-              <div className="rounded-md bg-white/[0.03] p-2 text-center">
-                <p className="text-[10px] text-zinc-600">Duration</p>
-                <p className="text-xs font-medium text-zinc-300">{fmtDuration(run.duration_ms)}</p>
-              </div>
-              <div className="rounded-md bg-white/[0.03] p-2 text-center">
-                <p className="text-[10px] text-zinc-600">Recoveries</p>
-                <p className="text-xs font-medium text-blue-300">{run.recovered_steps}</p>
-              </div>
-            </div>
-          )}
-          <p className="mt-2 font-mono text-[10px] text-zinc-600 break-all">{runId}</p>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {isFetching && (
-            <p className="text-xs text-zinc-600 animate-pulse">Loading timeline…</p>
-          )}
-
-          {data && strategyStats.length > 0 && (
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">Recovery</p>
-              <div className="space-y-3">
-                {strategyStats.map((s) => (
-                  <StrategyBar key={s.sc} {...s} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {data && data.timeline.length > 0 && (
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">Timeline</p>
-              <div className="relative pl-4">
-                <div className="absolute left-[5px] top-0 bottom-0 w-px bg-white/8" />
-                {data.timeline.map((evt, idx) => {
-                  const dot =
-                    evt.e === 'wf_ok' || evt.e === 'rec_ok'                              ? 'bg-emerald-500 ring-emerald-500/20' :
-                    evt.e === 'wf_fail' || evt.e === 'step_fail' || evt.e === 'rec_fail' ? 'bg-red-500 ring-red-500/20' :
-                    evt.e === 'tier_ok'                                                  ? 'bg-blue-500 ring-blue-500/20' :
-                    'bg-zinc-600 ring-zinc-600/20'
-                  return (
-                    <div key={idx} className="relative mb-3 last:mb-0">
-                      <span className={`absolute -left-4 mt-1 size-2.5 rounded-full ring-2 ${dot}`} />
-                      <p className="text-xs font-medium text-zinc-300">{EVENT_LABELS[evt.e] ?? evt.e}</p>
-                      <p className="mt-0.5 text-[11px] text-zinc-600 flex flex-wrap gap-x-2">
-                        {evt.tier && (
-                          <span className="text-blue-400/80">{TIER_LABELS[evt.tier] ?? evt.tier}</span>
-                        )}
-                        {evt.sc && <span>{STRATEGY_LABELS[evt.sc] ?? evt.sc}</span>}
-                        {evt.fc && <span className="text-red-400">{FAILURE_LABELS[evt.fc] ?? evt.fc}</span>}
-                        {evt.si != null && <span>step {evt.si + 1}</span>}
-                        {evt.dur != null && <span>{fmtDuration(evt.dur)}</span>}
-                        {evt.tot != null && <span>{evt.tot} steps</span>}
-                        <span className="ml-auto">{new Date(evt.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-// ─── Runtime Registrations ───────────────────────────────────────────────────
-
-function RuntimeRegistrationsCard() {
-  const { data, isFetching } = useQuery({
-    queryKey: ['runtime-registrations'],
-    queryFn: fetchRuntimeRegistrations,
-    staleTime: 60_000,
-    refetchInterval: 120_000,
-  })
-
-  if (isFetching && !data) return null
-  if (!data || data.registrations.length === 0) return null
-
-  const active = data.registrations.filter((r) => !r.stale)
-  const versions = Object.entries(data.version_distribution).sort((a, b) => b[1] - a[1])
+function TrendChart({ rows }: { rows: TrackingDashboardResponse['execution_trend'] }) {
+  const max = Math.max(1, ...rows.map((row) => row.executions))
+  const width = 720
+  const height = 170
+  const barSlot = rows.length ? width / rows.length : width
+  const chartHeight = 116
 
   return (
     <Card className="border-white/8 bg-white/[0.025] shadow-none">
       <CardHeader className="border-b border-white/6 pb-3">
         <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-          <Monitor className="size-3.5" />
-          Active Runtimes
-          <span className="ml-auto tabular-nums text-zinc-200">{active.length}</span>
-          {data.stale_count > 0 && (
-            <span className="text-[10px] text-amber-400">{data.stale_count} stale</span>
-          )}
+          <TrendingUp className="size-3.5" />
+          Execution Trend
+          <span className="ml-auto text-[11px] font-normal text-zinc-600">success, failure, and recovery volume</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-white/6">
-          {data.registrations.slice(0, 8).map((r: RuntimeRegistration) => (
-            <div key={`${r.company}:${r.platform}`} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-zinc-300">{r.company}</p>
-                <p className="text-[11px] text-zinc-600">{r.platform} · {fmtRelative(r.last_seen * 1000)}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[10px] text-zinc-500">v{r.runtime_version || '?'}</span>
-                {r.stale ? (
-                  <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400">stale</span>
-                ) : (
-                  <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">active</span>
-                )}
-              </div>
-            </div>
-          ))}
+      <CardContent className="p-4">
+        <div className="h-[170px] w-full overflow-hidden">
+          <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" preserveAspectRatio="none" role="img" aria-label="Execution trend graph">
+            <line x1="0" x2={width} y1="132" y2="132" className="stroke-white/10" />
+            {rows.map((row, index) => {
+              const x = index * barSlot + barSlot * 0.18
+              const barWidth = Math.max(8, barSlot * 0.64)
+              const totalHeight = Math.max(2, (row.executions / max) * chartHeight)
+              const failedHeight = row.executions ? (row.failed / row.executions) * totalHeight : 0
+              const recoveredHeight = row.executions ? (row.recovered / row.executions) * totalHeight : 0
+              const successHeight = Math.max(0, totalHeight - failedHeight - recoveredHeight)
+              const y = 132 - totalHeight
+              return (
+                <g key={row.date}>
+                  <rect x={x} y={y} width={barWidth} height={successHeight} rx="3" className="fill-emerald-500/75" />
+                  <rect x={x} y={y + successHeight} width={barWidth} height={recoveredHeight} rx="3" className="fill-blue-500/75" />
+                  <rect x={x} y={y + successHeight + recoveredHeight} width={barWidth} height={failedHeight} rx="3" className="fill-red-500/75" />
+                  {(index === 0 || index === rows.length - 1 || rows.length <= 7) && (
+                    <text x={x + barWidth / 2} y="154" textAnchor="middle" className="fill-zinc-600 text-[10px]">
+                      {new Date(`${row.date}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+          </svg>
         </div>
-        {versions.length > 0 && (
-          <div className="border-t border-white/6 px-4 py-3">
-            <p className="mb-2 text-[10px] uppercase tracking-widest text-zinc-600">Version distribution</p>
-            <div className="flex flex-wrap gap-2">
-              {versions.map(([v, count]) => (
-                <span key={v} className="rounded bg-white/5 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
-                  v{v} <span className="text-zinc-600">×{count}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-zinc-600">
+          <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-emerald-500" />Successful</span>
+          <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-blue-500" />Recovered</span>
+          <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-red-500" />Failed</span>
+        </div>
       </CardContent>
     </Card>
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+function RecoveryUsage({ rows }: { rows: TrackingDashboardResponse['recovery_type_usage'] }) {
+  const max = Math.max(1, ...rows.map((row) => row.count))
+  return (
+    <Card className="border-white/8 bg-white/[0.025] shadow-none">
+      <CardHeader className="border-b border-white/6 pb-3">
+        <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+          <RotateCcw className="size-3.5" />
+          Recovery Type Usage
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 p-4">
+        {rows.map((row) => (
+          <div key={row.type} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-zinc-300">{row.type}</span>
+              <span className="tabular-nums text-zinc-500">{fmtNumber(row.count)}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/8">
+              <div
+                className="h-full rounded-full bg-blue-500/80"
+                style={{ width: `${Math.max(0, Math.round((row.count / max) * 100))}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function FailureLists({
+  workflows,
+  steps,
+}: {
+  workflows: TrackingDashboardResponse['most_failed_workflows']
+  steps: TrackingDashboardResponse['most_failed_steps']
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card className="border-white/8 bg-white/[0.025] shadow-none">
+        <CardHeader className="border-b border-white/6 pb-3">
+          <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+            <AlertTriangle className="size-3.5" />
+            Most Failed Workflows
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {workflows.length === 0 ? (
+            <p className="px-4 py-8 text-center text-xs text-zinc-600">No workflow failures in this range.</p>
+          ) : workflows.map((row) => (
+            <div key={row.workflow} className="flex items-center gap-3 border-t border-white/6 px-4 py-3 first:border-t-0">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-zinc-200">{row.workflow}</p>
+                <p className="mt-0.5 text-[11px] text-zinc-600">{row.last_failure_code || 'unknown failure'} · {fmtRelative(row.last_seen)}</p>
+              </div>
+              <span className="text-sm font-semibold tabular-nums text-red-300">{fmtNumber(row.failed_executions)}</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className="border-white/8 bg-white/[0.025] shadow-none">
+        <CardHeader className="border-b border-white/6 pb-3">
+          <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+            <Zap className="size-3.5" />
+            Most Failed Steps
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {steps.length === 0 ? (
+            <p className="px-4 py-8 text-center text-xs text-zinc-600">No step failures in this range.</p>
+          ) : steps.map((row) => (
+            <div key={`${row.workflow}:${row.step_index ?? 'unknown'}`} className="flex items-center gap-3 border-t border-white/6 px-4 py-3 first:border-t-0">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-zinc-200">{row.step_label}</p>
+                <p className="mt-0.5 truncate text-[11px] text-zinc-600">{row.workflow} · {row.last_failure_code || 'unknown failure'}</p>
+              </div>
+              <span className="text-sm font-semibold tabular-nums text-red-300">{fmtNumber(row.failed_executions)}</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function RecentActivity({ rows }: { rows: TrackingDashboardResponse['recent_activity'] }) {
+  return (
+    <Card className="border-white/8 bg-white/[0.025] shadow-none">
+      <CardHeader className="border-b border-white/6 pb-3">
+        <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+          <Activity className="size-3.5" />
+          Recent Activity
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {rows.length === 0 ? (
+          <p className="px-4 py-10 text-center text-xs text-zinc-600">No executions recorded yet.</p>
+        ) : rows.map((row) => (
+          <div key={row.run_id} className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-zinc-200">{row.workflow}</p>
+              <p className="mt-0.5 text-[11px] text-zinc-600">
+                {row.company} · {fmtRelative(row.started_at)}
+                {row.failure_code ? ` · ${row.failure_code}` : ''}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-zinc-600">
+              <Clock3 className="size-3.5" />
+              {fmtDuration(row.duration_ms)}
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-blue-300">
+              <RotateCcw className="size-3.5" />
+              {fmtNumber(row.recovered_steps)}
+            </div>
+            <StatusBadge status={row.status} />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
 
 export function DashboardPage() {
-  const queryClient = useQueryClient()
-  const [selectedRun, setSelectedRun] = useState<TrackingRunSummary | null>(null)
-  const [company, setCompany] = useState<string>('')
-
-  const { data: pluginsData } = useQuery({
-    queryKey: ['plugins'],
-    queryFn: fetchPlugins,
-    staleTime: 60_000,
-  })
-  const { data: trackingCompaniesData } = useQuery({
-    queryKey: ['tracking-companies'],
-    queryFn: fetchTrackingCompanies,
+  const [range, setRange] = useState<TrackingDashboardRange>('7d')
+  const dashboardQ = useQuery({
+    queryKey: ['tracking-dashboard', range],
+    queryFn: () => fetchTrackingDashboard(range),
     staleTime: 30_000,
     refetchInterval: 30_000,
   })
-  const plugins   = normalizePluginList(pluginsData)
-  const trackingCompanies = (trackingCompaniesData?.companies ?? [])
-    .map((entry) => entry.company)
-    .filter(Boolean)
-  const pluginCompanies = plugins.map((p) => p.slug || toCompanySlug(p.name || '')).filter(Boolean)
-  const companies = Array.from(new Set([...trackingCompanies, ...pluginCompanies]))
-  const activeCompany = company && companies.includes(company) ? company : companies[0] || ''
 
-  const { data, isFetching, dataUpdatedAt } = useQuery({
-    queryKey:        ['tracking-runs', activeCompany],
-    queryFn:         () => fetchTrackingRuns(activeCompany),
-    enabled:         !!activeCompany,
-    staleTime:       30_000,
-    refetchInterval: 30_000,
-  })
-
-  const runs = data?.runs ?? []
-  const stats = useAnalytics(runs)
-
-  const lastUpdated = dataUpdatedAt ? fmtRelative(dataUpdatedAt) : null
-  const refreshDashboard = () => {
-    void queryClient.invalidateQueries({ queryKey: ['tracking-companies'] })
-    void queryClient.invalidateQueries({ queryKey: ['plugins'] })
-    void queryClient.invalidateQueries({ queryKey: ['runtime-registrations'] })
-    if (activeCompany) {
-      void queryClient.invalidateQueries({ queryKey: ['tracking-runs', activeCompany] })
-    }
-  }
+  const data = dashboardQ.data
+  const metrics = data?.metrics ?? EMPTY_METRICS
+  const successTone = metrics.total_executions === 0 ? 'neutral' : metrics.success_rate >= 90 ? 'good' : metrics.success_rate >= 75 ? 'warn' : 'bad'
+  const recoveryTone = metrics.recovery_rate > 0 ? 'good' : 'neutral'
 
   return (
     <div className="h-full overflow-y-auto">
       <PageHeader
         title="Dashboard"
-        description="Live monitoring of workflow executions, recovery effectiveness, and failure patterns."
+        description="Adoption, usage, reliability, and recovery health for installed automations."
         actions={
-          <div className="flex items-center gap-3">
-            {lastUpdated && (
-              <span className="hidden text-[11px] text-zinc-600 sm:block">Updated {lastUpdated}</span>
-            )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex rounded-lg border border-white/8 bg-white/[0.025] p-0.5">
+              {(['7d', '30d'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setRange(item)}
+                  className={`h-8 rounded-md px-3 text-xs font-medium transition-colors ${
+                    range === item ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
             <Button
+              type="button"
               variant="ghost"
               size="sm"
-              onClick={refreshDashboard}
-              disabled={isFetching}
+              onClick={() => dashboardQ.refetch()}
+              disabled={dashboardQ.isFetching}
               className="gap-1.5 border border-white/8"
             >
-              <RefreshCw className={`size-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`size-3.5 ${dashboardQ.isFetching ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -481,246 +343,58 @@ export function DashboardPage() {
       />
 
       <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
-
-        {/* Company tabs */}
-        {companies.length > 1 && (
-          <div className="flex flex-wrap gap-2">
-            {companies.map((c) => (
-              <button
-                key={c}
-                onClick={() => setCompany(c)}
-                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeCompany === c
-                    ? 'border-white/20 bg-white/10 text-white'
-                    : 'border-white/8 text-zinc-500 hover:border-white/14 hover:text-zinc-300'
-                }`}
-              >
-                {c}
-              </button>
-            ))}
+        {dashboardQ.isError && (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            Dashboard metrics could not be loaded.
           </div>
         )}
 
-        {!activeCompany ? (
-          <div className="rounded-xl border border-white/8 bg-white/[0.02] px-6 py-16 text-center">
-            <Activity className="mx-auto mb-3 size-8 text-zinc-700" />
-            <p className="text-sm font-medium text-zinc-400">No tracking data found for this workspace</p>
-            <p className="mt-1 text-xs text-zinc-600">Run an installed skill to start seeing execution data.</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-zinc-600">{rangeLabel(range)}</p>
+          {dashboardQ.dataUpdatedAt > 0 && (
+            <p className="text-xs text-zinc-600">Updated {fmtRelative(dashboardQ.dataUpdatedAt)}</p>
+          )}
+        </div>
+
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard label="Total Installs" value={fmtNumber(metrics.total_installs)} sub="registered runtimes" icon={Download} />
+          <KpiCard label="Active Users" value={fmtNumber(metrics.active_users)} sub={`active in ${rangeLabel(range).toLowerCase()}`} icon={Users} />
+          <KpiCard label="Active Companies" value={fmtNumber(metrics.active_companies)} sub="companies with usage" icon={Building2} />
+          <KpiCard label="Total Executions" value={fmtNumber(metrics.total_executions)} sub={`${fmtNumber(metrics.executions_last_24h)} in the last 24h`} icon={Activity} />
+        </section>
+
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard label="Success Rate" value={fmtPercent(metrics.success_rate)} sub="completed executions" icon={ShieldCheck} tone={successTone} />
+          <KpiCard label="Failed Executions" value={fmtNumber(metrics.failed_executions)} sub={`failures in ${rangeLabel(range).toLowerCase()}`} icon={AlertTriangle} tone={metrics.failed_executions > 0 ? 'bad' : 'good'} />
+          <KpiCard label="Recovery Rate" value={fmtPercent(metrics.recovery_rate)} sub="executions saved by recovery" icon={RotateCcw} tone={recoveryTone} />
+          <KpiCard label="Avg Execution Time" value={fmtDuration(metrics.average_execution_time)} sub="successful and failed runs" icon={Clock3} />
+        </section>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <TrendChart rows={data?.execution_trend ?? []} />
+          <RecoveryUsage rows={data?.recovery_type_usage ?? [
+            { type: 'Selector', count: 0 },
+            { type: 'Text Anchor', count: 0 },
+            { type: 'Text Variant', count: 0 },
+            { type: 'Vision', count: 0 },
+          ]} />
+        </div>
+
+        <FailureLists
+          workflows={data?.most_failed_workflows ?? []}
+          steps={data?.most_failed_steps ?? []}
+        />
+
+        <RecentActivity rows={data?.recent_activity ?? []} />
+
+        {!dashboardQ.isFetching && metrics.total_installs === 0 && metrics.total_executions === 0 && (
+          <div className="rounded-lg border border-white/8 bg-white/[0.02] px-5 py-6 text-center">
+            <CheckCircle2 className="mx-auto mb-3 size-7 text-zinc-700" />
+            <p className="text-sm font-medium text-zinc-400">No production telemetry yet</p>
+            <p className="mt-1 text-xs text-zinc-600">Install and run a published plugin to populate adoption and reliability metrics.</p>
           </div>
-        ) : (
-          <>
-            {/* KPI strip */}
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <KpiCard
-                label="Total Runs"
-                value={stats.total}
-                sub={stats.total > 0 ? `${stats.ok} passed · ${stats.failed} failed` : 'No data yet'}
-                icon={Activity}
-              />
-              <KpiCard
-                label="Success Rate"
-                value={`${stats.successRate}%`}
-                sub={`${stats.ok} of ${stats.total} runs`}
-                icon={CheckCircle2}
-                tone={stats.successRate >= 80 ? 'good' : stats.successRate >= 50 ? 'warn' : stats.total > 0 ? 'bad' : 'neutral'}
-              />
-              <KpiCard
-                label="Avg Duration"
-                value={fmtDuration(stats.avgDur)}
-                sub="across completed runs"
-                icon={Clock}
-                tone="neutral"
-              />
-              <KpiCard
-                label="Recovered Steps"
-                value={stats.totalRec}
-                sub={`${stats.withRec} runs needed recovery`}
-                icon={Zap}
-                tone={stats.totalRec > 0 ? 'warn' : 'good'}
-              />
-            </section>
-
-            {/* Runtime registrations */}
-            <RuntimeRegistrationsCard />
-
-            {/* Run history sparkline */}
-            {stats.sparkline.length > 0 && (
-              <Card className="border-white/8 bg-white/[0.025] shadow-none">
-                <CardContent className="px-4 pt-3 pb-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-medium text-zinc-400">Run History</p>
-                    <span className="text-[11px] text-zinc-600">last {stats.sparkline.length} runs</span>
-                  </div>
-                  <RunSparkline runs={stats.sparkline} />
-                  <div className="mt-2 flex items-center gap-4 text-[10px] text-zinc-600">
-                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500" />success</span>
-                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-red-500" />failure</span>
-                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-zinc-700" />running</span>
-                    <span className="ml-auto">height ∝ duration</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="grid gap-4 lg:grid-cols-3">
-              {/* Left column: Failure reasons + Per-plugin */}
-              <div className="space-y-4 lg:col-span-1">
-
-                {/* Failure reasons */}
-                <Card className="border-white/8 bg-white/[0.025] shadow-none">
-                  <CardHeader className="border-b border-white/6 pb-3">
-                    <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-                      <AlertTriangle className="size-3.5" />
-                      Failure Reasons
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    {stats.failureCodes.length === 0 ? (
-                      <p className="text-xs text-zinc-600">No failures recorded.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {stats.failureCodes.map(([code, count]) => {
-                          const max = stats.failureCodes[0][1]
-                          const pct = Math.round((count / max) * 100)
-                          return (
-                            <div key={code} className="space-y-1">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-zinc-300">{FAILURE_LABELS[code] ?? code}</span>
-                                <span className="tabular-nums text-red-400">{count}</span>
-                              </div>
-                              <div className="h-1 rounded-full bg-white/8 overflow-hidden">
-                                <div className="h-full rounded-full bg-red-500/60" style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Per-plugin breakdown */}
-                {stats.pluginStats.length > 1 && (
-                  <Card className="border-white/8 bg-white/[0.025] shadow-none">
-                    <CardHeader className="border-b border-white/6 pb-3">
-                      <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-                        <Activity className="size-3.5" />
-                        By Plugin
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      {stats.pluginStats.map(([pid, s]) => {
-                        const total = s.ok + s.fail
-                        const rate  = total ? Math.round((s.ok / total) * 100) : 0
-                        return (
-                          <div key={pid} className="flex items-center gap-3 border-t border-white/6 px-4 py-2.5 first:border-t-0">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-medium text-zinc-300">{pid}</p>
-                              <p className="text-[11px] text-zinc-600">{total} runs · {s.rec} recovered</p>
-                            </div>
-                            <div className={`text-xs font-semibold tabular-nums ${rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
-                              {rate}%
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-
-              {/* Right column: Recovery effectiveness + Run feed */}
-              <div className="space-y-4 lg:col-span-2">
-
-                {/* Run feed */}
-                <Card className="border-white/8 bg-white/[0.025] shadow-none">
-                  <CardHeader className="border-b border-white/6 pb-3">
-                    <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-                      <Activity className="size-3.5" />
-                      Live Run Feed
-                      <span className="ml-auto text-zinc-700">{runs.length} total</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    {runs.length === 0 && !isFetching && (
-                      <div className="px-4 py-10 text-center">
-                        <p className="text-xs text-zinc-600">
-                          No executions for <span className="font-mono text-zinc-500">{activeCompany}</span> yet.
-                        </p>
-                      </div>
-                    )}
-                    {isFetching && runs.length === 0 && (
-                      <div className="space-y-px p-1">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className="h-12 animate-pulse rounded bg-white/[0.02]" />
-                        ))}
-                      </div>
-                    )}
-                    {runs.map((run) => (
-                      <button
-                        key={run.run_id}
-                        className="group flex w-full items-center gap-3 border-t border-white/6 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] first:border-t-0"
-                        onClick={() => setSelectedRun(run)}
-                      >
-                        {/* Status icon */}
-                        <div className="shrink-0">
-                          {run.status === 'ok' ? (
-                            <CheckCircle2 className="size-4 text-emerald-400" />
-                          ) : run.status === 'fail' ? (
-                            <CircleAlert className="size-4 text-red-400" />
-                          ) : (
-                            <Clock className="size-4 text-zinc-600" />
-                          )}
-                        </div>
-
-                        {/* Plugin + time */}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-zinc-200 group-hover:text-white">
-                            {run.plugin_id || run.run_id.slice(0, 16)}
-                          </p>
-                          <p className="text-[11px] text-zinc-600">{fmtRelative(run.started_at)}</p>
-                        </div>
-
-                        {/* Failure code */}
-                        {run.failure_code && (
-                          <span className="hidden text-[10px] text-red-400/80 sm:block">
-                            {FAILURE_LABELS[run.failure_code] ?? run.failure_code}
-                          </span>
-                        )}
-
-                        {/* Recovery badge */}
-                        {run.recovered_steps > 0 && (
-                          <Badge variant="outline" className="text-[10px] border-blue-500/30 bg-blue-500/10 text-blue-300">
-                            <Zap className="mr-0.5 size-2.5" />
-                            {run.recovered_steps}
-                          </Badge>
-                        )}
-
-                        {/* Duration */}
-                        <span className="hidden text-[11px] text-zinc-600 sm:block">{fmtDuration(run.duration_ms)}</span>
-
-                        {/* Status badge */}
-                        <StatusBadge status={run.status} />
-                      </button>
-                    ))}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </>
         )}
       </div>
-
-      {/* Timeline drawer */}
-      {selectedRun && (
-        <TimelineDrawer
-          company={activeCompany}
-          runId={selectedRun.run_id}
-          run={selectedRun}
-          open={!!selectedRun}
-          onClose={() => setSelectedRun(null)}
-        />
-      )}
     </div>
   )
 }

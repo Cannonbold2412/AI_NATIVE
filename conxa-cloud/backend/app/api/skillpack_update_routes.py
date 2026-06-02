@@ -152,6 +152,7 @@ class TelemetryBody(BaseModel):
     runtime_version: str = ""
     companies: list[str] = []
     platform: str = ""
+    install_id: str = ""
 
 
 telemetry_router = APIRouter(prefix="/telemetry", tags=["telemetry"])
@@ -168,6 +169,7 @@ def post_telemetry_runtime_start(body: TelemetryBody) -> dict[str, Any]:
     now = time.time()
     companies = [c.strip() for c in (body.companies or []) if c.strip()]
     platform = (body.platform or "").strip() or "unknown"
+    install_id = "".join(c for c in (body.install_id or "").strip() if c.isalnum() or c in "-_")[:96]
 
     for company in companies:
         workspace_id = ""
@@ -175,13 +177,14 @@ def post_telemetry_runtime_start(body: TelemetryBody) -> dict[str, Any]:
         if isinstance(stored_token, dict):
             workspace_id = str(stored_token.get("workspace_id") or "")
 
-        key = f"{company}:{platform}"
+        key = f"{company}:{install_id or platform}"
         existing = db_get("runtime_registrations", key) or {}
         db_set(
             "runtime_registrations",
             key,
             {
                 "company": company,
+                "install_id": install_id,
                 "platform": platform,
                 "runtime_version": (body.runtime_version or "").strip(),
                 "workspace_id": workspace_id,

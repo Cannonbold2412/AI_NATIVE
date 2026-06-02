@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -222,6 +223,133 @@ def test_tracking_runs_report_workspace_mismatch(monkeypatch, tmp_path):
     assert body["workspace_id"] == "wrk_local"
     assert body["total_all_workspaces"] == 1
     assert body["hidden_workspace_runs"] == 1
+
+
+def test_tracking_dashboard_empty_workspace_has_v1_shape(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+
+    dashboard = client.get("/api/v1/tracking/dashboard?range=30d")
+
+    assert dashboard.status_code == 200, dashboard.text
+    body = dashboard.json()
+    assert body["range"] == "30d"
+    assert set(body["metrics"]) == {
+        "total_installs",
+        "active_users",
+        "active_companies",
+        "total_executions",
+        "executions_last_24h",
+        "success_rate",
+        "failed_executions",
+        "recovery_rate",
+        "average_execution_time",
+    }
+    assert [row["type"] for row in body["recovery_type_usage"]] == [
+        "Selector",
+        "Text Anchor",
+        "Text Variant",
+        "Vision",
+    ]
+    assert len(body["execution_trend"]) == 30
+
+
+def test_tracking_dashboard_aggregates_workspace_metrics(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+    now_ms = int(time.time() * 1000)
+
+    db_set("sync_tokens", "acme", {"token": "sync", "workspace_id": "wrk_local"})
+    db_set(
+        "tracking_tokens",
+        "acme",
+        {"token": "track-token", "company": "acme", "workspace_id": "wrk_local", "version": "1.0.0"},
+    )
+    db_set(
+        "tracking_tokens",
+        "hidden",
+        {"token": "hidden-token", "company": "hidden", "workspace_id": "wrk_other", "version": "1.0.0"},
+    )
+
+    for install_id in ("install-a", "install-b"):
+        telemetry = client.post(
+            "/api/v1/telemetry/runtime-start",
+            json={
+                "runtime_version": "1.0.0",
+                "companies": ["acme"],
+                "platform": "win32",
+                "install_id": install_id,
+            },
+        )
+        assert telemetry.status_code == 200, telemetry.text
+
+    ok = client.post(
+        "/api/tracking/acme/events",
+        json={
+            "rid": "run-ok",
+            "pid": "workflow-a",
+            "uid": "install-a",
+            "evts": [
+                {"e": "wf_start", "ts": now_ms - 60_000},
+                {"e": "rec_ok", "ts": now_ms - 50_000, "si": 0, "sc": "selector"},
+                {"e": "tier_ok", "ts": now_ms - 45_000, "si": 1, "tier": "tier2_a11y"},
+                {"e": "rec_ok", "ts": now_ms - 40_000, "si": 2, "sc": "text_variant"},
+                {"e": "rec_ok", "ts": now_ms - 35_000, "si": 3, "sc": "vision"},
+                {"e": "wf_ok", "ts": now_ms - 30_000, "dur": 1200, "tot": 4, "rec": 1},
+            ],
+        },
+        headers={"X-Tracking-Token": "track-token"},
+    )
+    assert ok.status_code == 202, ok.text
+
+    fail = client.post(
+        "/api/tracking/acme/events",
+        json={
+            "rid": "run-fail",
+            "pid": "workflow-b",
+            "uid": "install-b",
+            "evts": [
+                {"e": "wf_start", "ts": now_ms - 20_000},
+                {"e": "step_fail", "ts": now_ms - 15_000, "si": 2, "fc": "timeout"},
+                {"e": "wf_fail", "ts": now_ms - 10_000, "dur": 3000, "fsi": 2, "fc": "timeout"},
+            ],
+        },
+        headers={"X-Tracking-Token": "track-token"},
+    )
+    assert fail.status_code == 202, fail.text
+
+    hidden = client.post(
+        "/api/tracking/hidden/events",
+        json={
+            "rid": "run-hidden",
+            "pid": "hidden-workflow",
+            "evts": [{"e": "wf_start", "ts": now_ms}, {"e": "wf_fail", "ts": now_ms, "dur": 1}],
+        },
+        headers={"X-Tracking-Token": "hidden-token"},
+    )
+    assert hidden.status_code == 202, hidden.text
+
+    dashboard = client.get("/api/v1/tracking/dashboard?range=7d")
+    assert dashboard.status_code == 200, dashboard.text
+    body = dashboard.json()
+
+    assert body["range"] == "7d"
+    assert body["metrics"]["total_installs"] == 2
+    assert body["metrics"]["active_users"] == 2
+    assert body["metrics"]["active_companies"] == 1
+    assert body["metrics"]["total_executions"] == 2
+    assert body["metrics"]["executions_last_24h"] == 2
+    assert body["metrics"]["success_rate"] == 50
+    assert body["metrics"]["failed_executions"] == 1
+    assert body["metrics"]["recovery_rate"] == 50
+    assert body["metrics"]["average_execution_time"] == 2100
+
+    recovery = {row["type"]: row["count"] for row in body["recovery_type_usage"]}
+    assert recovery == {"Selector": 1, "Text Anchor": 1, "Text Variant": 1, "Vision": 1}
+    assert body["most_failed_workflows"][0]["workflow"] == "workflow-b"
+    assert body["most_failed_steps"][0]["step_index"] == 2
+    assert sum(row["executions"] for row in body["execution_trend"]) == 2
+    assert all(item["company"] != "hidden" for item in body["recent_activity"])
 
 
 def test_tracking_companies_discovers_token_backed_events_without_plugin(monkeypatch, tmp_path):

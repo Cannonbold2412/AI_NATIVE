@@ -593,11 +593,12 @@ async function recoverWithA11y(page, step, inputs, slug, stepIndex, tracker) {
   return false;
 }
 
-async function recoverWithFallbackSelectors(page, step, inputs, slug, stepIndex, skipSelector) {
+async function recoverWithFallbackSelectors(page, step, inputs, slug, stepIndex, skipSelector, tracker) {
   for (const selector of fallbackSelectors(step)) {
     if (skipSelector && selector === skipSelector) continue;
     const recovered = await recoverWithSelector(page, step, inputs, selector, () => {
       appendRecoveryEvent({ event: "layer_recovered", layer: 2, slug, step_index: stepIndex, recovery_selector: selector });
+      tracker.emit("rec_ok", { si: stepIndex, sc: "selector" });
     });
     if (recovered) return true;
   }
@@ -605,13 +606,14 @@ async function recoverWithFallbackSelectors(page, step, inputs, slug, stepIndex,
   return false;
 }
 
-async function recoverWithDialogScope(page, step, inputs, slug, stepIndex, primarySelector) {
+async function recoverWithDialogScope(page, step, inputs, slug, stepIndex, primarySelector, tracker) {
   if (step.type !== "click" || !primarySelector) return false;
 
   for (const container of DIALOG_CONTAINERS) {
     const selector = `${container} ${primarySelector}`;
     const recovered = await recoverWithSelector(page, step, inputs, selector, () => {
       appendRecoveryEvent({ event: "layer_recovered", layer: 3, slug, step_index: stepIndex, mode: "dialog" });
+      tracker.emit("rec_ok", { si: stepIndex, sc: "selector" });
     });
     if (recovered) return true;
   }
@@ -619,7 +621,7 @@ async function recoverWithDialogScope(page, step, inputs, slug, stepIndex, prima
   return false;
 }
 
-async function recoverWithFuzzyText(page, step, inputs, slug, stepIndex, primarySelector) {
+async function recoverWithFuzzyText(page, step, inputs, slug, stepIndex, primarySelector, tracker) {
   const intent = [step.value, step.label, step.aria_label, step._intent]
     .filter(value => typeof value === "string" && value.trim())
     .map(value => value.trim())[0];
@@ -648,6 +650,7 @@ async function recoverWithFuzzyText(page, step, inputs, slug, stepIndex, primary
     const selector = `${tagHint} >> nth=${fuzzyIndex}`;
     return await recoverWithSelector(page, step, inputs, selector, () => {
       appendRecoveryEvent({ event: "layer_recovered", layer: 3, slug, step_index: stepIndex, mode: "fuzzy" });
+      tracker.emit("rec_ok", { si: stepIndex, sc: "text_variant" });
     });
   } catch (_) {
     return false;
@@ -670,9 +673,9 @@ async function recoverStep(page, step, inputs, slug, stepIndex, primarySelector,
     appendRecoveryEvent({ event: "transient_recovered", slug, step_index: stepIndex });
   })) return true;
 
-  if (await recoverWithFallbackSelectors(page, step, inputs, slug, stepIndex, primarySelector)) return true;
-  if (await recoverWithDialogScope(page, step, inputs, slug, stepIndex, primarySelector)) return true;
-  return recoverWithFuzzyText(page, step, inputs, slug, stepIndex, primarySelector);
+  if (await recoverWithFallbackSelectors(page, step, inputs, slug, stepIndex, primarySelector, tracker)) return true;
+  if (await recoverWithDialogScope(page, step, inputs, slug, stepIndex, primarySelector, tracker)) return true;
+  return recoverWithFuzzyText(page, step, inputs, slug, stepIndex, primarySelector, tracker);
 }
 
 async function maybeCapturePreStep(page, step) {

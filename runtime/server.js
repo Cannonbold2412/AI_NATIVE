@@ -5,6 +5,7 @@ const fs     = require("fs");
 const os     = require("os");
 const https  = require("https");
 const semver = require("semver");
+const { loadInstallId } = require("./install_identity");
 
 // ─── 1. Resolve CONXA_DIR (install, read-only) and CONXA_DATA_DIR (user-writable) ─
 const CONXA_DIR = process.env.CONXA_DIR || (
@@ -23,6 +24,7 @@ const CACHE_DIR       = path.join(CONXA_DATA_DIR, "cache");
 const SESSIONS_DIR    = path.join(CACHE_DIR, "sessions");
 const LOG_FILE        = path.join(CONXA_DATA_DIR, "logs", "runtime.log");
 const RUNTIME_VERSION = require("./package.json").version;
+const INSTALL_ID      = loadInstallId(CONXA_DATA_DIR);
 
 // ─── 2. Playwright browser path (MUST precede any playwright require) ─────────
 // Respect a caller-supplied PLAYWRIGHT_BROWSERS_PATH (e.g. dev mode where CONXA_DIR
@@ -672,7 +674,7 @@ async function _handleTool(name, args) {
       log,
     });
     const _runId      = `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-    const _runTracker = _tracker.forRun(_runId, { uid: "", wid: "" });
+    const _runTracker = _tracker.forRun(_runId, { uid: INSTALL_ID, wid: "" });
     const _wfStartAt  = Date.now();
     let   _totalRecovered = 0;
 
@@ -857,6 +859,7 @@ async function _phonehome() {
     runtime_version: RUNTIME_VERSION,
     companies,
     platform: process.platform,
+    install_id: INSTALL_ID,
   });
   await new Promise((resolve) => {
     const req = https.request(`${CONXA_API}/api/v1/telemetry/runtime-start`, {

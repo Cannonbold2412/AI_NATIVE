@@ -418,6 +418,56 @@ export type TrackingRunDetail = {
   timeline: TrackingEvent[]
 }
 
+export type TrackingDashboardRange = '7d' | '30d'
+
+export type TrackingDashboardResponse = {
+  range: TrackingDashboardRange
+  metrics: {
+    total_installs: number
+    active_users: number
+    active_companies: number
+    total_executions: number
+    executions_last_24h: number
+    success_rate: number
+    failed_executions: number
+    recovery_rate: number
+    average_execution_time: number
+  }
+  recovery_type_usage: Array<{ type: 'Selector' | 'Text Anchor' | 'Text Variant' | 'Vision'; count: number }>
+  most_failed_workflows: Array<{
+    workflow: string
+    failed_executions: number
+    last_failure_code: string
+    last_seen: number
+  }>
+  most_failed_steps: Array<{
+    workflow: string
+    step_index: number | null
+    step_label: string
+    failed_executions: number
+    last_failure_code: string
+    last_seen: number
+  }>
+  recent_activity: Array<{
+    run_id: string
+    company: string
+    workflow: string
+    status: 'ok' | 'fail' | 'running'
+    duration_ms: number
+    recovered_steps: number
+    failure_code: string | null
+    failed_step_id: number | null
+    started_at: number
+  }>
+  execution_trend: Array<{
+    date: string
+    executions: number
+    successful: number
+    failed: number
+    recovered: number
+  }>
+}
+
 export function fetchTrackingRuns(
   company: string,
   limit = 50,
@@ -426,6 +476,10 @@ export function fetchTrackingRuns(
   return apiFetch(`/tracking/${encodeURIComponent(company)}/runs?limit=${limit}&offset=${offset}`).then(
     (r) => json<TrackingRunsResponse>(r),
   )
+}
+
+export function fetchTrackingDashboard(range: TrackingDashboardRange): Promise<TrackingDashboardResponse> {
+  return apiFetch(`/tracking/dashboard?range=${encodeURIComponent(range)}`).then((r) => json<TrackingDashboardResponse>(r))
 }
 
 export function fetchTrackingCompanies(): Promise<TrackingCompaniesResponse> {
