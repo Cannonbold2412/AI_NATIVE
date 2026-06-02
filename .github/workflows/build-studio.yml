@@ -65,7 +65,13 @@ jobs:
 
       - name: Build Studio installer (electron-builder)
         working-directory: conxa-builder/electron
-        run: npx electron-builder --config electron-builder.yml --win
+        run: npx electron-builder --config electron-builder.yml --win --publish never
         env:
-          # electron-builder reads GH_TOKEN to publish the release
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conxa-build-studio-installer
+          path: conxa-builder/electron/dist/studio/*.exe
+          retention-days: 30
