@@ -331,13 +331,7 @@ log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR })
 
 // ─── 11. Async post-connect tasks ────────────────────────────────────────────
 (async () => {
-  // Telemetry — fire and forget
-  _phonehome().catch(() => {});
-
-  // Background runtime self-update check (downloads update for next cold start)
-  _checkRuntimeUpdate().catch(() => {});
-
-  // Skill pack sync — 3s hard timeout, then continue with cache
+  // Skill pack sync first — ensures companies[] in phonehome is accurate
   try {
     await sync.syncSkillPacks(SKILL_PACKS_DIR, { timeoutMs: 15000, log: (m) => log("info", m) });
     skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR);
@@ -345,6 +339,12 @@ log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR })
   } catch (e) {
     log("warn", "sync_skipped", { reason: e.message });
   }
+
+  // Phonehome after sync so companies[] reflects current skill index
+  _phonehome().catch(() => {});
+
+  // Background runtime self-update check (downloads update for next cold start)
+  _checkRuntimeUpdate().catch(() => {});
 })();
 
 // ─── 12. Graceful shutdown ────────────────────────────────────────────────────
@@ -852,7 +852,6 @@ function _unregisterMcp(configPath) {
 
 
 async function _phonehome() {
-  const CONXA_API = process.env.CONXA_API_URL || "https://apis.conxa.in";
   const companies = [...new Set(Object.values(skillIndex).map(s => s.company))];
   const body = JSON.stringify({
     runtime_version: RUNTIME_VERSION,
@@ -860,7 +859,7 @@ async function _phonehome() {
     platform: process.platform,
   });
   await new Promise((resolve) => {
-    const req = https.request(`${CONXA_API}/telemetry/runtime-start`, {
+    const req = https.request(`${CONXA_API}/api/v1/telemetry/runtime-start`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
     }, (res) => { res.resume(); resolve(); });

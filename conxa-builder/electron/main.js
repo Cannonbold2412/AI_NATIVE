@@ -93,11 +93,14 @@ function startBackend() {
         : {}),
       CONXA_CLOUD_API:
         process.env.CONXA_CLOUD_API || "https://apis.conxa.in",
-      PYTHONPATH: [
+      // In dev, add source paths so Python can import conxa_core and conxa_compile
+      // without requiring a full pip install. In packaged mode these directories
+      // don't exist on disk and the frozen bundle has everything it needs — omit them.
+      PYTHONPATH: (IS_DEV ? [
         path.join(__dirname, "..", "..", "packages", "conxa-core"),
         path.join(__dirname, "..", "python"),
         process.env.PYTHONPATH || "",
-      ].filter(Boolean).join(path.delimiter),
+      ] : [process.env.PYTHONPATH || ""]).filter(Boolean).join(path.delimiter),
     },
   });
 

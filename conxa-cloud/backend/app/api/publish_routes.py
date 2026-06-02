@@ -29,7 +29,7 @@ from conxa_core.config import settings
 from conxa_core.db import db_get, db_set
 from conxa_core.models.plugin import PluginBuild, PluginInstaller, PluginWorkflow
 from conxa_core.storage.plugin_store import create_plugin, list_plugins, save_plugin
-from app.services.saas import ensure_principal, principal_from_request
+from app.services.saas import add_audit_event, ensure_principal, principal_from_request
 
 router = APIRouter(prefix="/plugins", tags=["publish"])
 installers_router = APIRouter(prefix="/installers", tags=["installers"])
@@ -276,6 +276,14 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
     tmp.replace(pack_path)
     _upsert_published_plugin(body, principal.workspace_id, principal.user_id)
 
+    add_audit_event(
+        principal,
+        "publish",
+        resource_type="skill_pack",
+        resource_id=slug,
+        metadata={"version": body.skill_pack_version, "files_written": written},
+    )
+
     return {
         "slug": slug,
         "version": body.skill_pack_version,
@@ -355,6 +363,14 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
             )
         })
         save_plugin(plugin_record)
+
+    add_audit_event(
+        principal,
+        "installer_upload",
+        resource_type="installer",
+        resource_id=slug,
+        metadata={"version": version, "size": len(body), "sha256": sha256},
+    )
 
     return {
         "slug": slug,

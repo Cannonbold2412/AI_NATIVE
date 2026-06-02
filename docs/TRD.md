@@ -208,7 +208,9 @@ All under `/api/v1/` except health endpoints:
 | `GET /api/v1/updates/runtime-manifest` | Runtime self-update manifest | Public |
 | `GET /api/v1/updates/studio-manifest` | Studio download info | Public |
 | `GET /api/v1/skill-packs/{company}/delta` | Skill-pack delta sync — authenticated by installer-embedded sync_token | Bearer: `pack.json.sync_token`; 401 if invalid |
-| `POST /api/v1/telemetry/runtime-start` | Runtime phone-home | Public (non-critical) |
+| `POST /api/v1/telemetry/runtime-start` | Runtime phone-home — stores `runtime_registrations` KV entry per `(company, platform)` | Public (non-critical) |
+| `GET /api/v1/telemetry/runtimes` | Runtime registration list for dashboard (active/stale, version distribution) | Clerk JWT |
+| `GET /api/v1/audit-events` | Audit log for the authenticated workspace (publish, installer upload, plugin create/delete) | Clerk JWT |
 | `POST /api/v1/subscriptions` | Create Razorpay subscription | Clerk JWT |
 | `POST /api/v1/billing/webhook` | Razorpay webhook | Webhook secret HMAC |
 | `GET /api/v1/dashboard` | Dashboard data | Clerk JWT |
@@ -305,12 +307,12 @@ sequenceDiagram
     Cloud-->>RT: {version, url, sha256}
     RT->>RT: if newer version → download runtime-win.exe.next
     RT->>CD: MCP connect (StdioServerTransport)
-    RT->>Cloud: POST /telemetry/runtime-start (fire-and-forget)
     RT->>RT: syncSkillPacks() — 15s timeout
     RT->>Cloud: GET /skill-packs/{co}/delta?since={ver}
     Cloud-->>RT: {files: [...base64 content...]}
     RT->>RT: atomic write + SHA-256 verify each file
     RT->>RT: reload skill index
+    RT->>Cloud: POST /api/v1/telemetry/runtime-start (fire-and-forget, after sync)
     RT-->>CD: ready (skill index loaded)
 ```
 

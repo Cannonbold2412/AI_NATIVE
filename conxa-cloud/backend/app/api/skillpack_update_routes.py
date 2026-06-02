@@ -14,9 +14,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from conxa_core.config import settings
-from conxa_core.db import db_get
+from conxa_core.db import db_get, db_set, db_list
+from app.services.saas import principal_from_request, ensure_principal
 
 router = APIRouter(prefix="/skill-packs", tags=["skill-packs"])
+
+_STALE_RUNTIME_DAYS = 30
 
 # Rate limiter: {token_prefix: last_request_ts}
 _rate_cache: dict[str, float] = {}
@@ -156,6 +159,71 @@ telemetry_router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
 @telemetry_router.post("/runtime-start")
 def post_telemetry_runtime_start(body: TelemetryBody) -> dict[str, Any]:
-    """Non-critical. Records which runtime versions are active for ops visibility."""
-    # In production: write to analytics DB / metrics system.
+    """Non-critical. Records device registrations for ops visibility.
+
+    Public endpoint — installed runtimes have no Clerk session.
+    Workspace is derived from the per-company sync_token KV entry (set at publish time).
+    Spoofing inflates counts but leaks nothing.
+    """
+    now = time.time()
+    companies = [c.strip() for c in (body.companies or []) if c.strip()]
+    platform = (body.platform or "").strip() or "unknown"
+
+    for company in companies:
+        workspace_id = ""
+        stored_token = db_get("sync_tokens", company)
+        if isinstance(stored_token, dict):
+            workspace_id = str(stored_token.get("workspace_id") or "")
+
+        key = f"{company}:{platform}"
+        existing = db_get("runtime_registrations", key) or {}
+        db_set(
+            "runtime_registrations",
+            key,
+            {
+                "company": company,
+                "platform": platform,
+                "runtime_version": (body.runtime_version or "").strip(),
+                "workspace_id": workspace_id,
+                "last_seen": now,
+                "first_seen": existing.get("first_seen", now),
+            },
+        )
+
     return {"ok": True}
+
+
+@telemetry_router.get("/runtimes")
+def get_runtime_registrations(request: Request) -> dict[str, Any]:
+    """Return runtime device registrations for the authenticated workspace.
+
+    Filters to the caller's workspace; flags runtimes not seen in 30 days.
+    """
+    principal = principal_from_request(request)
+    ensure_principal(principal)
+
+    stale_cutoff = time.time() - _STALE_RUNTIME_DAYS * 86400
+    all_regs = db_list("runtime_registrations")
+
+    registrations = []
+    version_counts: dict[str, int] = {}
+    stale_count = 0
+
+    for reg in all_regs:
+        if not isinstance(reg, dict):
+            continue
+        if reg.get("workspace_id") != principal.workspace_id:
+            continue
+        is_stale = reg.get("last_seen", 0) < stale_cutoff
+        if is_stale:
+            stale_count += 1
+        v = reg.get("runtime_version") or "unknown"
+        version_counts[v] = version_counts.get(v, 0) + 1
+        registrations.append({**reg, "stale": is_stale})
+
+    registrations.sort(key=lambda r: r.get("last_seen", 0), reverse=True)
+    return {
+        "registrations": registrations,
+        "stale_count": stale_count,
+        "version_distribution": version_counts,
+    }

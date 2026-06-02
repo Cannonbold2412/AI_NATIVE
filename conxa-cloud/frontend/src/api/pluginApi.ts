@@ -465,6 +465,30 @@ export function getStudioManifest(): Promise<StudioManifest> {
   return apiFetch('/updates/studio-manifest').then((r) => json<StudioManifest>(r))
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Runtime registrations (2.1 device registration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RuntimeRegistration = {
+  company: string
+  platform: string
+  runtime_version: string
+  workspace_id: string
+  last_seen: number
+  first_seen: number
+  stale: boolean
+}
+
+export type RuntimeRegistrationsResponse = {
+  registrations: RuntimeRegistration[]
+  stale_count: number
+  version_distribution: Record<string, number>
+}
+
+export function fetchRuntimeRegistrations(): Promise<RuntimeRegistrationsResponse> {
+  return apiFetch('/telemetry/runtimes').then((r) => json<RuntimeRegistrationsResponse>(r))
+}
+
 /** Stream a workflow test run (SSE). Returns a raw Response for readPluginSse(). */
 export function testWorkflow(
   pluginId: string,

@@ -12,32 +12,26 @@ import sys
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # Repo root is one level up from this spec file (conxa-builder/pyinstaller.spec).
 REPO_ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH is injected by PyInstaller)
 BACKEND_DIR = REPO_ROOT / "conxa-builder" / "python"
-# Make conxa_compile importable in the spec-execution context so that
-# collect_submodules() below can find all submodules. pathex only affects
+CORE_PACKAGE_DIR = REPO_ROOT / "packages" / "conxa-core"
+# Make both conxa_compile and conxa_core importable in the spec-execution context
+# so that collect_submodules() can enumerate all submodules. pathex only affects
 # the Analysis module graph, not the process sys.path used by collect_* calls.
 sys.path.insert(0, str(BACKEND_DIR))
+sys.path.insert(0, str(CORE_PACKAGE_DIR))
 
 block_cipher = None
-
-# Collect the local compile pipeline (conxa_compile, lives in BACKEND_DIR) and the
-# installed shared foundation (conxa_core, installed as a dependency). Data files
-# carry bridge.js, policy JSON, and the plugin/installer templates — without these
-# the frozen backend builds but fails at runtime.
-_core_data = collect_data_files(
-    "conxa_core", includes=["**/*.json", "storage/**"]
-)
 
 
 def _fs_collect(src_root: Path, dest_prefix: str, patterns):
     """Glob for data files directly on the filesystem.
 
     collect_data_files() requires the package to be pip-installed (dist-info);
-    conxa_compile is not, so we glob the source tree directly instead.
+    conxa_compile and conxa_core are collected from source directly instead.
     """
     result = []
     for pat in patterns:
@@ -46,6 +40,15 @@ def _fs_collect(src_root: Path, dest_prefix: str, patterns):
             result.append((str(f), dest))
     return result
 
+
+# Collect conxa_core data files (templates, policy JSON) directly from source.
+# collect_data_files() is unreliable when the wheel install is non-editable
+# because PyInstaller's hook can't always locate the dist-info in CI.
+_core_data = _fs_collect(
+    CORE_PACKAGE_DIR / "conxa_core",
+    "conxa_core",
+    ["*.json", "*.tmpl", "*.gitignore"],
+)
 
 _compile_data = _fs_collect(
     BACKEND_DIR / "conxa_compile",
@@ -58,7 +61,7 @@ _playwright_datas, _playwright_binaries, _ = collect_all("playwright")
 
 a = Analysis(
     [str(BACKEND_DIR / "backend.py")],
-    pathex=[str(BACKEND_DIR)],
+    pathex=[str(BACKEND_DIR), str(CORE_PACKAGE_DIR)],
     binaries=_playwright_binaries,
     datas=_core_data + _compile_data + _playwright_datas,
     hiddenimports=(

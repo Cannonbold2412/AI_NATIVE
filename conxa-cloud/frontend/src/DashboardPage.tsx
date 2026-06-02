@@ -4,10 +4,12 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   fetchPlugins,
+  fetchRuntimeRegistrations,
   fetchTrackingCompanies,
   fetchTrackingRun,
   fetchTrackingRuns,
   normalizePluginList,
+  type RuntimeRegistration,
   type TrackingEvent,
   type TrackingRunSummary,
 } from '@/api/pluginApi'
@@ -22,6 +24,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock,
+  Monitor,
   RefreshCw,
   Zap,
 } from 'lucide-react'
@@ -342,6 +345,70 @@ function TimelineDrawer({
   )
 }
 
+// ─── Runtime Registrations ───────────────────────────────────────────────────
+
+function RuntimeRegistrationsCard() {
+  const { data, isFetching } = useQuery({
+    queryKey: ['runtime-registrations'],
+    queryFn: fetchRuntimeRegistrations,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  })
+
+  if (isFetching && !data) return null
+  if (!data || data.registrations.length === 0) return null
+
+  const active = data.registrations.filter((r) => !r.stale)
+  const versions = Object.entries(data.version_distribution).sort((a, b) => b[1] - a[1])
+
+  return (
+    <Card className="border-white/8 bg-white/[0.025] shadow-none">
+      <CardHeader className="border-b border-white/6 pb-3">
+        <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+          <Monitor className="size-3.5" />
+          Active Runtimes
+          <span className="ml-auto tabular-nums text-zinc-200">{active.length}</span>
+          {data.stale_count > 0 && (
+            <span className="text-[10px] text-amber-400">{data.stale_count} stale</span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="divide-y divide-white/6">
+          {data.registrations.slice(0, 8).map((r: RuntimeRegistration) => (
+            <div key={`${r.company}:${r.platform}`} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-zinc-300">{r.company}</p>
+                <p className="text-[11px] text-zinc-600">{r.platform} · {fmtRelative(r.last_seen * 1000)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-zinc-500">v{r.runtime_version || '?'}</span>
+                {r.stale ? (
+                  <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400">stale</span>
+                ) : (
+                  <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">active</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        {versions.length > 0 && (
+          <div className="border-t border-white/6 px-4 py-3">
+            <p className="mb-2 text-[10px] uppercase tracking-widest text-zinc-600">Version distribution</p>
+            <div className="flex flex-wrap gap-2">
+              {versions.map(([v, count]) => (
+                <span key={v} className="rounded bg-white/5 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
+                  v{v} <span className="text-zinc-600">×{count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -383,6 +450,7 @@ export function DashboardPage() {
   const refreshDashboard = () => {
     void queryClient.invalidateQueries({ queryKey: ['tracking-companies'] })
     void queryClient.invalidateQueries({ queryKey: ['plugins'] })
+    void queryClient.invalidateQueries({ queryKey: ['runtime-registrations'] })
     if (activeCompany) {
       void queryClient.invalidateQueries({ queryKey: ['tracking-runs', activeCompany] })
     }
@@ -471,6 +539,9 @@ export function DashboardPage() {
                 tone={stats.totalRec > 0 ? 'warn' : 'good'}
               />
             </section>
+
+            {/* Runtime registrations */}
+            <RuntimeRegistrationsCard />
 
             {/* Run history sparkline */}
             {stats.sparkline.length > 0 && (

@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Status:** Current as of 2026-06-02 (1.1, 1.2, sync-token model done)  
+**Status:** Current as of 2026-06-02 (1.1, 1.2, sync-token model, 2.1, 2.3 done)
 **Audience:** Engineering team
 
 This plan is grounded in the actual codebase. Each item references the specific file or system that needs to change. Items are ordered by risk and dependency, not effort.
@@ -158,17 +158,19 @@ This plan is grounded in the actual codebase. Each item references the specific 
 
 ---
 
-### 2.1 Device & Runtime Registration
+### ✅ 2.1 Device & Runtime Registration — DONE 2026-06-02
 
-**What's missing:** The cloud has no visibility into how many runtimes are deployed, which versions, or which companies they serve. `POST /api/v1/telemetry/runtime-start` exists but stores nothing (returns `{"ok": true}` immediately).
+**What was missing:** The cloud had no visibility into deployed runtimes. `POST /api/v1/telemetry/runtime-start` was a no-op stub.
 
-**Fix:**
-- On runtime cold start, `POST /telemetry/runtime-start` with `{runtime_version, companies[], platform}`.
-- Cloud stores this as a runtime registration record keyed by `(workspace_id, company, platform)`.
-- Dashboard shows "active runtimes" count per company.
-- Surface in dashboard: runtime version distribution, stale runtimes (not seen in 30 days).
+**What was built:**
+- `post_telemetry_runtime_start` now stores a registration record per `(company, platform)` in the `runtime_registrations` KV namespace. Workspace is derived from the `sync_tokens` KV entry (set at publish time) — no new credential needed from the runtime.
+- Added `GET /api/v1/telemetry/runtimes` (Clerk-authed, workspace-scoped): returns registrations, stale count (not seen in 30 days), and version distribution.
+- Fixed `_phonehome()` in `runtime/server.js`: was calling `${CONXA_API}/telemetry/runtime-start` (missing `/api/v1/`); now calls `${CONXA_API}/api/v1/telemetry/runtime-start` using the module-level `CONXA_API`.
+- Moved phonehome to fire after sync so `companies[]` reflects the current skill index rather than the pre-sync cache.
+- Added `RuntimeRegistrationsCard` to the Dashboard: shows active/stale status per company, version distribution, last-seen time.
+- Added `/api/v1/telemetry/runtime-start` to `PUBLIC_PATHS` in `security.py` (exact path only) so installed runtimes don't need Clerk auth for this non-critical endpoint.
 
-**Files:** `skillpack_update_routes.py:post_telemetry_runtime_start`, Cloud dashboard, `runtime/server.js:_phonehome()`
+**Files:** `skillpack_update_routes.py`, `security.py`, `runtime/server.js`, `DashboardPage.tsx`, `pluginApi.ts`
 
 ---
 
@@ -185,17 +187,20 @@ This plan is grounded in the actual codebase. Each item references the specific 
 
 ---
 
-### 2.3 Audit Log
+### ✅ 2.3 Audit Log — DONE 2026-06-02
 
-**What's missing:** No record of which user took which action (publish, compile, delete). Required for enterprise security reviews.
+**What was missing:** No record of which user took which action. The Settings page called `GET /api/v1/audit-events` which was a stub returning `[]`.
 
-**Fix:**
-- Add `audit_log` KV namespace.
-- Write entries on: publish, installer upload, plugin delete, workflow delete.
-- Fields: `user_id`, `workspace_id`, `action`, `resource_type`, `resource_id`, `ts`, `ip`.
-- Expose `GET /api/v1/audit/events` (Clerk-authed, owner/admin only, paginated).
+**What was built:**
+- New `audit_routes.py`: `write_audit_log(user_id, workspace_id, action, resource_type, resource_id, ip, metadata)` helper uses `db_append("audit_log", workspace_id, [entry])` to persist events per workspace. `GET /api/v1/audit-events` (Clerk-authed) returns workspace-scoped entries, most recent first, paginated by `limit` param (max 500).
+- IP extracted from `X-Forwarded-For` first hop (Render proxy-aware); falls back to `request.client.host`.
+- Events written on: `publish` (publish_routes.py), `installer_upload` (publish_routes.py), `plugin_create` and `plugin_delete` (plugin_routes.py).
+- Removed the empty stub from `v1_alias_routes.py`; Settings page now gets real data.
+- Registered `audit_router` in `main.py`.
 
-**Files:** `publish_routes.py`, `plugin_routes.py`, new `audit_routes.py`
+**Fields per entry:** `id`, `workspace_id`, `user_id`, `action`, `resource_type`, `resource_id`, `metadata`, `created_at` (epoch seconds), `ip`.
+
+**Files:** `audit_routes.py` (new), `publish_routes.py`, `plugin_routes.py`, `v1_alias_routes.py`, `main.py`
 
 ---
 

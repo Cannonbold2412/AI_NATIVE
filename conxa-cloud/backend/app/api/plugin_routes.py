@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from conxa_core.config import settings
 from conxa_core.models.plugin import Plugin, PluginBuild, PluginInstaller, PluginWorkflow
-from app.services.saas import principal_from_request, ensure_principal, visible_workspace_ids_for
+from app.services.saas import add_audit_event, principal_from_request, ensure_principal, visible_workspace_ids_for
 from conxa_core.storage.plugin_store import (
     create_plugin,
     delete_plugin,
@@ -135,6 +135,13 @@ def post_create_plugin(body: CreatePluginBody, request: Request) -> dict[str, An
         workspace_id=principal.workspace_id,
         owner_user_id=principal.user_id,
     )
+    add_audit_event(
+        principal,
+        "plugin_create",
+        resource_type="plugin",
+        resource_id=plugin.id,
+        metadata={"name": body.name},
+    )
     return {"plugin": plugin.model_dump(mode="json")}
 
 
@@ -167,4 +174,11 @@ def delete_plugin_endpoint(plugin_id: str, request: Request) -> dict[str, Any]:
         shutil.rmtree(auth_dir, ignore_errors=True)
     if not delete_plugin(plugin_id):
         raise HTTPException(status_code=404, detail="Plugin not found.")
+    add_audit_event(
+        principal,
+        "plugin_delete",
+        resource_type="plugin",
+        resource_id=plugin_id,
+        metadata={"name": plugin.name},
+    )
     return {"deleted": True, "plugin_id": plugin_id}
