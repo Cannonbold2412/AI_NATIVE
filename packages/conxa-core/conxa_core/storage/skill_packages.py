@@ -29,6 +29,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from conxa_core.config import state_base_dir
 from conxa_core.skill_pack_build_log import (
     skill_pack_log_append,
     skill_pack_text_metrics,
@@ -150,8 +151,13 @@ def rename_package_bundle_root(new_slug: str) -> str:
 
 
 def skill_package_root_dir() -> Path:
-    """Filesystem container holding one directory per skill package bundle."""
-    path = PROJECT_ROOT / FIXED_PACKAGE_ROOT
+    """Filesystem container holding one directory per skill package bundle.
+
+    Rooted at the writable state base (the user profile in frozen builds, the
+    in-repo source dir in development) so generated bundles never target the
+    read-only install tree.
+    """
+    path = state_base_dir() / FIXED_PACKAGE_ROOT
     path.mkdir(parents=True, exist_ok=True)
     maybe_migrate_legacy_container_layout(path)
     return path

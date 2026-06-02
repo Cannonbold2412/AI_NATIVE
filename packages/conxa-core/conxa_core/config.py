@@ -1,11 +1,26 @@
 """Central configuration for the skill platform service."""
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def state_base_dir() -> Path:
+    """Writable base directory for generated runtime state (``data/``, ``output/``).
+
+    Frozen builds are installed under a read-only location (e.g. ``Program Files``
+    on Windows), so state cannot live next to the bundled package. Redirect it to
+    the user profile (``~/.conxa``), consistent with the deps/runtime convention.
+    Development keeps the in-repo source default so ``pip install -e`` and
+    ``python backend.py`` workflows are unchanged.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(os.path.expanduser("~/.conxa"))
+    return Path(__file__).resolve().parent.parent
 
 
 @dataclass(frozen=True)
@@ -32,7 +47,7 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    data_dir: Path = Path(__file__).resolve().parent.parent / "data"
+    data_dir: Path = state_base_dir() / "data"
     host: str = "127.0.0.1"
     port: int = 8000
     default_action_timeout_ms: int = 5000
