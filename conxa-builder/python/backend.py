@@ -36,6 +36,11 @@ if _PY_DIR not in sys.path:
 
 from services import bootstrap as _bootstrap_pkg  # noqa: E402
 
+# Point Playwright at the managed Chromium build before the recorder is imported
+# or used. In frozen builds the browser lives in ~/.conxa/deps/chromium; without
+# this, launches on a non-bootstrap startup fail with "Executable doesn't exist".
+_bootstrap_pkg.configure_playwright_browsers_path()
+
 # Pre-import the recorder and plugin store at startup (main thread, before serve()
 # starts blocking on stdin). Importing these lazily in a dispatch thread causes a
 # deadlock: two simultaneous record clicks hit Python's per-module import lock while

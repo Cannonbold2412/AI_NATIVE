@@ -36,6 +36,26 @@ def _deps_dir() -> Path:
     return d
 
 
+def chromium_dir() -> Path:
+    """Managed Playwright browsers directory for frozen builds (~/.conxa/deps/chromium)."""
+    return _deps_dir() / "chromium"
+
+
+def configure_playwright_browsers_path() -> None:
+    """Point Playwright at the managed Chromium location in frozen builds.
+
+    ensure_chromium() sets PLAYWRIGHT_BROWSERS_PATH, but it only runs during
+    first-run bootstrap. On later launches the deps are already present, so
+    bootstrap is skipped and the env var is never set — the recorder process
+    then falls back to Playwright's default location and fails with
+    "Executable doesn't exist". Set it unconditionally at startup so every
+    process that launches the browser resolves the managed build. No-op in dev,
+    where Playwright's default managed location is used.
+    """
+    if getattr(sys, "frozen", False):
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(chromium_dir())
+
+
 def _emit(on_event: EventSink | None, **kw: Any) -> None:
     if on_event:
         on_event({"phase": "bootstrap", **kw})
@@ -199,7 +219,7 @@ def ensure_chromium(on_event: EventSink | None = None) -> None:
     """
     if getattr(sys, "frozen", False):
         # Packaged build: redirect to a managed path under ~/.conxa/deps/
-        browsers_path = _deps_dir() / "chromium"
+        browsers_path = chromium_dir()
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
         if any(browsers_path.glob("chromium-*")):
             _emit(on_event, dep="chromium", status="ready")
