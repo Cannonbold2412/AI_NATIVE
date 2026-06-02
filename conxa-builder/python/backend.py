@@ -891,9 +891,19 @@ class Backend:
             sync_skill_pack(company, source_dir, runtime_dir, data_dir=data_dir)
             _stage_runtime_auth(plugin, company, data_dir)
 
+            # Frozen builds run the packed runtime exe, which has no node_modules
+            # for an npx-based Playwright install. Point it at the Studio-managed
+            # Chromium (~/.conxa/deps/chromium) — its revision matches the packed
+            # runtime's bundled Playwright, so it launches directly. Dev keeps the
+            # per-runtime chromium dir and the npx install path.
+            if getattr(sys, "frozen", False):
+                browsers_dir = _bootstrap_pkg.chromium_dir()
+            else:
+                browsers_dir = runtime_dir / "chromium"
+
             sink({"kind": "workflow_test", "message": "Checking Playwright browser runtime…"})
             ensure_chromium_installed(
-                runtime_dir / "chromium",
+                browsers_dir,
                 runtime_dir,
                 log_sink=lambda msg: sink({"kind": "workflow_test", "message": msg}),
             )
@@ -910,7 +920,7 @@ class Backend:
                 },
                 env={
                     "CONXA_DATA_DIR": str(data_dir),
-                    "PLAYWRIGHT_BROWSERS_PATH": str(runtime_dir / "chromium"),
+                    "PLAYWRIGHT_BROWSERS_PATH": str(browsers_dir),
                 },
             )
         except (RuntimeToolError, RuntimeError) as exc:

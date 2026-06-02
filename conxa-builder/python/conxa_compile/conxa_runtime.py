@@ -16,8 +16,42 @@ class RuntimeToolError(RuntimeError):
     """Raised when the local MCP runtime cannot complete a tool call."""
 
 
+def _runtime_exe(path: Path) -> Path | None:
+    """Return the packed runtime executable in ``path``, or None.
+
+    The customer installer stages it as ``runtime.exe``; the Studio deps bootstrap
+    caches it as ``runtime-win.exe``. Either is a self-contained MCP stdio server.
+    """
+    names = ("runtime.exe", "runtime-win.exe") if sys.platform == "win32" else ("runtime", "runtime-mac")
+    for name in names:
+        exe = path / name
+        if exe.is_file():
+            return exe
+    return None
+
+
 def _is_runtime_dir(path: Path) -> bool:
+    """A runnable runtime is either a packed exe or a server.js source tree."""
+    if _runtime_exe(path) is not None:
+        return True
     return (path / "server.js").is_file() and (path / "package.json").is_file()
+
+
+def _bootstrap_runtime_dir() -> Path | None:
+    """Locate the Studio deps-managed runtime (~/.conxa/deps/runtime/<version>/).
+
+    Mirrors services.bootstrap._deps_dir(); kept inline so this module stays
+    dependency-free. Returns the highest-versioned dir that holds a packed exe.
+    """
+    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa")
+    runtime_root = Path(base) / "deps" / "runtime"
+    if not runtime_root.is_dir():
+        return None
+    candidates = [d for d in runtime_root.iterdir() if d.is_dir() and _runtime_exe(d) is not None]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda d: d.name)
+    return candidates[-1]
 
 
 def _dev_runtime_candidates(source_file: Path) -> list[Path]:
@@ -36,12 +70,17 @@ def _dev_runtime_candidates(source_file: Path) -> list[Path]:
 
 
 def resolve_runtime_dir() -> Path | None:
-    """Find the Conxa shared runtime directory containing server.js.
+    """Find a runnable Conxa runtime directory (packed exe or server.js tree).
 
-    Priority:
+    Priority (tuned for Studio testing, which stages a freshly built skill pack
+    into CONXA_DIR/skill-packs and therefore needs a writable location):
       1. $CONXA_DIR env var (explicit override — trusted as-is)
-      2. Installed location (C:\\Program Files\\Conxa on Windows, ~/.conxa on Mac/Linux)
-      3. Repo-local runtime/ (dev fallback; supports nested builder checkout)
+      2. Repo-local runtime/ (only matches in a source checkout — the developer's
+         working copy, preferred in dev; never present inside a frozen install)
+      3. Studio deps-managed runtime (~/.conxa/deps/runtime/<version>/) — the packed
+         exe; writable, used by frozen builds
+      4. Installed location (C:\\Program Files\\Conxa on Windows, ~/.conxa else) —
+         read-only last resort
 
     Returns None if no valid runtime is found.
     """
@@ -49,21 +88,26 @@ def resolve_runtime_dir() -> Path | None:
     env_dir = os.environ.get("CONXA_DIR", "").strip()
     if env_dir:
         p = Path(env_dir)
-        if (p / "server.js").is_file():
+        if _is_runtime_dir(p):
             return p
 
-    # 2. Installed location
+    # 2. Repo-local dev source tree (matches only when running from a checkout)
+    for dev in _dev_runtime_candidates(Path(__file__)):
+        if _is_runtime_dir(dev):
+            return dev
+
+    # 3. Studio deps-managed runtime (packed exe; writable — the frozen path)
+    deps_runtime = _bootstrap_runtime_dir()
+    if deps_runtime is not None:
+        return deps_runtime
+
+    # 4. Installed location (packed runtime.exe or server.js; may be read-only)
     if sys.platform == "win32":
         installed = Path(r"C:\Program Files\Conxa")
     else:
         installed = Path.home() / ".conxa"
-    if (installed / "server.js").is_file():
+    if _is_runtime_dir(installed):
         return installed
-
-    # 3. Repo-local dev fallback
-    for dev in _dev_runtime_candidates(Path(__file__)):
-        if _is_runtime_dir(dev):
-            return dev
 
     return None
 
@@ -160,14 +204,24 @@ def call_runtime_tool(
     env: dict[str, str] | None = None,
     timeout_s: int = 900,
 ) -> dict:
-    """Call a tool on the local MCP stdio runtime and return its JSON-RPC result."""
-    node = shutil.which("node")
-    if not node:
-        raise RuntimeToolError("Node.js not found. Install Node.js to test workflows.")
+    """Call a tool on the local MCP stdio runtime and return its JSON-RPC result.
 
-    server_js = runtime_dir / "server.js"
-    if not server_js.is_file():
-        raise RuntimeToolError(f"Runtime server.js not found at {server_js}")
+    Launches the packed runtime executable when present (production parity with
+    how Claude Desktop spawns it); otherwise falls back to ``node server.js`` for
+    a repo-local source tree (dev).
+    """
+    exe = _runtime_exe(runtime_dir)
+    if exe is not None:
+        cmd: list[str] = [str(exe)]
+    else:
+        node = shutil.which("node")
+        if not node:
+            raise RuntimeToolError("Node.js not found. Install Node.js to test workflows.")
+        if not (runtime_dir / "server.js").is_file():
+            raise RuntimeToolError(
+                f"No runnable runtime at {runtime_dir} (neither a packed executable nor server.js)."
+            )
+        cmd = [node, "server.js"]
 
     proc_env = {
         **os.environ,
@@ -177,7 +231,7 @@ def call_runtime_tool(
     }
 
     proc = subprocess.Popen(
-        [node, "server.js"],
+        cmd,
         cwd=str(runtime_dir),
         env=proc_env,
         stdin=subprocess.PIPE,
