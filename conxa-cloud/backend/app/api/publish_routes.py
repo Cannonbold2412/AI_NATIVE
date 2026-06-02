@@ -23,8 +23,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+import uuid
+
 from conxa_core.config import settings
 from conxa_core.db import db_get, db_set
+from conxa_core.models.plugin import PluginBuild, PluginInstaller, PluginWorkflow
 from conxa_core.storage.plugin_store import create_plugin, list_plugins, save_plugin
 from app.services.saas import ensure_principal, principal_from_request
 
@@ -164,6 +167,20 @@ def _upsert_published_plugin(body: PublishBody, workspace_id: str, owner_user_id
         ),
         None,
     )
+    now = time.time()
+    build = PluginBuild(last_built_at=now, output_path="", version=body.skill_pack_version)
+    workflows = [
+        PluginWorkflow(
+            id=str(uuid.uuid4()),
+            slug=skill_slug,
+            name=skill_slug.replace("-", " ").title(),
+            session_id="",
+            recorded_at=now,
+            status="compiled",
+            skill_id=skill_slug,
+        )
+        for skill_slug in body.skills
+    ]
     if existing is None:
         plugin = create_plugin(
             name=name,
@@ -172,7 +189,12 @@ def _upsert_published_plugin(body: PublishBody, workspace_id: str, owner_user_id
             workspace_id=workspace_id,
             owner_user_id=owner_user_id,
         )
-        plugin = plugin.model_copy(update={"slug": body.slug, "status": "ready"})
+        plugin = plugin.model_copy(update={
+            "slug": body.slug,
+            "status": "ready",
+            "build": build,
+            "workflows": workflows,
+        })
     else:
         plugin = existing.model_copy(
             update={
@@ -183,6 +205,8 @@ def _upsert_published_plugin(body: PublishBody, workspace_id: str, owner_user_id
                 "target_url": target_url or existing.target_url,
                 "protected_url": protected_url or existing.protected_url,
                 "status": "ready",
+                "build": build,
+                "workflows": workflows,
             }
         )
     save_plugin(plugin)
@@ -302,16 +326,35 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
     tmp.write_bytes(body)
     tmp.replace(exe_path)
 
+    uploaded_at = time.time()
     meta = {
         "slug": slug,
         "filename": filename,
         "version": version,
         "sha256": sha256,
         "size": len(body),
-        "uploaded_at": time.time(),
+        "uploaded_at": uploaded_at,
         "workspace_id": principal.workspace_id,
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+    # Persist installer metadata onto the plugin record so the dashboard can
+    # surface version and a download button without reading the filesystem.
+    plugin_record = next(
+        (p for p in list_plugins(workspace_id=principal.workspace_id) if p.slug == slug),
+        None,
+    )
+    if plugin_record is not None:
+        plugin_record = plugin_record.model_copy(update={
+            "installer": PluginInstaller(
+                built_at=uploaded_at,
+                installer_path=str(exe_path),
+                filename=filename,
+                version=version,
+                runtime_version="",
+            )
+        })
+        save_plugin(plugin_record)
 
     return {
         "slug": slug,

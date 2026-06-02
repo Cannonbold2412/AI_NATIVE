@@ -8,6 +8,7 @@ served here.
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -16,13 +17,14 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from conxa_core.config import settings
-from conxa_core.models.plugin import Plugin
+from conxa_core.models.plugin import Plugin, PluginBuild, PluginInstaller, PluginWorkflow
 from app.services.saas import principal_from_request, ensure_principal, visible_workspace_ids_for
 from conxa_core.storage.plugin_store import (
     create_plugin,
     delete_plugin,
     get_plugin,
     list_plugins,
+    save_plugin,
 )
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
@@ -35,15 +37,77 @@ class CreatePluginBody(BaseModel):
     protected_url_marker_text: str = Field(default="")
 
 
+def _backfill_plugin(plugin: Plugin) -> Plugin:
+    """Transparently populate build/installer/workflows from on-disk artifacts
+    for plugins published before these fields were persisted to the plugin store.
+    Saves the enriched record so the backfill only runs once per plugin.
+    """
+    changed = False
+
+    if plugin.installer is None:
+        meta_path = settings.data_dir / "installers" / plugin.slug / "meta.json"
+        if meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                plugin.installer = PluginInstaller(
+                    built_at=float(meta.get("uploaded_at", 0)),
+                    installer_path=str(settings.data_dir / "installers" / plugin.slug / "installer.exe"),
+                    filename=str(meta.get("filename", f"{plugin.slug}-Plugin-Setup.exe")),
+                    version=str(meta.get("version", "0.1.0")),
+                    runtime_version="",
+                )
+                changed = True
+            except Exception:
+                pass
+
+    if plugin.build is None or not plugin.workflows:
+        pack_path = settings.data_dir / "skill-packs" / plugin.slug / "pack.json"
+        if pack_path.is_file():
+            try:
+                import time
+                import uuid as _uuid
+                pack = json.loads(pack_path.read_text(encoding="utf-8"))
+                version = str(pack.get("skill_pack_version", "0.1.0"))
+                skills: list[str] = pack.get("skills", [])
+                if plugin.build is None:
+                    plugin.build = PluginBuild(
+                        last_built_at=float(pack.get("published_at", time.time())),
+                        output_path="",
+                        version=version,
+                    )
+                    changed = True
+                if not plugin.workflows and skills:
+                    now = float(pack.get("published_at", time.time()))
+                    plugin.workflows = [
+                        PluginWorkflow(
+                            id=str(_uuid.uuid4()),
+                            slug=s,
+                            name=s.replace("-", " ").title(),
+                            session_id="",
+                            recorded_at=now,
+                            status="compiled",
+                            skill_id=s,
+                        )
+                        for s in skills
+                    ]
+                    changed = True
+            except Exception:
+                pass
+
+    if changed:
+        plugin = save_plugin(plugin)
+    return plugin
+
+
 def _visible_plugins(principal) -> list[Plugin]:
     visible_ids = set(visible_workspace_ids_for(principal))
     plugins: list[Plugin] = []
     for plugin in list_plugins():
         if plugin.workspace_id == principal.workspace_id:
-            plugins.append(plugin)
+            plugins.append(_backfill_plugin(plugin))
             continue
         if plugin.workspace_id in visible_ids and plugin.owner_user_id == principal.user_id:
-            plugins.append(plugin)
+            plugins.append(_backfill_plugin(plugin))
     return sorted(plugins, key=lambda p: p.updated_at, reverse=True)
 
 
