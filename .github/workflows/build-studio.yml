@@ -52,7 +52,7 @@ jobs:
         working-directory: .
 
       - name: Bundle Python backend with PyInstaller
-        run: pyinstaller conxa-builder/pyinstaller.spec --noconfirm
+        run: pyinstaller conxa-builder/pyinstaller.spec --noconfirm --distpath conxa-builder/dist
         working-directory: .
 
       - name: Install Electron dependencies
