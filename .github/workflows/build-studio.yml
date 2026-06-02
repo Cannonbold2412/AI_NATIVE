@@ -43,13 +43,17 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          # Build + install conxa-core as a wheel (non-editable) so its package
-          # data (bridge.js, templates, policy JSON) materializes on disk for
-          # PyInstaller's collect_data_files.
-          python -m pip wheel --no-deps -w dist-wheels packages/conxa-core
-          python -m pip install dist-wheels/conxa_core-*.whl
+          # Install conxa-core from source (non-editable). This pulls its runtime
+          # deps — pydantic, pydantic-settings, SQLAlchemy — which PyInstaller must
+          # see to bundle them. A plain directory path is used (not a wheel glob):
+          # PowerShell does not expand `*` for native executables, so a
+          # `conxa_core-*.whl` glob would be passed literally to pip and silently
+          # fail. The spec collects conxa_core data files from the source tree, so
+          # a built wheel is not needed for package data.
+          python -m pip install packages/conxa-core
           python -m pip install -r conxa-builder/python/requirements.txt pyinstaller
         working-directory: .
 

@@ -59,14 +59,26 @@ _compile_data = _fs_collect(
 # collect_all bundles the driver binary + CLI scripts so ensure_chromium() works when frozen.
 _playwright_datas, _playwright_binaries, _ = collect_all("playwright")
 
+# pydantic v2 ships a compiled pydantic_core extension and resolves much of its
+# machinery through dynamic imports that PyInstaller's static analysis can miss.
+# collect_all pulls the package data, binaries, and every submodule explicitly.
+_pydantic_datas, _pydantic_binaries, _pydantic_hidden = collect_all("pydantic")
+_pydantic_core_datas, _pydantic_core_binaries, _pydantic_core_hidden = collect_all("pydantic_core")
+
 a = Analysis(
     [str(BACKEND_DIR / "backend.py")],
     pathex=[str(BACKEND_DIR), str(CORE_PACKAGE_DIR)],
-    binaries=_playwright_binaries,
-    datas=_core_data + _compile_data + _playwright_datas,
+    binaries=_playwright_binaries + _pydantic_binaries + _pydantic_core_binaries,
+    datas=(
+        _core_data + _compile_data + _playwright_datas
+        + _pydantic_datas + _pydantic_core_datas
+    ),
     hiddenimports=(
         collect_submodules("conxa_core")
         + collect_submodules("conxa_compile")
+        + collect_submodules("pydantic_settings")
+        + _pydantic_hidden
+        + _pydantic_core_hidden
         + [
             # Services layer used by backend.py.
             "services.auth_service",
