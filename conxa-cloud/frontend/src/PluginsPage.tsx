@@ -2,13 +2,24 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
+import { fetchInstallerVersions, fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Download, Globe, Search } from 'lucide-react'
+
+function formatBytes(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return '0 KB'
+  if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatDate(ts: number) {
+  if (!ts) return 'Unknown'
+  return new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
 function statusBadge(status: Plugin['status']) {
   const map: Record<Plugin['status'], { label: string; className: string }> = {
@@ -22,6 +33,60 @@ function statusBadge(status: Plugin['status']) {
     <Badge variant="outline" className={className}>
       {label}
     </Badge>
+  )
+}
+
+function InstallerVersionHistory({ plugin }: { plugin: Plugin }) {
+  const q = useQuery({
+    queryKey: ['installer-versions', plugin.slug],
+    queryFn: () => fetchInstallerVersions(plugin.slug),
+    enabled: !!plugin.installer,
+    staleTime: 30_000,
+  })
+  if (!plugin.installer) return null
+
+  const versions = q.data?.versions ?? []
+  return (
+    <div className="mt-3 border-t border-white/8 pt-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-zinc-300">Version history</p>
+        {q.isLoading ? <span className="text-[11px] text-zinc-600">Loading...</span> : null}
+      </div>
+      {versions.length === 0 && !q.isLoading ? (
+        <p className="text-xs text-zinc-600">No versions tracked yet</p>
+      ) : (
+        <div className="space-y-2">
+          {versions.slice(0, 4).map((item) => (
+            <div key={item.version} className="rounded-md border border-white/8 bg-black/20 p-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-xs text-zinc-200">v{item.version}</span>
+                    {item.is_latest ? (
+                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0 text-[10px] text-emerald-300">
+                        latest
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.release_notes}</p>
+                  <p className="mt-1 text-[11px] text-zinc-600">
+                    {formatDate(item.uploaded_at)} / {formatBytes(item.size)}
+                  </p>
+                </div>
+                <a
+                  href={item.download_url}
+                  download={item.filename}
+                  className="rounded-md border border-white/10 p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
+                  title={`Download v${item.version}`}
+                >
+                  <Download className="size-3.5" />
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -119,6 +184,7 @@ export function PluginsPage() {
                     ) : (
                       <p className="text-xs text-zinc-600">Installer not published yet</p>
                     )}
+                    <InstallerVersionHistory plugin={plugin} />
                   </CardContent>
                 </Card>
               )

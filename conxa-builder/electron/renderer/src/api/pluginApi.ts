@@ -34,6 +34,7 @@ export type PluginInstaller = {
   filename: string
   version: string
   runtime_version: string
+  release_notes?: string
 }
 
 export type Plugin = {
@@ -97,7 +98,9 @@ export type InstallerBuildResult = {
   plugin_id: string
   version: string
   runtime_version: string
+  release_notes?: string
   cloud_download_url?: string
+  cloud_version_download_url?: string
   cloud_sha256?: string
   cloud_upload_error?: string
   cloud_workspace_id?: string
@@ -281,6 +284,8 @@ export async function buildInstaller(
   pluginId: string,
   onLog: (message: string) => void = () => {},
   logoPath?: string | null,
+  version?: string,
+  releaseNotes?: string,
 ): Promise<InstallerBuildResult> {
   const unsub = window.conxa.onEvent((ev: BackendEvent) => {
     if (ev.kind === 'installer_build' && ev.message) onLog(String(ev.message))
@@ -289,6 +294,8 @@ export async function buildInstaller(
     return await cmd<InstallerBuildResult>('build_installer', {
       plugin_id: pluginId,
       logo_path: logoPath ?? null,
+      version,
+      release_notes: releaseNotes,
     })
   } finally {
     unsub()

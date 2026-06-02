@@ -62,6 +62,7 @@ def _backfill_plugin(plugin: Plugin) -> Plugin:
                     filename=str(meta.get("filename", f"{slug}-Plugin-Setup.exe")),
                     version=str(meta.get("version", "0.1.0")),
                     runtime_version="",
+                    release_notes=str(meta.get("release_notes", "")),
                 )
                 changed = True
             elif exe_path.is_file():
@@ -74,6 +75,7 @@ def _backfill_plugin(plugin: Plugin) -> Plugin:
                     filename=f"{slug}-Plugin-Setup.exe",
                     version=version,
                     runtime_version="",
+                    release_notes="",
                 )
                 changed = True
         except Exception:

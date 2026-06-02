@@ -521,26 +521,100 @@ def test_publish_rejects_path_traversal():
 def test_installer_upload_and_public_download():
     payload = b"MZ\x90\x00fake-exe-bytes"
     up = client.post(
-        "/api/v1/plugins/dl-test/installer/upload?filename=Acme-Setup.exe&version=1.2.0",
+        "/api/v1/plugins/dl-test/installer/upload?filename=Acme-Setup.exe&version=1.2.0&release_notes=Initial%20release",
         content=payload,
     )
     assert up.status_code == 200, up.text
     sha = up.json()["sha256"]
+    assert up.json()["version_download_url"] == "/api/v1/installers/dl-test/versions/1.2.0"
 
     dl = client.get("/api/v1/installers/dl-test")
     assert dl.status_code == 200
     assert dl.content == payload
     assert dl.headers["X-Conxa-SHA256"] == sha
 
+    exact = client.get("/api/v1/installers/dl-test/versions/1.2.0")
+    assert exact.status_code == 200
+    assert exact.content == payload
+
 
 def test_installer_upload_allows_build_artifact_larger_than_json_cap():
     payload = b"MZ" + (b"x" * (settings.max_json_body_bytes + 1024))
     up = client.post(
-        "/api/v1/plugins/big-dl-test/installer/upload?filename=Big-Setup.exe&version=1.2.0",
+        "/api/v1/plugins/big-dl-test/installer/upload?filename=Big-Setup.exe&version=1.2.0&release_notes=Large%20installer",
         content=payload,
     )
     assert up.status_code == 200, up.text
     assert up.json()["size"] == len(payload)
+
+
+def test_installer_upload_rejects_duplicate_version_and_preserves_history():
+    first = b"MZfirst"
+    second = b"MZsecond"
+    slug = "versioned-dl-test"
+
+    up1 = client.post(
+        f"/api/v1/plugins/{slug}/installer/upload?filename=Versioned-Setup.exe&version=1.2.0&release_notes=First%20release",
+        content=first,
+    )
+    assert up1.status_code == 200, up1.text
+
+    duplicate = client.post(
+        f"/api/v1/plugins/{slug}/installer/upload?filename=Versioned-Setup.exe&version=1.2.0&release_notes=Duplicate",
+        content=second,
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "installer_version_exists"
+
+    up2 = client.post(
+        f"/api/v1/plugins/{slug}/installer/upload?filename=Versioned-Setup.exe&version=1.2.1&release_notes=Second%20release",
+        content=second,
+    )
+    assert up2.status_code == 200, up2.text
+
+    latest = client.get(f"/api/v1/installers/{slug}")
+    assert latest.status_code == 200
+    assert latest.content == second
+
+    old = client.get(f"/api/v1/installers/{slug}/versions/1.2.0")
+    assert old.status_code == 200
+    assert old.content == first
+
+    versions = client.get(f"/api/v1/plugins/{slug}/installer/versions")
+    assert versions.status_code == 200, versions.text
+    rows = versions.json()["versions"]
+    assert [row["version"] for row in rows[:2]] == ["1.2.1", "1.2.0"]
+    assert rows[0]["is_latest"] is True
+    assert rows[0]["release_notes"] == "Second release"
+    assert rows[1]["is_latest"] is False
+
+
+def test_installer_upload_updates_plugin_latest_metadata():
+    slug = "plugin-meta-installer"
+    pub = client.post(
+        "/api/v1/plugins/publish",
+        json={
+            "slug": slug,
+            "display_name": "Plugin Meta Installer",
+            "target_url": "https://example.test",
+            "skill_pack_version": "1.0.0",
+            "skills": [],
+            "files": [],
+        },
+    )
+    assert pub.status_code == 200, pub.text
+
+    up = client.post(
+        f"/api/v1/plugins/{slug}/installer/upload?filename=Meta-Setup.exe&version=1.4.0&release_notes=Dashboard%20release",
+        content=b"MZmeta",
+    )
+    assert up.status_code == 200, up.text
+
+    plugins = client.get("/api/v1/plugins")
+    assert plugins.status_code == 200
+    plugin = next(row for row in plugins.json()["plugins"] if row["slug"] == slug)
+    assert plugin["installer"]["version"] == "1.4.0"
+    assert plugin["installer"]["release_notes"] == "Dashboard release"
 
 
 def test_installer_download_missing_is_404():

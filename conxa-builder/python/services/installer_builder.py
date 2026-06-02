@@ -17,6 +17,8 @@ def build_installer(
     *,
     company_slug: str,
     logo_path: str | None = None,
+    version: str | None = None,
+    release_notes: str = "",
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     # Point the shared builder at the bootstrapped NSIS if not already set.
@@ -32,4 +34,11 @@ def build_installer(
 
     from conxa_compile.installer_builder import build_installer as _build
 
-    return _build(plugin_id, company_slug=company_slug, logo_path=logo_path, realtime_sink=realtime_sink)
+    return _build(
+        plugin_id,
+        company_slug=company_slug,
+        logo_path=logo_path,
+        version=version,
+        release_notes=release_notes,
+        realtime_sink=realtime_sink,
+    )

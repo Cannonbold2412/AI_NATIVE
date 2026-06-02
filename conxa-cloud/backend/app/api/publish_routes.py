@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import secrets
 import time
 from pathlib import Path
@@ -36,6 +37,9 @@ installers_router = APIRouter(prefix="/installers", tags=["installers"])
 
 _OWNERS_NS = "publish_owners"
 _SAFE_SLUG = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+_SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +57,7 @@ class PublishBody(BaseModel):
     target_url: str = Field(default="")
     protected_url: str = Field(default="")
     skill_pack_version: str = Field(..., min_length=1, max_length=32)
+    release_notes: str = Field(default="", max_length=2000)
     skills: list[str] = Field(default_factory=list)
     files: list[PublishFile] = Field(default_factory=list)
 
@@ -75,12 +80,32 @@ def _validate_rel_path(rel: str) -> str:
     return r
 
 
+def _validate_version(version: str) -> str:
+    value = str(version or "").strip()
+    if not _SEMVER_RE.fullmatch(value):
+        raise HTTPException(status_code=400, detail="invalid_installer_version")
+    return value
+
+
+def _validate_release_notes(notes: str | None) -> str:
+    value = str(notes or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="release_notes_required")
+    if len(value) > 2000:
+        raise HTTPException(status_code=400, detail="release_notes_too_long")
+    return value
+
+
 def _skill_packs_dir(slug: str) -> Path:
     return settings.data_dir / "skill-packs" / slug
 
 
 def _installer_dir(slug: str) -> Path:
     return settings.data_dir / "installers" / slug
+
+
+def _installer_version_dir(slug: str, version: str) -> Path:
+    return _installer_dir(slug) / "versions" / version
 
 
 def _owner_of(slug: str) -> str | None:
@@ -263,6 +288,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
             "company": pack.get("company") or slug,
             "company_display": body.display_name.strip() or pack.get("company_display") or slug,
             "skill_pack_version": body.skill_pack_version,
+            "release_notes": body.release_notes.strip(),
             "skills": list(body.skills),
             "workspace_id": principal.workspace_id,
             "published_at": published_at,
@@ -304,7 +330,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
 async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
     """Upload the built installer .exe as a raw octet-stream body.
 
-    Query params: ``filename`` (display name), ``version``.
+    Query params: ``filename`` (display name), ``version``, ``release_notes``.
     """
     principal = principal_from_request(request)
     ensure_principal(principal)
@@ -323,27 +349,51 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=413, detail="installer_too_large")
 
     sha256 = hashlib.sha256(body).hexdigest()
-    version = request.query_params.get("version", "0.0.0")
+    version = _validate_version(request.query_params.get("version", ""))
+    release_notes = _validate_release_notes(request.query_params.get("release_notes"))
     filename = request.query_params.get("filename") or f"{slug}-Plugin-Setup.exe"
     filename = Path(filename).name  # strip any path components
 
     out_dir = _installer_dir(slug)
     out_dir.mkdir(parents=True, exist_ok=True)
-    exe_path = out_dir / "installer.exe"
-    tmp = exe_path.with_suffix(".exe.tmp")
+    version_dir = _installer_version_dir(slug, version)
+    if version_dir.exists():
+        raise HTTPException(status_code=409, detail="installer_version_exists")
+    version_dir.mkdir(parents=True, exist_ok=False)
+    version_exe_path = version_dir / "installer.exe"
+    tmp = version_exe_path.with_suffix(".exe.tmp")
     tmp.write_bytes(body)
-    tmp.replace(exe_path)
+    tmp.replace(version_exe_path)
 
     uploaded_at = time.time()
     meta = {
         "slug": slug,
         "filename": filename,
         "version": version,
+        "release_notes": release_notes,
         "sha256": sha256,
         "size": len(body),
         "uploaded_at": uploaded_at,
         "workspace_id": principal.workspace_id,
+        "is_latest": True,
     }
+    (version_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+    for other_meta_path in (out_dir / "versions").glob("*/meta.json"):
+        if other_meta_path == version_dir / "meta.json":
+            continue
+        try:
+            other_meta = json.loads(other_meta_path.read_text(encoding="utf-8"))
+            if other_meta.get("is_latest"):
+                other_meta["is_latest"] = False
+                other_meta_path.write_text(json.dumps(other_meta, indent=2), encoding="utf-8")
+        except Exception:
+            continue
+
+    latest_exe_path = out_dir / "installer.exe"
+    tmp_latest = latest_exe_path.with_suffix(".exe.tmp")
+    tmp_latest.write_bytes(body)
+    tmp_latest.replace(latest_exe_path)
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     # Persist installer metadata onto the plugin record so the dashboard can
@@ -356,10 +406,11 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
         plugin_record = plugin_record.model_copy(update={
             "installer": PluginInstaller(
                 built_at=uploaded_at,
-                installer_path=str(exe_path),
+                installer_path=str(latest_exe_path),
                 filename=filename,
                 version=version,
                 runtime_version="",
+                release_notes=release_notes,
             )
         })
         save_plugin(plugin_record)
@@ -369,24 +420,59 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
         "installer_upload",
         resource_type="installer",
         resource_id=slug,
-        metadata={"version": version, "size": len(body), "sha256": sha256},
+        metadata={"version": version, "size": len(body), "sha256": sha256, "release_notes": release_notes},
     )
 
     return {
         "slug": slug,
+        "version": version,
         "sha256": sha256,
         "size": len(body),
         "download_url": f"/api/v1/installers/{slug}",
+        "version_download_url": f"/api/v1/installers/{slug}/versions/{version}",
     }
 
 
-@installers_router.get("/{slug}")
-def get_installer(slug: str) -> StreamingResponse:
-    """Public end-user installer download. SHA-256 returned in X-Conxa-SHA256."""
+@router.get("/{slug}/installer/versions")
+def get_installer_versions(slug: str, request: Request) -> dict[str, Any]:
+    """Authenticated installer release history for the dashboard."""
+    principal = principal_from_request(request)
+    ensure_principal(principal)
     slug = _validate_slug(slug)
-    out_dir = _installer_dir(slug)
-    exe_path = out_dir / "installer.exe"
-    meta_path = out_dir / "meta.json"
+    owner = _owner_of(slug)
+    if owner and owner != principal.workspace_id:
+        raise HTTPException(status_code=403, detail="slug_owned_by_another_workspace")
+
+    versions_dir = _installer_dir(slug) / "versions"
+    versions: list[dict[str, Any]] = []
+    if versions_dir.is_dir():
+        for meta_path in versions_dir.glob("*/meta.json"):
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if meta.get("workspace_id") != principal.workspace_id:
+                continue
+            version = str(meta.get("version") or meta_path.parent.name)
+            versions.append(
+                {
+                    "slug": slug,
+                    "version": version,
+                    "release_notes": str(meta.get("release_notes") or ""),
+                    "filename": str(meta.get("filename") or f"{slug}-Plugin-Setup.exe"),
+                    "sha256": str(meta.get("sha256") or ""),
+                    "size": int(meta.get("size") or 0),
+                    "uploaded_at": float(meta.get("uploaded_at") or 0),
+                    "workspace_id": str(meta.get("workspace_id") or ""),
+                    "is_latest": bool(meta.get("is_latest")),
+                    "download_url": f"/api/v1/installers/{slug}/versions/{version}",
+                }
+            )
+    versions.sort(key=lambda item: float(item.get("uploaded_at") or 0), reverse=True)
+    return {"slug": slug, "versions": versions}
+
+
+def _stream_installer(exe_path: Path, meta_path: Path) -> StreamingResponse:
     if not exe_path.is_file() or not meta_path.is_file():
         raise HTTPException(status_code=404, detail="installer_not_published")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -399,3 +485,20 @@ def get_installer(slug: str) -> StreamingResponse:
         media_type="application/octet-stream",
         headers=headers,
     )
+
+
+@installers_router.get("/{slug}/versions/{version}")
+def get_installer_version(slug: str, version: str) -> StreamingResponse:
+    """Public exact-version installer download."""
+    slug = _validate_slug(slug)
+    version = _validate_version(version)
+    version_dir = _installer_version_dir(slug, version)
+    return _stream_installer(version_dir / "installer.exe", version_dir / "meta.json")
+
+
+@installers_router.get("/{slug}")
+def get_installer(slug: str) -> StreamingResponse:
+    """Public end-user installer download. SHA-256 returned in X-Conxa-SHA256."""
+    slug = _validate_slug(slug)
+    out_dir = _installer_dir(slug)
+    return _stream_installer(out_dir / "installer.exe", out_dir / "meta.json")

@@ -218,6 +218,7 @@ def set_installer(
     filename: str,
     version: str,
     runtime_version: str,
+    release_notes: str = "",
 ) -> Plugin | None:
     plugin = get_plugin(plugin_id)
     if plugin is None:
@@ -228,6 +229,7 @@ def set_installer(
         filename=filename,
         version=version,
         runtime_version=runtime_version,
+        release_notes=release_notes,
     )
     return save_plugin(plugin)
 

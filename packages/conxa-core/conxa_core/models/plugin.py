@@ -42,6 +42,7 @@ class PluginInstaller(BaseModel):
     filename: str
     version: str
     runtime_version: str
+    release_notes: str = ""
 
 
 class Plugin(BaseModel):

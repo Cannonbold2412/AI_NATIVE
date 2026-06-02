@@ -129,6 +129,7 @@ def test_installer_publish_rewrites_pack_with_cloud_tracking(backend, monkeypatc
                         "schema_version": 1,
                         "protocol_version": 1,
                     },
+                    "sync_token": "sync-token",
                     "workspace_id": "wrk_123",
                     "published_at": 123.0,
                 }
@@ -140,6 +141,7 @@ def test_installer_publish_rewrites_pack_with_cloud_tracking(backend, monkeypatc
         seen["url"] = req.full_url
         seen["auth"] = req.headers.get("Authorization")
         seen["timeout"] = timeout
+        seen["body"] = json.loads(req.data.decode("utf-8"))
         return FakeResponse()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
@@ -148,19 +150,83 @@ def test_installer_publish_rewrites_pack_with_cloud_tracking(backend, monkeypatc
     publish_info = b._publish_skill_pack_for_installer(
         company_slug="render",
         plugin=SimpleNamespace(name="Render", target_url="https://dashboard.render.com", protected_url="https://dashboard.render.com/"),
+        version="1.2.3",
+        release_notes="Release message",
         sink=logs.append,
     )
 
     rewritten = json.loads((packs_dir / "pack.json").read_text(encoding="utf-8"))
     assert seen["url"] == "https://apis.conxa.in/api/v1/plugins/publish"
     assert seen["auth"] == "Bearer studio-token"
+    assert seen["body"]["skill_pack_version"] == "1.2.3"
+    assert seen["body"]["release_notes"] == "Release message"
+    assert rewritten["skill_pack_version"] == "1.2.3"
+    assert rewritten["release_notes"] == "Release message"
     assert rewritten["tracking"]["tracking_url"] == "https://apis.conxa.in/api/tracking/render/events"
     assert rewritten["tracking"]["tracking_token"] == "cloud-token"
     assert rewritten["sync_endpoint"] == "https://apis.conxa.in/api/v1/skill-packs/render/delta"
+    assert rewritten["sync_token"] == "sync-token"
     assert publish_info["workspace_id"] == "wrk_123"
     assert publish_info["tracking_url"] == "https://apis.conxa.in/api/tracking/render/events"
     assert publish_info["tracking_token_present"] is True
     assert any("workspace wrk_123" in entry["message"] for entry in logs)
+
+
+def test_cmd_build_installer_forwards_release_metadata(backend, monkeypatch, tmp_path):
+    b, _out = backend
+
+    from conxa_core.config import settings
+    from conxa_core.storage.plugin_store import create_plugin
+    from services import installer_builder
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+    plugin = create_plugin("Render", "https://dashboard.render.com")
+    seen: dict[str, object] = {}
+
+    def fake_publish(**kwargs):
+        seen["publish"] = kwargs
+        return {}
+
+    def fake_build(plugin_id, **kwargs):
+        seen["build_plugin_id"] = plugin_id
+        seen["build"] = kwargs
+        return {
+            "installer_path": str(tmp_path / "Render-Claude-Setup.exe"),
+            "filename": "Render-Claude-Setup.exe",
+            "company": kwargs["company_slug"],
+            "plugin_id": plugin_id,
+            "version": kwargs["version"],
+            "runtime_version": "v1.0.0",
+            "release_notes": kwargs["release_notes"],
+        }
+
+    def fake_upload(**kwargs):
+        seen["upload"] = kwargs
+        return dict(kwargs["result"], cloud_download_url="https://apis.conxa.in/api/v1/installers/render")
+
+    monkeypatch.setattr(b, "_publish_skill_pack_for_installer", fake_publish)
+    monkeypatch.setattr(installer_builder, "build_installer", fake_build)
+    monkeypatch.setattr(b, "_upload_installer_for_download", fake_upload)
+
+    result = b.cmd_build_installer(
+        {
+            "plugin_id": plugin.id,
+            "company_slug": "render",
+            "logo_path": "C:/logo.png",
+            "version": "2.0.0",
+            "release_notes": "Ship it",
+        },
+        "rid",
+    )
+
+    assert seen["publish"]["version"] == "2.0.0"
+    assert seen["publish"]["release_notes"] == "Ship it"
+    assert seen["build"]["version"] == "2.0.0"
+    assert seen["build"]["release_notes"] == "Ship it"
+    assert seen["upload"]["release_notes"] == "Ship it"
+    assert result["version"] == "2.0.0"
+    assert result["release_notes"] == "Ship it"
 
 
 def test_auth_stop_recording_marks_plugin_ready(backend, monkeypatch, tmp_path):

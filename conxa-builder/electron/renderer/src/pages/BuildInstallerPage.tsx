@@ -11,8 +11,20 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { CheckCircle2, Download, ImagePlus, Loader2, PackageCheck, X, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 
 function packageNameFromOutputPath(outputPath?: string | null): string {
   if (!outputPath) return 'No package'
@@ -42,6 +54,9 @@ export function BuildInstallerPage() {
   const [installerDone, setInstallerDone] = useState(false)
   const [installerResult, setInstallerResult] = useState<InstallerBuildResult | null>(null)
   const [logoPath, setLogoPath] = useState<string | null>(null)
+  const [releaseDialogOpen, setReleaseDialogOpen] = useState(false)
+  const [releaseVersion, setReleaseVersion] = useState('')
+  const [releaseNotes, setReleaseNotes] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
 
   const plugins = useMemo(() => normalizePluginList(pluginsQ.data), [pluginsQ.data])
@@ -71,6 +86,11 @@ export function BuildInstallerPage() {
   const activeDone = activePluginId === selectedPlugin?.id ? installerDone : false
   const buildingSelected = building && activePluginId === selectedPlugin?.id
   const canBuild = selectedPluginTestsOk && Boolean(logoPath) && !buildingSelected
+  const releaseVersionValue = releaseVersion.trim()
+  const releaseNotesValue = releaseNotes.trim()
+  const releaseVersionValid = SEMVER_RE.test(releaseVersionValue)
+  const releaseNotesValid = releaseNotesValue.length > 0 && releaseNotesValue.length <= 2000
+  const canConfirmReleaseBuild = canBuild && releaseVersionValid && releaseNotesValid
 
   function selectPlugin(pluginId: string) {
     setSelectedId(pluginId)
@@ -79,6 +99,7 @@ export function BuildInstallerPage() {
     setInstallerResult(null)
     setLogs([])
     setActivePluginId(null)
+    setReleaseDialogOpen(false)
   }
 
   async function handlePickLogo() {
@@ -92,8 +113,19 @@ export function BuildInstallerPage() {
     setLogoPath(null)
   }
 
+  function handleOpenReleaseDialog() {
+    if (!selectedPlugin || !canBuild) return
+    setReleaseVersion(selectedPlugin.build?.version || selectedPlugin.installer?.version || '0.1.0')
+    setReleaseNotes('')
+    setReleaseDialogOpen(true)
+  }
+
   async function handleBuildInstaller() {
     if (!selectedPlugin) return
+    const version = releaseVersionValue
+    const notes = releaseNotesValue
+    if (!SEMVER_RE.test(version) || !notes || notes.length > 2000) return
+    setReleaseDialogOpen(false)
     setActivePluginId(selectedPlugin.id)
     setLogs([])
     setInstallerError('')
@@ -102,10 +134,16 @@ export function BuildInstallerPage() {
     setBuilding(true)
 
     try {
-      const result = await buildInstaller(selectedPlugin.id, (message) => {
-        setLogs((prev) => [...prev, message])
-        setTimeout(() => logRef.current?.scrollTo(0, logRef.current.scrollHeight), 0)
-      }, logoPath)
+      const result = await buildInstaller(
+        selectedPlugin.id,
+        (message) => {
+          setLogs((prev) => [...prev, message])
+          setTimeout(() => logRef.current?.scrollTo(0, logRef.current.scrollHeight), 0)
+        },
+        logoPath,
+        version,
+        notes,
+      )
       setInstallerResult(result)
       setInstallerDone(true)
       void pluginsQ.refetch()
@@ -262,7 +300,7 @@ export function BuildInstallerPage() {
               </div>
 
               <div className="flex flex-wrap gap-2 px-4">
-                <Button size="sm" onClick={handleBuildInstaller} disabled={!canBuild}>
+                <Button size="sm" onClick={handleOpenReleaseDialog} disabled={!canBuild}>
                   {buildingSelected ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
@@ -298,6 +336,9 @@ export function BuildInstallerPage() {
                     ) : null}
                     {currentResult?.cloud_download_url ? (
                       <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">{currentResult.cloud_download_url}</p>
+                    ) : null}
+                    {currentResult?.cloud_version_download_url ? (
+                      <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">{currentResult.cloud_version_download_url}</p>
                     ) : null}
                     {currentResult?.cloud_workspace_id ? (
                       <p className="mt-1 break-all pl-6 font-mono text-[11px] text-emerald-100/60">Workspace: {currentResult.cloud_workspace_id}</p>
@@ -335,6 +376,70 @@ export function BuildInstallerPage() {
           )}
         </div>
       </div>
+      <Dialog open={releaseDialogOpen} onOpenChange={setReleaseDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (canConfirmReleaseBuild) void handleBuildInstaller()
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Installer Release</DialogTitle>
+              <DialogDescription>{selectedPlugin?.name ?? 'Selected plugin'}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <label className="grid gap-1.5 text-xs font-medium text-zinc-300">
+                Version
+                <Input
+                  value={releaseVersion}
+                  onChange={(event) => setReleaseVersion(event.target.value)}
+                  placeholder="1.2.3"
+                  aria-invalid={releaseVersion.length > 0 && !releaseVersionValid}
+                  disabled={buildingSelected}
+                />
+              </label>
+              {releaseVersion.length > 0 && !releaseVersionValid ? (
+                <p className="text-xs text-red-300">Use 1.2.3 or 1.2.3-beta.1.</p>
+              ) : null}
+              <label className="grid gap-1.5 text-xs font-medium text-zinc-300">
+                Release message
+                <Textarea
+                  value={releaseNotes}
+                  onChange={(event) => setReleaseNotes(event.target.value)}
+                  maxLength={2000}
+                  rows={5}
+                  aria-invalid={releaseNotes.length > 2000}
+                  disabled={buildingSelected}
+                  className="resize-none"
+                />
+              </label>
+              <p className={cn('text-xs', releaseNotes.length > 2000 ? 'text-red-300' : 'text-zinc-500')}>
+                {releaseNotes.length}/2000
+              </p>
+            </div>
+            <DialogFooter className="bg-transparent">
+              <Button type="button" variant="outline" onClick={() => setReleaseDialogOpen(false)} disabled={buildingSelected}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!canConfirmReleaseBuild}>
+                {buildingSelected ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Building...
+                  </>
+                ) : (
+                  <>
+                    <PackageCheck className="size-4" />
+                    Build Installer
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

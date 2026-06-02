@@ -119,6 +119,7 @@ export type PluginInstaller = {
   filename: string
   version: string
   runtime_version: string
+  release_notes?: string
 }
 
 export type Plugin = {
@@ -507,6 +508,25 @@ export type InstallerBuildResult = {
   plugin_id: string
   version: string
   runtime_version: string
+}
+
+export type InstallerVersion = {
+  slug: string
+  version: string
+  release_notes: string
+  filename: string
+  sha256: string
+  size: number
+  uploaded_at: number
+  workspace_id: string
+  is_latest: boolean
+  download_url: string
+}
+
+export function fetchInstallerVersions(slug: string): Promise<{ slug: string; versions: InstallerVersion[] }> {
+  return apiFetch(`/plugins/${encodeURIComponent(slug)}/installer/versions`).then((r) =>
+    json<{ slug: string; versions: InstallerVersion[] }>(r),
+  )
 }
 
 export type StudioManifest = {

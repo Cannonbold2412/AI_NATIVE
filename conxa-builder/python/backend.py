@@ -23,6 +23,7 @@ import sys
 import threading
 import traceback
 import urllib.error
+import re
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 from typing import Any, Callable
@@ -47,6 +48,26 @@ _bootstrap_pkg.configure_playwright_browsers_path()
 # conxa_core.config.Settings() tries to read the repo .env from a piped-stdin context.
 from conxa_compile.recorder.session import registry as _recorder_registry  # noqa: E402
 from conxa_core.storage.plugin_store import get_plugin as _get_plugin  # noqa: E402
+
+_SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+
+
+def _validate_release_version(value: Any) -> str:
+    version = str(value or "").strip()
+    if not _SEMVER_RE.fullmatch(version):
+        raise _CommandError("invalid_release_version", "Installer version must look like 1.2.3 or 1.2.3-beta.1.")
+    return version
+
+
+def _validate_release_notes(value: Any) -> str:
+    notes = str(value or "").strip()
+    if not notes:
+        raise _CommandError("invalid_release_notes", "Release message is required.")
+    if len(notes) > 2000:
+        raise _CommandError("invalid_release_notes", "Release message must be 2000 characters or fewer.")
+    return notes
 
 
 def _is_rejected_protected_url(url: str) -> bool:
@@ -229,6 +250,8 @@ class Backend:
         *,
         company_slug: str,
         plugin: Any,
+        version: str,
+        release_notes: str,
         sink: Callable[[dict[str, Any]], None],
     ) -> dict[str, Any]:
         """Publish the built skill pack and rewrite local pack.json with cloud tracking."""
@@ -247,6 +270,10 @@ class Backend:
             raise _CommandError("pack_not_built", f"No built skill pack for {company_slug}")
 
         pack = json.loads(pack_path.read_text(encoding="utf-8"))
+        pack["skill_pack_version"] = version
+        pack["release_notes"] = release_notes
+        pack_path.write_text(json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8")
+
         files: list[dict[str, str]] = []
         for fpath in sorted(packs_dir.rglob("*")):
             if fpath.is_file():
@@ -264,7 +291,8 @@ class Backend:
                 "display_name": str(getattr(plugin, "name", "") or company_slug),
                 "target_url": str(getattr(plugin, "target_url", "") or pack.get("target_url") or ""),
                 "protected_url": str(getattr(plugin, "protected_url", "") or pack.get("protected_url") or ""),
-                "skill_pack_version": str(pack.get("skill_pack_version") or "0.1.0"),
+                "skill_pack_version": version,
+                "release_notes": release_notes,
                 "skills": list(pack.get("skills") or []),
                 "files": files,
             }
@@ -327,6 +355,7 @@ class Backend:
         *,
         company_slug: str,
         result: dict[str, Any],
+        release_notes: str,
         sink: Callable[[dict[str, Any]], None],
     ) -> dict[str, Any]:
         import urllib.request
@@ -343,6 +372,7 @@ class Backend:
             {
                 "filename": str(result.get("filename") or installer_path.name),
                 "version": str(result.get("version") or "0.0.0"),
+                "release_notes": release_notes,
             }
         )
         url = f"{cloud_api}/api/v1/plugins/{quote(company_slug)}/installer/upload?{params}"
@@ -354,6 +384,11 @@ class Backend:
             with urllib.request.urlopen(req, timeout=180) as resp:
                 uploaded = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
+            if exc.code == 409:
+                raise _CommandError(
+                    "installer_version_exists",
+                    f"Installer version {result.get('version') or ''} already exists in Conxa Cloud.",
+                ) from exc
             if exc.code == 413:
                 result = dict(result)
                 result["cloud_upload_error"] = "installer_upload_too_large"
@@ -370,6 +405,8 @@ class Backend:
             raise _CommandError("installer_upload_failed", f"Installer upload failed: {exc}") from exc
         result = dict(result)
         result["cloud_download_url"] = f"{cloud_api}{uploaded.get('download_url', '')}"
+        if uploaded.get("version_download_url"):
+            result["cloud_version_download_url"] = f"{cloud_api}{uploaded.get('version_download_url', '')}"
         result["cloud_sha256"] = uploaded.get("sha256", "")
         sink({"kind": "installer_build", "message": "Installer uploaded to Conxa Cloud"})
         return result
@@ -733,6 +770,8 @@ class Backend:
             company_slug = _plugin_company_slug(plugin)
             if not company_slug:
                 raise _CommandError("invalid_plugin", "Built plugin is missing a runtime company slug.")
+        version = _validate_release_version(payload.get("version"))
+        release_notes = _validate_release_notes(payload.get("release_notes"))
 
         # Invariant: auth.json must never enter the installer input. Captured
         # auth lives under the plugin state dir, but the installer stages only
@@ -747,8 +786,21 @@ class Backend:
 
         logo_path = str(payload.get("logo_path") or "").strip() or None
         sink = _event_sink(rid)
-        publish_info = self._publish_skill_pack_for_installer(company_slug=company_slug, plugin=plugin, sink=sink)
-        result = build_installer(plugin_id, company_slug=company_slug, logo_path=logo_path, realtime_sink=sink)
+        publish_info = self._publish_skill_pack_for_installer(
+            company_slug=company_slug,
+            plugin=plugin,
+            version=version,
+            release_notes=release_notes,
+            sink=sink,
+        )
+        result = build_installer(
+            plugin_id,
+            company_slug=company_slug,
+            logo_path=logo_path,
+            version=version,
+            release_notes=release_notes,
+            realtime_sink=sink,
+        )
         if publish_info:
             result = dict(result)
             result["cloud_workspace_id"] = publish_info.get("workspace_id", "")
@@ -769,7 +821,12 @@ class Backend:
                     ),
                 }
             )
-        return self._upload_installer_for_download(company_slug=company_slug, result=result, sink=sink)
+        return self._upload_installer_for_download(
+            company_slug=company_slug,
+            result=result,
+            release_notes=release_notes,
+            sink=sink,
+        )
 
     def cmd_test_workflow(self, payload: dict[str, Any], rid: str) -> dict[str, Any]:
         """Run a built workflow end-to-end against the local Conxa runtime.

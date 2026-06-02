@@ -96,6 +96,8 @@ def build_installer(
     *,
     company_slug: str,
     logo_path: str | None = None,
+    version: str | None = None,
+    release_notes: str = "",
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Package an already-built plugin into a Windows installer EXE.
@@ -159,7 +161,7 @@ def build_installer(
         )
 
     skills = [str(skill) for skill in pack.get("skills", []) if skill]
-    version = pack.get("skill_pack_version", plugin.build.version or RUNTIME_VERSION)
+    installer_version = str(version or pack.get("skill_pack_version") or plugin.build.version or RUNTIME_VERSION)
     _log(f"Using existing skill pack ({len(skills)} skill(s): {', '.join(skills) if skills else 'none'})")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -190,8 +192,8 @@ def build_installer(
 
         # ── 4. Render NSIS script ─────────────────────────────────────────────
         company_name = plugin.name
-        _log(f"Rendering NSIS script (company={company_slug!r}, version={version})…")
-        nsi_path = _render_nsis_script(tmp, company_slug, company_name, version, icon_path=staged_icon)
+        _log(f"Rendering NSIS script (company={company_slug!r}, version={installer_version})…")
+        nsi_path = _render_nsis_script(tmp, company_slug, company_name, installer_version, icon_path=staged_icon)
         _log(f"NSIS script written to {nsi_path}")
 
         # ── 5. Compile installer ──────────────────────────────────────────────
@@ -247,8 +249,9 @@ def build_installer(
             plugin_id,
             installer_path=str(dest),
             filename=installer_name,
-            version=version,
+            version=installer_version,
             runtime_version=RUNTIME_VERSION,
+            release_notes=release_notes,
         )
     except Exception:
         pass
@@ -258,8 +261,9 @@ def build_installer(
         "filename":       installer_name,
         "company":        company_slug,
         "plugin_id":      plugin_id,
-        "version":        version,
+        "version":        installer_version,
         "runtime_version": RUNTIME_VERSION,
+        "release_notes":   release_notes,
     }
 
 
