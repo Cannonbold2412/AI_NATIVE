@@ -106,16 +106,6 @@ function KpiCard({
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'ok') {
-    return <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-300">success</Badge>
-  }
-  if (status === 'fail') {
-    return <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-[10px] text-red-300">failed</Badge>
-  }
-  return <Badge variant="outline" className="border-zinc-500/30 bg-zinc-500/10 text-[10px] text-zinc-400">running</Badge>
-}
-
 function TrendChart({ rows }: { rows: TrackingDashboardResponse['execution_trend'] }) {
   const max = Math.max(1, ...rows.map((row) => row.executions))
   const width = 720
@@ -255,36 +245,36 @@ function FailureLists({
   )
 }
 
-function RecentActivity({ rows }: { rows: TrackingDashboardResponse['recent_activity'] }) {
+function RecoveryByStep({ rows }: { rows: TrackingDashboardResponse['recovery_usage_by_step'] }) {
   return (
     <Card className="border-white/8 bg-white/[0.025] shadow-none">
       <CardHeader className="border-b border-white/6 pb-3">
         <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-          <Activity className="size-3.5" />
-          Recent Activity
+          <RotateCcw className="size-3.5" />
+          Recovery By Workflow And Step
+          <span className="ml-auto text-[11px] font-normal text-zinc-600">workflow · step · recovery type</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         {rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-xs text-zinc-600">No executions recorded yet.</p>
+          <p className="px-4 py-10 text-center text-xs text-zinc-600">No recovery usage recorded in this range.</p>
         ) : rows.map((row) => (
-          <div key={row.run_id} className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
+          <div
+            key={`${row.company}:${row.workflow}:${row.step_index ?? 'unknown'}:${row.recovery_type}`}
+            className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.2fr)_minmax(9rem,0.6fr)_auto_auto] md:items-center"
+          >
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-zinc-200">{row.workflow}</p>
-              <p className="mt-0.5 text-[11px] text-zinc-600">
-                {row.company} · {fmtRelative(row.started_at)}
-                {row.failure_code ? ` · ${row.failure_code}` : ''}
-              </p>
+              <p className="mt-0.5 truncate text-[11px] text-zinc-600">{row.company} · {fmtRelative(row.last_seen)}</p>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-zinc-600">
-              <Clock3 className="size-3.5" />
-              {fmtDuration(row.duration_ms)}
+            <div className="min-w-0">
+              <p className="truncate text-xs text-zinc-300">{row.step_label}</p>
+              <p className="mt-0.5 text-[11px] text-zinc-600">{row.step_index === null ? 'step unknown' : `step ${row.step_index + 1}`}</p>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-blue-300">
-              <RotateCcw className="size-3.5" />
-              {fmtNumber(row.recovered_steps)}
-            </div>
-            <StatusBadge status={row.status} />
+            <Badge variant="outline" className="w-fit border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-300">
+              {row.recovery_type}
+            </Badge>
+            <span className="text-sm font-semibold tabular-nums text-blue-200">{fmtNumber(row.count)}</span>
           </div>
         ))}
       </CardContent>
@@ -385,7 +375,7 @@ export function DashboardPage() {
           steps={data?.most_failed_steps ?? []}
         />
 
-        <RecentActivity rows={data?.recent_activity ?? []} />
+        <RecoveryByStep rows={data?.recovery_usage_by_step ?? []} />
 
         {!dashboardQ.isFetching && metrics.total_installs === 0 && metrics.total_executions === 0 && (
           <div className="rounded-lg border border-white/8 bg-white/[0.02] px-5 py-6 text-center">

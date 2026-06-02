@@ -341,6 +341,14 @@ def _failed_step_index(record: dict[str, Any]) -> int | None:
         return None
 
 
+def _event_step_index(evt: dict[str, Any]) -> int | None:
+    value = evt.get("si")
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]:
     days = _range_days(range_value)
     now_ms = int(time.time() * 1000)
@@ -382,16 +390,58 @@ def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]
     active_companies = len({str(r.get("company") or "") for r in range_records if r.get("company")})
 
     recovery_counts = {name: 0 for name in _RECOVERY_TYPES}
+    recovery_step_usage: dict[str, dict[str, Any]] = {}
     for record in range_records:
+        summary = record.get("summary") or {}
+        company = str(record.get("company") or "")
+        workflow = str(summary.get("plugin_id") or "Unknown workflow")
         for evt in record.get("events") or []:
             recovery_type = _event_recovery_type(evt)
             if recovery_type:
                 recovery_counts[recovery_type] += 1
+                step_index = _event_step_index(evt)
+                key = f"{company}:{workflow}:{step_index if step_index is not None else 'unknown'}:{recovery_type}"
+                current = recovery_step_usage.setdefault(
+                    key,
+                    {
+                        "company": company,
+                        "workflow": workflow,
+                        "step_index": step_index,
+                        "step_label": f"Step {step_index + 1}" if step_index is not None else "Unknown step",
+                        "recovery_type": recovery_type,
+                        "count": 0,
+                        "last_seen": 0,
+                    },
+                )
+                current["count"] += 1
+                current["last_seen"] = max(int(current["last_seen"]), _epoch_ms(evt.get("ts")) or _record_time_ms(record))
     # Older runtimes may only send wf_ok.rec. Keep recovered runs visible as selector saves.
     if not any(recovery_counts.values()):
         recovery_counts["Selector"] = sum(
             1 for record in range_records if int(_number((record.get("summary") or {}).get("recovered_steps"))) > 0
         )
+        for record in range_records:
+            recovered_steps = int(_number((record.get("summary") or {}).get("recovered_steps")))
+            if recovered_steps <= 0:
+                continue
+            summary = record.get("summary") or {}
+            company = str(record.get("company") or "")
+            workflow = str(summary.get("plugin_id") or "Unknown workflow")
+            key = f"{company}:{workflow}:unknown:Selector"
+            current = recovery_step_usage.setdefault(
+                key,
+                {
+                    "company": company,
+                    "workflow": workflow,
+                    "step_index": None,
+                    "step_label": "Unknown step",
+                    "recovery_type": "Selector",
+                    "count": 0,
+                    "last_seen": 0,
+                },
+            )
+            current["count"] += recovered_steps
+            current["last_seen"] = max(int(current["last_seen"]), _record_time_ms(record))
 
     workflow_failures: dict[str, dict[str, Any]] = {}
     step_failures: dict[str, dict[str, Any]] = {}
@@ -467,6 +517,11 @@ def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]
             {"type": name, "count": recovery_counts[name]}
             for name in _RECOVERY_TYPES
         ],
+        "recovery_usage_by_step": sorted(
+            recovery_step_usage.values(),
+            key=lambda row: (row["count"], row["last_seen"]),
+            reverse=True,
+        )[:12],
         "most_failed_workflows": sorted(
             workflow_failures.values(),
             key=lambda row: (row["failed_executions"], row["last_seen"]),
@@ -477,20 +532,6 @@ def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]
             key=lambda row: (row["failed_executions"], row["last_seen"]),
             reverse=True,
         )[:6],
-        "recent_activity": [
-            {
-                "run_id": (record.get("summary") or {}).get("run_id"),
-                "company": record.get("company"),
-                "workflow": (record.get("summary") or {}).get("plugin_id") or "Unknown workflow",
-                "status": (record.get("summary") or {}).get("status"),
-                "duration_ms": (record.get("summary") or {}).get("duration_ms") or 0,
-                "recovered_steps": (record.get("summary") or {}).get("recovered_steps") or 0,
-                "failure_code": (record.get("summary") or {}).get("failure_code"),
-                "failed_step_id": _failed_step_index(record),
-                "started_at": _record_time_ms(record),
-            }
-            for record in all_records[:12]
-        ],
         "execution_trend": list(buckets.values()),
     }
 

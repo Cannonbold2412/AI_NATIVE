@@ -251,6 +251,8 @@ def test_tracking_dashboard_empty_workspace_has_v1_shape(monkeypatch, tmp_path):
         "Text Variant",
         "Vision",
     ]
+    assert body["recovery_usage_by_step"] == []
+    assert "recent_activity" not in body
     assert len(body["execution_trend"]) == 30
 
 
@@ -346,10 +348,21 @@ def test_tracking_dashboard_aggregates_workspace_metrics(monkeypatch, tmp_path):
 
     recovery = {row["type"]: row["count"] for row in body["recovery_type_usage"]}
     assert recovery == {"Selector": 1, "Text Anchor": 1, "Text Variant": 1, "Vision": 1}
+    recovery_by_step = {
+        (row["workflow"], row["step_index"], row["recovery_type"]): row["count"]
+        for row in body["recovery_usage_by_step"]
+    }
+    assert recovery_by_step == {
+        ("workflow-a", 0, "Selector"): 1,
+        ("workflow-a", 1, "Text Anchor"): 1,
+        ("workflow-a", 2, "Text Variant"): 1,
+        ("workflow-a", 3, "Vision"): 1,
+    }
     assert body["most_failed_workflows"][0]["workflow"] == "workflow-b"
     assert body["most_failed_steps"][0]["step_index"] == 2
     assert sum(row["executions"] for row in body["execution_trend"]) == 2
-    assert all(item["company"] != "hidden" for item in body["recent_activity"])
+    assert all(item["company"] != "hidden" for item in body["recovery_usage_by_step"])
+    assert "recent_activity" not in body
 
 
 def test_tracking_companies_discovers_token_backed_events_without_plugin(monkeypatch, tmp_path):

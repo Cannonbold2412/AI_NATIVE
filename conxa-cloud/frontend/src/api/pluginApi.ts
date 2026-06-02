@@ -435,6 +435,15 @@ export type TrackingDashboardResponse = {
     average_execution_time: number
   }
   recovery_type_usage: Array<{ type: 'Selector' | 'Text Anchor' | 'Text Variant' | 'Vision'; count: number }>
+  recovery_usage_by_step: Array<{
+    company: string
+    workflow: string
+    step_index: number | null
+    step_label: string
+    recovery_type: 'Selector' | 'Text Anchor' | 'Text Variant' | 'Vision'
+    count: number
+    last_seen: number
+  }>
   most_failed_workflows: Array<{
     workflow: string
     failed_executions: number
@@ -448,17 +457,6 @@ export type TrackingDashboardResponse = {
     failed_executions: number
     last_failure_code: string
     last_seen: number
-  }>
-  recent_activity: Array<{
-    run_id: string
-    company: string
-    workflow: string
-    status: 'ok' | 'fail' | 'running'
-    duration_ms: number
-    recovered_steps: number
-    failure_code: string | null
-    failed_step_id: number | null
-    started_at: number
   }>
   execution_trend: Array<{
     date: string
