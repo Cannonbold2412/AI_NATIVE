@@ -48,11 +48,23 @@ jobs:
         working-directory: runtime
         run: npm run build:win
 
+      - name: Stage keytar.node for release
+        working-directory: runtime
+        run: |
+          $src = "node_modules\keytar\build\Release\keytar.node"
+          if (-not (Test-Path $src)) {
+            Write-Error "keytar.node not found at $src — native build may have failed"
+            exit 1
+          }
+          Copy-Item $src -Destination "keytar.node"
+          Write-Output "Staged keytar.node ($((Get-Item keytar.node).Length) bytes)"
+        shell: pwsh
+
       - name: Compute SHA-256 checksums
         working-directory: runtime
         run: |
-          $winHash = (Get-FileHash dist/runtime-win.exe -Algorithm SHA256).Hash.ToLower()
-          $keytarHash = (Get-FileHash keytar.node -Algorithm SHA256).Hash.ToLower()
+          $winHash    = (Get-FileHash dist/runtime-win.exe -Algorithm SHA256).Hash.ToLower()
+          $keytarHash = (Get-FileHash keytar.node          -Algorithm SHA256).Hash.ToLower()
           Write-Output "RUNTIME_WIN_SHA256=$winHash"   | Out-File -Append $env:GITHUB_ENV
           Write-Output "KEYTAR_SHA256=$keytarHash"      | Out-File -Append $env:GITHUB_ENV
           Write-Output "runtime-win.exe: $winHash"
