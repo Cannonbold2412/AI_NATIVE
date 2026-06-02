@@ -21,17 +21,19 @@ jobs:
       contents: write
 
     env:
-      STUDIO_VERSION: ${{ github.ref_name || inputs.tag }}
+      STUDIO_VERSION: ${{ github.event.inputs.tag || github.ref_name }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # used by electron-builder publish
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: conxa-builder/electron/package-lock.json
 
@@ -59,6 +61,13 @@ jobs:
         working-directory: conxa-builder/electron
         run: npm ci
 
+      - name: Set Studio package version
+        working-directory: conxa-builder/electron
+        shell: pwsh
+        run: |
+          $version = "${{ env.STUDIO_VERSION }}" -replace "^studio-v", ""
+          npm version $version --no-git-tag-version
+
       - name: Build renderer
         working-directory: conxa-builder/electron
         run: npm run build:renderer
@@ -67,11 +76,26 @@ jobs:
         working-directory: conxa-builder/electron
         run: npx electron-builder --config electron-builder.yml --win --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ""
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.STUDIO_VERSION }}
+          name: Build Studio ${{ env.STUDIO_VERSION }}
+          files: |
+            conxa-builder/electron/dist/studio/*.exe
+            conxa-builder/electron/dist/studio/*.exe.blockmap
+            conxa-builder/electron/dist/studio/latest*.yml
+          prerelease: ${{ contains(env.STUDIO_VERSION, 'beta') }}
+          fail_on_unmatched_files: true
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: conxa-build-studio-installer
-          path: conxa-builder/electron/dist/studio/*.exe
+          path: |
+            conxa-builder/electron/dist/studio/*.exe
+            conxa-builder/electron/dist/studio/*.exe.blockmap
+            conxa-builder/electron/dist/studio/latest*.yml
           retention-days: 30
