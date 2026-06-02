@@ -280,12 +280,16 @@ export async function buildPlugin(
 export async function buildInstaller(
   pluginId: string,
   onLog: (message: string) => void = () => {},
+  logoPath?: string | null,
 ): Promise<InstallerBuildResult> {
   const unsub = window.conxa.onEvent((ev: BackendEvent) => {
     if (ev.kind === 'installer_build' && ev.message) onLog(String(ev.message))
   })
   try {
-    return await cmd<InstallerBuildResult>('build_installer', { plugin_id: pluginId })
+    return await cmd<InstallerBuildResult>('build_installer', {
+      plugin_id: pluginId,
+      logo_path: logoPath ?? null,
+    })
   } finally {
     unsub()
   }

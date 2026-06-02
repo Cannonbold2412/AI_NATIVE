@@ -11,7 +11,7 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Download, Loader2, PackageCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, Download, ImagePlus, Loader2, PackageCheck, X, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 function packageNameFromOutputPath(outputPath?: string | null): string {
@@ -41,7 +41,10 @@ export function BuildInstallerPage() {
   const [installerError, setInstallerError] = useState('')
   const [installerDone, setInstallerDone] = useState(false)
   const [installerResult, setInstallerResult] = useState<InstallerBuildResult | null>(null)
+  const [logoPath, setLogoPath] = useState<string | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const plugins = useMemo(() => normalizePluginList(pluginsQ.data), [pluginsQ.data])
   const builtPlugins = useMemo(() => plugins.filter((plugin) => plugin.build), [plugins])
@@ -69,6 +72,7 @@ export function BuildInstallerPage() {
   const activeError = activePluginId === selectedPlugin?.id ? installerError : ''
   const activeDone = activePluginId === selectedPlugin?.id ? installerDone : false
   const buildingSelected = building && activePluginId === selectedPlugin?.id
+  const canBuild = selectedPluginTestsOk && Boolean(logoPath) && !buildingSelected
 
   function selectPlugin(pluginId: string) {
     setSelectedId(pluginId)
@@ -77,6 +81,23 @@ export function BuildInstallerPage() {
     setInstallerResult(null)
     setLogs([])
     setActivePluginId(null)
+  }
+
+  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Electron exposes the native filesystem path on File objects
+    const nativePath = (file as File & { path?: string }).path ?? null
+    setLogoPath(nativePath)
+    if (logoPreview) URL.revokeObjectURL(logoPreview)
+    setLogoPreview(URL.createObjectURL(file))
+  }
+
+  function handleClearLogo() {
+    setLogoPath(null)
+    if (logoPreview) URL.revokeObjectURL(logoPreview)
+    setLogoPreview(null)
+    if (logoInputRef.current) logoInputRef.current.value = ''
   }
 
   async function handleBuildInstaller() {
@@ -92,7 +113,7 @@ export function BuildInstallerPage() {
       const result = await buildInstaller(selectedPlugin.id, (message) => {
         setLogs((prev) => [...prev, message])
         setTimeout(() => logRef.current?.scrollTo(0, logRef.current.scrollHeight), 0)
-      })
+      }, logoPath)
       setInstallerResult(result)
       setInstallerDone(true)
       void pluginsQ.refetch()
@@ -216,8 +237,52 @@ export function BuildInstallerPage() {
                   <Link to="/test" className="underline">Test Plugin</Link> before building the installer.
                 </div>
               )}
+
+              {/* Logo picker */}
+              <div className="mx-4 mt-1 flex items-center gap-3">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.ico"
+                  className="hidden"
+                  onChange={handleLogoChange}
+                />
+                {logoPreview ? (
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={logoPreview}
+                      alt="Installer logo"
+                      className="size-9 rounded border border-white/10 object-contain bg-black/20"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-zinc-300 truncate max-w-[160px]">
+                        {logoPath?.split(/[\\/]/).pop()}
+                      </span>
+                      <span className="text-[10px] text-zinc-500">Installer logo</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearLogo}
+                      className="ml-1 rounded p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-white/10 transition-colors"
+                      title="Remove logo"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="flex items-center gap-1.5 rounded-md border border-dashed border-amber-500/40 px-2.5 py-1.5 text-xs text-amber-400 hover:border-amber-400/70 hover:text-amber-300 transition-colors"
+                  >
+                    <ImagePlus className="size-3.5" />
+                    Add installer logo (required)
+                  </button>
+                )}
+              </div>
+
               <div className="flex flex-wrap gap-2 px-4">
-                <Button size="sm" onClick={handleBuildInstaller} disabled={buildingSelected || !selectedPluginTestsOk}>
+                <Button size="sm" onClick={handleBuildInstaller} disabled={!canBuild}>
                   {buildingSelected ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />

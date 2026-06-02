@@ -729,9 +729,10 @@ class Backend:
                 "Refusing to build: auth.json found under the built skill pack.",
             )
 
+        logo_path = str(payload.get("logo_path") or "").strip() or None
         sink = _event_sink(rid)
         publish_info = self._publish_skill_pack_for_installer(company_slug=company_slug, plugin=plugin, sink=sink)
-        result = build_installer(plugin_id, company_slug=company_slug, realtime_sink=sink)
+        result = build_installer(plugin_id, company_slug=company_slug, logo_path=logo_path, realtime_sink=sink)
         if publish_info:
             result = dict(result)
             result["cloud_workspace_id"] = publish_info.get("workspace_id", "")

@@ -71,10 +71,25 @@ def _find_makensis() -> str | None:
     return None
 
 
+def _stage_logo_icon(src: Path, tmp: Path, log: Callable[[str], None]) -> Path:
+    """Convert src image to ICO and place it in tmp/icon.ico."""
+    from PIL import Image
+
+    dest = tmp / "icon.ico"
+    if src.suffix.lower() == ".ico":
+        shutil.copy2(src, dest)
+    else:
+        img = Image.open(src).convert("RGBA")
+        img.save(dest, format="ICO", sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
+    log(f"Logo staged as icon: {dest}")
+    return dest
+
+
 def build_installer(
     plugin_id: str,
     *,
     company_slug: str,
+    logo_path: str | None = None,
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Package an already-built plugin into a Windows installer EXE.
@@ -148,10 +163,18 @@ def build_installer(
         staged_files = list(staged_packs.rglob("*"))
         _log(f"Skill packs staged ({len(staged_files)} file(s))")
 
+        # ── 3b. Stage logo icon ───────────────────────────────────────────────
+        staged_icon: Path | None = None
+        if logo_path:
+            try:
+                staged_icon = _stage_logo_icon(Path(logo_path), tmp, _log)
+            except Exception as exc:
+                _log(f"Warning: could not process logo ({exc}); proceeding without custom icon.")
+
         # ── 4. Render NSIS script ─────────────────────────────────────────────
         company_name = plugin.name
         _log(f"Rendering NSIS script (company={company_slug!r}, version={version})…")
-        nsi_path = _render_nsis_script(tmp, company_slug, company_name, version)
+        nsi_path = _render_nsis_script(tmp, company_slug, company_name, version, icon_path=staged_icon)
         _log(f"NSIS script written to {nsi_path}")
 
         # ── 5. Compile installer ──────────────────────────────────────────────
@@ -281,13 +304,20 @@ def _download_file(url: str, dest: Path) -> None:
     urllib.request.urlretrieve(url, dest)
 
 
-def _render_nsis_script(tmp: Path, company_slug: str, company_name: str, version: str) -> Path:
+def _render_nsis_script(
+    tmp: Path,
+    company_slug: str,
+    company_name: str,
+    version: str,
+    icon_path: Path | None = None,
+) -> Path:
     import conxa_core.storage as _storage
 
     template_path = Path(_storage.__file__).parent / "installer_templates" / "setup.nsi.tmpl"
     if not template_path.is_file():
         raise FileNotFoundError(f"NSIS template not found: {template_path}")
     template = template_path.read_text(encoding="utf-8")
+    icon_directive = f'Icon "{icon_path}"' if icon_path else ""
     rendered = (
         template
         .replace("{{COMPANY_SLUG}}", company_slug)
@@ -295,6 +325,7 @@ def _render_nsis_script(tmp: Path, company_slug: str, company_name: str, version
         .replace("{{VERSION}}", version)
         .replace("{{RUNTIME_VERSION}}", RUNTIME_VERSION)
         .replace("{{STAGING_DIR}}", str(tmp))
+        .replace("{{ICON_DIRECTIVE}}", icon_directive)
     )
     nsi_path = tmp / "setup.nsi"
     nsi_path.write_text(rendered, encoding="utf-8")
