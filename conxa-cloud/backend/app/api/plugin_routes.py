@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from conxa_core.config import settings
+from conxa_core.db import db_get
 from conxa_core.models.plugin import Plugin, PluginBuild, PluginInstaller, PluginWorkflow
 from app.services.saas import add_audit_event, principal_from_request, ensure_principal, visible_workspace_ids_for
 from conxa_core.storage.plugin_store import (
@@ -38,34 +41,49 @@ class CreatePluginBody(BaseModel):
 
 
 def _backfill_plugin(plugin: Plugin) -> Plugin:
-    """Transparently populate build/installer/workflows from on-disk artifacts
-    for plugins published before these fields were persisted to the plugin store.
-    Saves the enriched record so the backfill only runs once per plugin.
+    """Populate build/installer/workflows for plugins published before these fields
+    were persisted to the store. Uses disk files first; falls back to the
+    sync_tokens Postgres record so this works even on ephemeral Render disks.
+    Saves the enriched record on first run so subsequent requests pay no cost.
     """
     changed = False
+    slug = plugin.slug
 
+    # ── installer ──────────────────────────────────────────────────────────────
     if plugin.installer is None:
-        meta_path = settings.data_dir / "installers" / plugin.slug / "meta.json"
-        if meta_path.is_file():
-            try:
+        exe_path = settings.data_dir / "installers" / slug / "installer.exe"
+        meta_path = settings.data_dir / "installers" / slug / "meta.json"
+        try:
+            if meta_path.is_file():
                 meta = json.loads(meta_path.read_text(encoding="utf-8"))
                 plugin.installer = PluginInstaller(
                     built_at=float(meta.get("uploaded_at", 0)),
-                    installer_path=str(settings.data_dir / "installers" / plugin.slug / "installer.exe"),
-                    filename=str(meta.get("filename", f"{plugin.slug}-Plugin-Setup.exe")),
+                    installer_path=str(exe_path),
+                    filename=str(meta.get("filename", f"{slug}-Plugin-Setup.exe")),
                     version=str(meta.get("version", "0.1.0")),
                     runtime_version="",
                 )
                 changed = True
-            except Exception:
-                pass
+            elif exe_path.is_file():
+                # meta.json gone (disk wiped); reconstruct version from Postgres.
+                sync_rec = db_get("sync_tokens", slug) or {}
+                version = str(sync_rec.get("version", "0.1.0"))
+                plugin.installer = PluginInstaller(
+                    built_at=exe_path.stat().st_mtime,
+                    installer_path=str(exe_path),
+                    filename=f"{slug}-Plugin-Setup.exe",
+                    version=version,
+                    runtime_version="",
+                )
+                changed = True
+        except Exception:
+            pass
 
+    # ── build + workflows ──────────────────────────────────────────────────────
     if plugin.build is None or not plugin.workflows:
-        pack_path = settings.data_dir / "skill-packs" / plugin.slug / "pack.json"
-        if pack_path.is_file():
-            try:
-                import time
-                import uuid as _uuid
+        pack_path = settings.data_dir / "skill-packs" / slug / "pack.json"
+        try:
+            if pack_path.is_file():
                 pack = json.loads(pack_path.read_text(encoding="utf-8"))
                 version = str(pack.get("skill_pack_version", "0.1.0"))
                 skills: list[str] = pack.get("skills", [])
@@ -80,7 +98,7 @@ def _backfill_plugin(plugin: Plugin) -> Plugin:
                     now = float(pack.get("published_at", time.time()))
                     plugin.workflows = [
                         PluginWorkflow(
-                            id=str(_uuid.uuid4()),
+                            id=str(uuid.uuid4()),
                             slug=s,
                             name=s.replace("-", " ").title(),
                             session_id="",
@@ -91,8 +109,18 @@ def _backfill_plugin(plugin: Plugin) -> Plugin:
                         for s in skills
                     ]
                     changed = True
-            except Exception:
-                pass
+            elif plugin.build is None:
+                # pack.json gone; derive version from Postgres sync_tokens.
+                sync_rec = db_get("sync_tokens", slug) or {}
+                if sync_rec.get("version"):
+                    plugin.build = PluginBuild(
+                        last_built_at=float(sync_rec.get("updated_at", time.time())),
+                        output_path="",
+                        version=str(sync_rec["version"]),
+                    )
+                    changed = True
+        except Exception:
+            pass
 
     if changed:
         plugin = save_plugin(plugin)
