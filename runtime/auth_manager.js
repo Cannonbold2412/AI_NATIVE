@@ -2,10 +2,6 @@
 const crypto = require("crypto");
 const fs     = require("fs");
 const path   = require("path");
-const https  = require("https");
-
-const SERVICE    = "conxa";
-const CONXA_API  = process.env.CONXA_API_URL || "https://apis.conxa.in";
 
 // keytar loaded at runtime (native .node file alongside exe or regular require)
 let _keytar = null;
@@ -40,85 +36,35 @@ function _getKeytar() {
   return _keytar;
 }
 
-// In-flight refresh locks
-const _refreshLocks = new Map();
+// ─── Per-machine session-encryption key ──────────────────────────────────────
+// A unique random key is generated per machine per company on first use and
+// stored in the OS keychain.  It is used as HKDF key material to encrypt the
+// target-platform browser session at rest (AES-256-GCM).  Keeping it separate
+// from the installer-embedded sync_token means a leaked installer cannot
+// decrypt session files from individual users' machines.
 
-async function getToken(company) {
-  const raw = await _getKeytar().getPassword(SERVICE, company);
-  if (!raw) return null;
-  try {
-    const stored = JSON.parse(raw);
-    if (stored.expires_at && Date.now() > new Date(stored.expires_at).getTime() - 300000) {
-      return await refreshToken(company, stored.token);
-    }
-    return stored.token;
-  } catch (_) {
-    return raw; // legacy raw string
-  }
-}
-
-async function setToken(company, token, expiresAt = null) {
-  await _getKeytar().setPassword(SERVICE, company, JSON.stringify({ token, expires_at: expiresAt }));
-}
-
-async function refreshToken(company, oldToken) {
-  if (_refreshLocks.has(company)) return _refreshLocks.get(company);
-  const p = _doRefresh(company, oldToken);
-  _refreshLocks.set(company, p);
-  try {
-    const result = await p;
-    _refreshLocks.delete(company);
-    return result;
-  } catch (e) {
-    _refreshLocks.delete(company);
-    return null;
-  }
-}
-
-function _doRefresh(company, oldToken) {
-  return new Promise((resolve) => {
-    const body = JSON.stringify({ token: oldToken, company });
-    const req  = https.request(`${CONXA_API}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-    }, (res) => {
-      let data = "";
-      res.on("data", c => data += c);
-      res.on("end", async () => {
-        if (res.statusCode === 200) {
-          try {
-            const parsed = JSON.parse(data);
-            await setToken(company, parsed.token, parsed.expires_at);
-            resolve(parsed.token);
-          } catch (_) { resolve(null); }
-        } else {
-          resolve(null);
-        }
-      });
-    });
-    req.on("error", () => resolve(null));
-    req.setTimeout(5000, () => { req.destroy(); resolve(null); });
-    req.write(body);
-    req.end();
-  });
-}
-
-function getAuthChallengeUrl(company) {
-  const nonce = crypto.randomBytes(16).toString("hex");
-  const url   = `https://app.conxa.in/auth/cli?company=${encodeURIComponent(company)}&nonce=${nonce}`;
-  return { url, nonce };
-}
-
-// Session encryption — AES-256-GCM, key from Conxa token via HKDF
+const _SESSION_KEY_SVC = "conxa-session";
 const HKDF_INFO = Buffer.from("conxa-session-v1");
 
-function _deriveKey(token) {
-  return crypto.hkdfSync("sha256", Buffer.from(token), Buffer.alloc(32), HKDF_INFO, 32);
+async function getSessionKey(company) {
+  const keytar = _getKeytar();
+  let raw = await keytar.getPassword(_SESSION_KEY_SVC, company);
+  if (!raw) {
+    // First use: generate a fresh random 32-byte key, store as hex.
+    const key = crypto.randomBytes(32).toString("hex");
+    await keytar.setPassword(_SESSION_KEY_SVC, company, key);
+    raw = key;
+  }
+  return raw;
 }
 
-function saveEncryptedSession(company, state, token, sessionsDir) {
+function _deriveKey(sessionKeyHex) {
+  return crypto.hkdfSync("sha256", Buffer.from(sessionKeyHex, "hex"), Buffer.alloc(32), HKDF_INFO, 32);
+}
+
+function saveEncryptedSession(company, state, sessionKeyHex, sessionsDir) {
   try {
-    const key    = _deriveKey(token);
+    const key    = _deriveKey(sessionKeyHex);
     const iv     = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
     const enc    = Buffer.concat([cipher.update(JSON.stringify(state)), cipher.final()]);
@@ -133,22 +79,23 @@ function saveEncryptedSession(company, state, token, sessionsDir) {
   } catch (_) {}
 }
 
-function loadDecryptedSession(company, token, sessionsDir) {
+function loadDecryptedSession(company, sessionKeyHex, sessionsDir) {
   const sessionPath = path.join(sessionsDir, `${company}_state.json`);
   if (!fs.existsSync(sessionPath)) return null;
   try {
     const { iv, tag, data } = JSON.parse(fs.readFileSync(sessionPath, "utf8"));
-    const key     = _deriveKey(token);
+    const key     = _deriveKey(sessionKeyHex);
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64"));
     decipher.setAuthTag(Buffer.from(tag, "base64"));
     const dec = Buffer.concat([decipher.update(Buffer.from(data, "base64")), decipher.final()]);
     return JSON.parse(dec.toString());
   } catch (_) {
-    return null; // corrupted or wrong token — fresh session needed
+    return null; // corrupted or wrong key — fresh session needed
   }
 }
 
-// Save unencrypted session (fallback when no token yet — target website auth before Conxa auth)
+// Save unencrypted session (fallback when keytar unavailable — target website
+// auth before session key has been persisted)
 function saveRawSession(company, state, sessionsDir) {
   try {
     fs.mkdirSync(sessionsDir, { recursive: true });
@@ -170,9 +117,9 @@ const AUTH_REFRESH_MAX_ATTEMPTS = 3;
 const _authRefreshAttempts = new Map();
 
 /**
- * Attempt to re-authenticate an expired session.
+ * Attempt to re-authenticate an expired target-platform session.
  *
- * - Headed mode (DISPLAY set or Windows): opens Playwright to loginUrl, waits
+ * - Headed mode (Windows or DISPLAY set): opens Playwright to loginUrl, waits
  *   for the user to complete login (up to 3 min), saves fresh storageState.
  * - Headless (no DISPLAY on Linux): returns immediately with an error payload
  *   so Claude can surface "Re-login required" to the user — never hangs.
@@ -191,12 +138,10 @@ async function refreshSession(company, loginUrl, context, sessionsDir) {
     return { ok: false, session_expired: true, login_url: loginUrl, message: "Re-login required (headless mode — no browser available)." };
   }
 
-  // Open a new page in the existing context so cookies / storage are fresh.
   let authPage = null;
   try {
     authPage = await context.newPage();
     await authPage.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    // Wait for the user to land on a non-login URL (up to 3 minutes).
     await authPage.waitForURL(
       (url) => !AUTH_FAILURE_URL_RE.test(url.pathname),
       { timeout: 180_000 }
@@ -216,10 +161,7 @@ async function refreshSession(company, loginUrl, context, sessionsDir) {
 const AUTH_FAILURE_URL_RE = /\/(login|signin|sign-in|auth|logout|session-expired)(\/|$|\?)/i;
 
 module.exports = {
-  getToken,
-  setToken,
-  refreshToken,
-  getAuthChallengeUrl,
+  getSessionKey,
   saveEncryptedSession,
   loadDecryptedSession,
   saveRawSession,

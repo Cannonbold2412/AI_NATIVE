@@ -279,8 +279,18 @@ class Backend:
         if not tracking.get("tracking_token"):
             raise _CommandError("cloud_publish_failed", "Cloud publish did not return a tracking token.")
 
+        sync_token = str(published.get("sync_token") or "")
+        if not sync_token:
+            raise _CommandError(
+                "cloud_publish_failed",
+                "Cloud publish did not return a sync_token. "
+                "The installer cannot be built — the runtime needs this token to pull skill-pack updates. "
+                "Ensure the cloud backend is up-to-date.",
+            )
+
         pack["tracking"] = tracking
         pack["sync_endpoint"] = f"{cloud_api}/api/v1/skill-packs/{company_slug}/delta"
+        pack["sync_token"] = sync_token
         pack["published"] = {
             "cloud_api": cloud_api,
             "workspace_id": str(published.get("workspace_id") or ""),
@@ -292,9 +302,9 @@ class Backend:
             {
                 "kind": "installer_build",
                 "message": (
-                    "Cloud tracking embedded in pack.json "
-                    f"(workspace {workspace_id or 'unknown'}, tracking token present, "
-                    f"url {tracking['tracking_url']})"
+                    "Cloud tokens embedded in pack.json "
+                    f"(workspace {workspace_id or 'unknown'}, sync_token present, "
+                    f"tracking_token present, url {tracking['tracking_url']})"
                 ),
             }
         )
@@ -303,6 +313,7 @@ class Backend:
             "workspace_id": workspace_id,
             "tracking_url": tracking["tracking_url"],
             "tracking_token_present": True,
+            "sync_token_present": True,
             "sync_endpoint": pack["sync_endpoint"],
         }
 

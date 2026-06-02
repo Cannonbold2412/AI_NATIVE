@@ -23,7 +23,6 @@ from app.api.razorpay_routes import router as razorpay_router
 from app.api.run_routes import router as run_router
 from app.api.security import ProductionRequestMiddleware
 from app.api.skillpack_update_routes import router as skillpack_update_router
-from app.api.skillpack_update_routes import auth_router as skillpack_auth_router
 from app.api.skillpack_update_routes import telemetry_router as skillpack_telemetry_router
 from app.api.tracking_routes import public_router as public_tracking_router
 from app.api.tracking_routes import router as tracking_router
@@ -87,7 +86,6 @@ app.include_router(installers_router, prefix="/api/v1")
 app.include_router(run_router, prefix="/api/v1")
 app.include_router(razorpay_router, prefix="/api/v1")
 app.include_router(skillpack_update_router, prefix="/api/v1")
-app.include_router(skillpack_auth_router, prefix="/api/v1")
 app.include_router(skillpack_telemetry_router, prefix="/api/v1")
 app.include_router(tracking_router, prefix="/api/v1")
 app.include_router(public_tracking_router)  # package-token ingest endpoint for runtimes

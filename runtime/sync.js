@@ -73,7 +73,7 @@ function restoreSkillBackup(skillDir) {
   }
 }
 
-async function _doSync(skillPacksDir, authManager, log) {
+async function _doSync(skillPacksDir, log) {
   if (!fs.existsSync(skillPacksDir)) return;
 
   for (const company of fs.readdirSync(skillPacksDir)) {
@@ -86,9 +86,11 @@ async function _doSync(skillPacksDir, authManager, log) {
     const syncEndpoint = pack.sync_endpoint;
     if (!syncEndpoint) continue;
 
-    const token = await authManager.getToken(company);
+    // Auth: use the sync_token embedded in pack.json at publish time.
+    // No user interaction required — the token ships inside the installer.
+    const token = pack.sync_token || null;
     if (!token) {
-      log(`[sync:error] ${company} no auth token — skipping`);
+      log(`[sync:warn] ${company} no sync_token in pack.json — skipping sync (pack may need to be republished)`);
       continue;
     }
 
@@ -164,10 +166,9 @@ async function _doSync(skillPacksDir, authManager, log) {
 
 // Public: run sync with a hard timeout.
 // Default 15s — increased from 3s to accommodate corporate networks with higher latency.
-// Server.js callers that specified timeoutMs:3000 should migrate to timeoutMs:15000.
-async function syncSkillPacks(skillPacksDir, authManager, { timeoutMs = 15000, log = console.error } = {}) {
+async function syncSkillPacks(skillPacksDir, { timeoutMs = 15000, log = console.error } = {}) {
   await Promise.race([
-    _doSync(skillPacksDir, authManager, log),
+    _doSync(skillPacksDir, log),
     new Promise((_, reject) => setTimeout(() => reject(new Error("sync timeout")), timeoutMs)),
   ]);
 }

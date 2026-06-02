@@ -116,6 +116,34 @@ def _tracking_token(slug: str, workspace_id: str, version: str, owner_user_id: s
     return token
 
 
+def _sync_token(slug: str, workspace_id: str, version: str, owner_user_id: str) -> str:
+    """Return the per-company long-lived sync token, minting one on first publish.
+
+    The token is embedded in pack.json and shipped inside the installer so the
+    runtime can pull skill-pack deltas without any user-facing Conxa login.
+    It is stable across republishes (reused if present) and can be rotated by
+    deleting the 'sync_tokens' KV entry, which forces a new token on next publish.
+    """
+    existing = db_get("sync_tokens", slug)
+    if isinstance(existing, dict) and existing.get("token"):
+        token = str(existing["token"])
+    else:
+        token = secrets.token_urlsafe(32)
+    db_set(
+        "sync_tokens",
+        slug,
+        {
+            "token": token,
+            "company": slug,
+            "version": version,
+            "workspace_id": workspace_id,
+            "owner_user_id": owner_user_id,
+            "updated_at": time.time(),
+        },
+    )
+    return token
+
+
 def _api_base(request: Request) -> str:
     forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
     forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
@@ -198,6 +226,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
         "schema_version": 1,
         "protocol_version": 1,
     }
+    sync_token = _sync_token(slug, principal.workspace_id, body.skill_pack_version, principal.user_id)
     if pack_path.is_file():
         try:
             pack = json.loads(pack_path.read_text(encoding="utf-8"))
@@ -214,6 +243,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
             "workspace_id": principal.workspace_id,
             "published_at": published_at,
             "sync_endpoint": f"{_api_base(request)}/api/v1/skill-packs/{slug}/delta",
+            "sync_token": sync_token,
             "tracking": tracking,
         }
     )
@@ -227,6 +257,7 @@ def post_publish(body: PublishBody, request: Request) -> dict[str, Any]:
         "version": body.skill_pack_version,
         "files_written": written,
         "sync_url": f"/api/v1/skill-packs/{slug}/delta",
+        "sync_token": sync_token,
         "tracking": tracking,
         "workspace_id": principal.workspace_id,
         "published_at": published_at,

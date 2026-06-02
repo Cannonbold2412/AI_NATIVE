@@ -209,10 +209,10 @@ async function getAuthContext(company, authManager, opts = {}) {
   const protectedUrl = _resolveProtectedUrl(company, pack);
   const targetUrl    = pack.target_url || protectedUrl;
 
-  // Try encrypted session (requires Conxa token)
+  // Try encrypted session (uses per-machine session key from keytar)
   if (authManager) {
     try {
-      const token = await authManager.getToken(company);
+      const token = await authManager.getSessionKey(company);
       if (token) {
         const stored = authManager.loadDecryptedSession(company, token, SESSIONS_DIR);
         if (stored) {
@@ -268,15 +268,11 @@ async function getAuthContext(company, authManager, opts = {}) {
   const { state, protectedUrl: capturedProtectedUrl } = await _captureInteractiveAuth(company, targetUrl);
   _writeAuthMeta(company, { protected_url: capturedProtectedUrl });
 
-  // Save as raw session — will be re-encrypted once Conxa token is available
+  // Encrypt and save the session using the per-machine session key.
   if (authManager) {
     try {
-      const token = await authManager.getToken(company);
-      if (token) {
-        authManager.saveEncryptedSession(company, state, token, SESSIONS_DIR);
-      } else {
-        authManager.saveRawSession(company, state, SESSIONS_DIR);
-      }
+      const sessionKey = await authManager.getSessionKey(company);
+      authManager.saveEncryptedSession(company, state, sessionKey, SESSIONS_DIR);
     } catch (_) {
       authManager.saveRawSession(company, state, SESSIONS_DIR);
     }

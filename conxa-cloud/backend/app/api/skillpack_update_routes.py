@@ -1,9 +1,11 @@
-"""Endpoints consumed by runtime.exe at startup for skill pack sync and auth."""
+"""Endpoints consumed by runtime.exe at startup for skill pack sync."""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import secrets
 import time
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from conxa_core.config import settings
+from conxa_core.db import db_get
 
 router = APIRouter(prefix="/skill-packs", tags=["skill-packs"])
 
@@ -42,6 +45,25 @@ def _check_rate_limit(token: str) -> None:
             headers={"Retry-After": str(int(_RATE_LIMIT_SECONDS - (time.time() - last)))},
         )
     _rate_cache[key] = time.time()
+
+
+def _verify_sync_token(company: str, token: str | None) -> None:
+    """Validate the Bearer token against the per-company sync_token.
+
+    In production (SKILL_AUTH_REQUIRED=true) a valid sync token is required.
+    The sync token is minted at publish time and embedded in the installer's
+    pack.json — end users never need a Conxa login.
+
+    In local dev (auth_required=false) validation is skipped so the Build
+    Studio can sync without a published token.
+    """
+    if not settings.auth_required:
+        return
+    stored = db_get("sync_tokens", company)
+    if not isinstance(stored, dict) or not stored.get("token"):
+        raise HTTPException(status_code=401, detail="sync_token_not_configured")
+    if not token or not secrets.compare_digest(str(stored["token"]), token):
+        raise HTTPException(status_code=401, detail="invalid_sync_token")
 
 
 def _skill_packs_dir(company: str) -> Path:
@@ -96,12 +118,9 @@ def _build_delta(company: str, since_version: str) -> dict[str, Any]:
                 "path":           f"{slug}/{fname}",
                 "action":         "update",
                 "sha256":         _sha256_file(fpath),
-                "content_base64": fpath.read_bytes().decode("latin-1").encode("utf-8"),  # placeholder
                 "_content_bytes": fpath.read_bytes(),
             })
 
-    # Encode file content as base64 for inline delivery
-    import base64
     for f in files:
         raw = f.pop("_content_bytes", b"")
         f["content_base64"] = base64.b64encode(raw).decode("ascii")
@@ -113,72 +132,24 @@ def _build_delta(company: str, since_version: str) -> dict[str, Any]:
 def get_skill_pack_delta(company: str, since: str = "0", request: Request = None) -> dict[str, Any]:
     """Return files changed since `since` version as base64-encoded content.
 
+    Authentication: Bearer token must match the per-company sync_token minted
+    at publish time and embedded in the installer's pack.json.
     Rate limited: 1 request per 5 minutes per token.
     """
     token = _extract_token(request) if request else None
-    # In production: verify token against Clerk/JWT. Local dev: skip.
-    if token and settings.auth_required:
+    _verify_sync_token(company, token)
+    if token:
         _check_rate_limit(token)
-
     return _build_delta(company, since)
 
 
-# ─── Auth endpoints ───────────────────────────────────────────────────────────
-
-class RefreshBody(BaseModel):
-    token: str
-    company: str
-
-
-class PollBody(BaseModel):
-    nonce: str
-
+# ─── Telemetry ────────────────────────────────────────────────────────────────
 
 class TelemetryBody(BaseModel):
     runtime_version: str = ""
     companies: list[str] = []
     platform: str = ""
 
-
-# In-memory nonce store — replace with Redis in production
-_auth_nonces: dict[str, dict[str, Any]] = {}
-
-
-auth_router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-@auth_router.post("/refresh")
-def post_auth_refresh(body: RefreshBody) -> dict[str, Any]:
-    """Attempt to refresh a Conxa auth token.
-
-    In production this validates against Clerk and issues a new JWT.
-    Local dev returns a fixed response.
-    """
-    if not body.token:
-        raise HTTPException(status_code=401, detail="Token required.")
-    # Local dev: echo back with extended expiry
-    expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 86400 * 30))
-    return {"token": body.token, "expires_at": expires_at}
-
-
-@auth_router.post("/cli/poll")
-def post_auth_cli_poll(body: PollBody) -> dict[str, Any]:
-    nonce = body.nonce
-    if nonce in _auth_nonces:
-        entry = _auth_nonces.pop(nonce)
-        expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 86400 * 30))
-        return {"token": entry["token"], "expires_at": expires_at}
-    return {"status": "pending"}
-
-
-@auth_router.post("/cli/complete")
-def post_auth_cli_complete(nonce: str, token: str) -> dict[str, Any]:
-    """Called by Conxa web UI after user logs in via deep-link auth flow."""
-    _auth_nonces[nonce] = {"token": token, "ts": time.time()}
-    return {"ok": True}
-
-
-# ─── Telemetry ────────────────────────────────────────────────────────────────
 
 telemetry_router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 

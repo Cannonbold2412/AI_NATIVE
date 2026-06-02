@@ -65,11 +65,6 @@ if (cliArgs.includes("--unregister-mcp")) {
   _unregisterMcp(cliArgs[cliArgs.indexOf("--unregister-mcp") + 1]);
   process.exit(0);
 }
-if (cliArgs.includes("--handle-auth-callback")) {
-  const callbackUrl = cliArgs[cliArgs.indexOf("--handle-auth-callback") + 1] || "";
-  _handleAuthCallback(callbackUrl);
-  process.exit(0);
-}
 
 // ─── 4. Logger ────────────────────────────────────────────────────────────────
 function log(level, msg, extra = {}) {
@@ -344,7 +339,7 @@ log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR })
 
   // Skill pack sync — 3s hard timeout, then continue with cache
   try {
-    await sync.syncSkillPacks(SKILL_PACKS_DIR, authManager, { timeoutMs: 15000, log: (m) => log("info", m) });
+    await sync.syncSkillPacks(SKILL_PACKS_DIR, { timeoutMs: 15000, log: (m) => log("info", m) });
     skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR);
     log("info", "sync_complete", { count: Object.keys(skillIndex).length });
   } catch (e) {
@@ -686,7 +681,7 @@ async function _handleTool(name, args) {
   // ── refresh_skills ───────────────────────────────────────────────────────────
   if (name === "refresh_skills") {
     try {
-      await sync.syncSkillPacks(SKILL_PACKS_DIR, authManager, { timeoutMs: 15000, log: (m) => log("info", m) });
+      await sync.syncSkillPacks(SKILL_PACKS_DIR, { timeoutMs: 15000, log: (m) => log("info", m) });
       skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR);
       return text(`Refreshed. ${Object.keys(skillIndex).length} skills loaded.`);
     } catch (e) {
@@ -740,7 +735,7 @@ async function _handleTool(name, args) {
         skillLoader.verifySkillIntegrity(entry.skillDir, entry.manifest);
       } catch (integrityErr) {
         // Trigger background re-sync
-        sync.syncSkillPacks(SKILL_PACKS_DIR, authManager, { timeoutMs: 15000, log: (m) => log("info", m) })
+        sync.syncSkillPacks(SKILL_PACKS_DIR, { timeoutMs: 15000, log: (m) => log("info", m) })
           .then(() => { skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR); })
           .catch(() => {});
         return err(`Skill integrity check failed: ${integrityErr.message}. A re-sync has been triggered — call refresh_skills, then retry.`);
@@ -982,20 +977,6 @@ function _unregisterMcp(configPath) {
   fs.renameSync(tmp, configPath);
 }
 
-function _handleAuthCallback(callbackUrl) {
-  try {
-    const url    = new URL(callbackUrl);
-    const token  = url.searchParams.get("token");
-    const nonce  = url.searchParams.get("nonce");
-    const company = url.searchParams.get("company");
-    if (!token || !company) return;
-    // Write to a well-known file that the runtime process will pick up
-    const callbackFile = path.join(CONXA_DIR, "cache", ".auth_callback.json");
-    fs.mkdirSync(path.dirname(callbackFile), { recursive: true });
-    fs.writeFileSync(callbackFile, JSON.stringify({ token, nonce, company, ts: Date.now() }));
-    authManager.setToken(company, token).catch(() => {});
-  } catch (_) {}
-}
 
 async function _phonehome() {
   const CONXA_API = process.env.CONXA_API_URL || "https://apis.conxa.in";
