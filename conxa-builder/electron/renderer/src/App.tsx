@@ -56,7 +56,7 @@ export function App() {
     }
     cmd<{ all_ready: boolean }>('deps_status')
       .then((r) => setDepsState(r.all_ready ? 'ready' : 'needed'))
-      .catch(() => setDepsState('ready')) // if status check fails, proceed and let features fail individually
+      .catch(() => setDepsState('needed'))
   }, [])
 
   useEffect(() => {
