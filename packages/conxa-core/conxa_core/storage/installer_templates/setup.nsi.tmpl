@@ -13,18 +13,20 @@
 !define VERSION        "{{VERSION}}"
 !define RUNTIME_VER    "{{RUNTIME_VERSION}}"
 !define STAGING_DIR    "{{STAGING_DIR}}"
-!define INSTALL_DIR    "$PROGRAMFILES64\Conxa"
+; Per-user install: no UAC, correct user profile, works with Claude Desktop MSIX
+!define INSTALL_DIR    "$LOCALAPPDATA\Conxa"
 !define RUNTIME_DIR    "${INSTALL_DIR}\runtime"
 !define CHROMIUM_DIR   "${INSTALL_DIR}\chromium"
 !define SKILL_DIR      "${INSTALL_DIR}\skill-packs\${COMPANY_SLUG}"
-!define CLAUDE_CONFIG       "$APPDATA\Claude\claude_desktop_config.json"
-!define CLAUDE_CODE_CONFIG  "$PROFILE\.claude.json"
+!define MCPB_FILE      "${INSTALL_DIR}\conxa.mcpb"
 !define UNINSTALL_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\Conxa-${COMPANY_SLUG}"
 
 Name          "${COMPANY_NAME} for Claude"
 OutFile       "${OUTPUT_PATH}"
 InstallDir    "${INSTALL_DIR}"
-RequestExecutionLevel admin
+; Per-user install — no UAC prompt, matches Slack/Notion feel.
+; $APPDATA and $LOCALAPPDATA correctly resolve to the logged-in user's profile.
+RequestExecutionLevel user
 SetCompressor  lzma
 Unicode True
 {{ICON_DIRECTIVE}}
@@ -36,8 +38,7 @@ Var RuntimePresent
 Function DetectRuntime
   StrCpy $RuntimePresent "0"
   IfFileExists "${RUNTIME_DIR}\version.json" 0 detect_done
-  ; Read installed version — simplified: presence of version.json = compatible
-  ; Production: use nsJSON or a custom plugin to parse and semver-compare
+  ; Presence of version.json = compatible runtime installed
   StrCpy $RuntimePresent "1"
   detect_done:
 FunctionEnd
@@ -55,8 +56,6 @@ SectionEnd
 ; ── Chromium section ──────────────────────────────────────────────────────────
 Section "Chromium" SEC_CHROMIUM
   IfFileExists "${CHROMIUM_DIR}\*" chromium_skip
-  ; Set PLAYWRIGHT_BROWSERS_PATH so Playwright installs to our managed path
-  System::Call 'Kernel32::SetEnvironmentVariable(t "PLAYWRIGHT_BROWSERS_PATH", t "${CHROMIUM_DIR}")'
   ExecWait '"${RUNTIME_DIR}\runtime.exe" "--install-playwright"' $0
   IntCmp $0 0 chromium_skip
   MessageBox MB_OK "Chromium installation failed (code $0). Automation may not work.$\nYou can retry by running:$\n${RUNTIME_DIR}\runtime.exe --install-playwright"
@@ -68,89 +67,81 @@ Section "SkillPacks" SEC_SKILLS
   SetOutPath "${SKILL_DIR}"
   ; Copy company skill pack — preserves other companies' directories
   File /r "${STAGING_DIR}\skill-packs\${COMPANY_SLUG}\*.*"
-  ; Force runtime.exe to rescan the newly installed pack instead of using stale AppData cache.
+  ; Force runtime.exe to rescan the newly installed pack instead of using stale cache.
   Delete "$APPDATA\Conxa\cache\manifests.json"
+SectionEnd
+
+; ── Desktop Extension section ─────────────────────────────────────────────────
+; MCP registration is handled by Claude Desktop itself via the official .mcpb
+; Desktop Extension mechanism — we never edit claude_desktop_config.json directly.
+; This is robust to Claude's MSIX config-path virtualization (issue #26073).
+Section "DesktopExtension" SEC_MCPB
+  ; Stage the .mcpb file into the install dir
+  SetOutPath "${INSTALL_DIR}"
+  File "${STAGING_DIR}\conxa.mcpb"
+
+  ; Check if Claude Desktop has registered the .mcpb file association.
+  ; Claude Desktop registers this handler on its own install.
+  ReadRegStr $0 HKCU "Software\Classes\.mcpb" ""
+  StrCmp $0 "" mcpb_check_hkcr mcpb_launch
+
+  mcpb_check_hkcr:
+  ; Also check HKCR in case Claude installed system-wide
+  ReadRegStr $0 HKCR ".mcpb" ""
+  StrCmp $0 "" mcpb_claude_missing mcpb_launch
+
+  mcpb_claude_missing:
+  MessageBox MB_OK "Setup complete — skill files installed.$\n$\nClaude Desktop was not detected on this machine.$\n$\nTo activate ${COMPANY_NAME} skills:$\n1. Install Claude from https://claude.ai/download$\n2. Double-click: ${MCPB_FILE}$\n3. Click Install, then restart Claude."
+  Goto mcpb_done
+
+  mcpb_launch:
+  ; Open the .mcpb with Claude Desktop — triggers the extension install dialog.
+  ; The user clicks Install once, then restarts Claude for tools to appear.
+  ExecShell "open" "${MCPB_FILE}"
+  MessageBox MB_OK "Almost done!$\n$\n1. In the Claude window that just opened, click Install to add ${COMPANY_NAME} skills.$\n2. Restart Claude Desktop.$\n$\nYour skills will be ready immediately after restart."
+  mcpb_done:
 SectionEnd
 
 ; ── Deep-link registration ─────────────────────────────────────────────────────
 Section "DeepLink" SEC_DEEPLINK
-  ; Register conxa-runtime:// URI scheme so auth callbacks reach the runtime
-  WriteRegStr HKCR "conxa-runtime"                   "" "URL:Conxa Runtime"
-  WriteRegStr HKCR "conxa-runtime"                   "URL Protocol" ""
-  WriteRegStr HKCR "conxa-runtime\DefaultIcon"       "" "${RUNTIME_DIR}\runtime.exe,0"
-  WriteRegStr HKCR "conxa-runtime\shell"             "" "open"
-  WriteRegStr HKCR "conxa-runtime\shell\open\command" "" \
+  ; Register conxa-runtime:// URI scheme per-user (HKCU) — no admin required.
+  WriteRegStr HKCU "Software\Classes\conxa-runtime"                    "" "URL:Conxa Runtime"
+  WriteRegStr HKCU "Software\Classes\conxa-runtime"                    "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\conxa-runtime\DefaultIcon"        "" "${RUNTIME_DIR}\runtime.exe,0"
+  WriteRegStr HKCU "Software\Classes\conxa-runtime\shell"              "" "open"
+  WriteRegStr HKCU "Software\Classes\conxa-runtime\shell\open\command" "" \
     '"${RUNTIME_DIR}\runtime.exe" "--handle-auth-callback" "%1"'
-SectionEnd
-
-; ── MCP registration ──────────────────────────────────────────────────────────
-Section "MCPRegistration" SEC_MCP
-  ; Check Claude Code config first (~/.claude.json)
-  IfFileExists "${CLAUDE_CODE_CONFIG}" mcp_found
-  ; Try Claude Desktop APPDATA path
-  IfFileExists "${CLAUDE_CONFIG}" mcp_found
-  ; Try Claude Desktop LOCALAPPDATA path
-  IfFileExists "$LOCALAPPDATA\Claude\claude_desktop_config.json" mcp_localappdata
-  ; Neither Claude Code nor Claude Desktop found
-  MessageBox MB_OK "Claude not found.$\n$\nInstall Claude from https://claude.in/download and then re-run this installer to enable ${COMPANY_NAME} skills.$\n$\nYou can also manually add Conxa to your .claude.json or claude_desktop_config.json."
-  Goto mcp_skip
-  mcp_localappdata:
-  StrCpy $0 "$LOCALAPPDATA\Claude\claude_desktop_config.json"
-  Goto mcp_register
-  mcp_found:
-  StrCpy $0 "${CLAUDE_CODE_CONFIG}"
-  IfFileExists "$0" mcp_register
-  StrCpy $0 "${CLAUDE_CONFIG}"
-  mcp_register:
-  ; Backup existing config
-  CopyFiles $0 "$0.conxa.bak"
-  ; Merge conxa MCP entry using runtime.exe helper
-  ExecWait '"${RUNTIME_DIR}\runtime.exe" "--register-mcp" "$0"' $1
-  IntCmp $1 0 mcp_skip
-  MessageBox MB_OK "Failed to register Conxa MCP (code $1).$\nPlease add the following to your .claude.json manually:$\n{ $\"mcpServers$\": { $\"conxa$\": { $\"command$\": $\"${RUNTIME_DIR}\\runtime.exe$\" } } }"
-  mcp_skip:
 SectionEnd
 
 ; ── Uninstaller ────────────────────────────────────────────────────────────────
 Section "Uninstall"
   ; Remove this company's skill packs only
   RMDir /r "${SKILL_DIR}"
-  ; Remove deep-link registration (shared — only remove if no other skill packs remain)
+  ; Remove deep-link registration only if no other skill packs remain
   IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_deeplink_removal
-  DeleteRegKey HKCR "conxa-runtime"
+  DeleteRegKey HKCU "Software\Classes\conxa-runtime"
   skip_deeplink_removal:
-  ; Remove MCP registration only if no other companies remain
-  IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_mcp_removal
-  IfFileExists "${CLAUDE_CODE_CONFIG}" do_unregister_code
-  IfFileExists "${CLAUDE_CONFIG}" do_unregister_mcp
-  IfFileExists "$LOCALAPPDATA\Claude\claude_desktop_config.json" do_unregister_localappdata
-  Goto skip_mcp_removal
-  do_unregister_code:
-  ExecWait '"${RUNTIME_DIR}\runtime.exe" "--unregister-mcp" "${CLAUDE_CODE_CONFIG}"'
-  Goto skip_mcp_removal
-  do_unregister_localappdata:
-  ExecWait '"${RUNTIME_DIR}\runtime.exe" "--unregister-mcp" "$LOCALAPPDATA\Claude\claude_desktop_config.json"'
-  Goto skip_mcp_removal
-  do_unregister_mcp:
-  ExecWait '"${RUNTIME_DIR}\runtime.exe" "--unregister-mcp" "${CLAUDE_CONFIG}"'
-  skip_mcp_removal:
-  ; Remove runtime only if no skill packs remain
+  ; Remove runtime + .mcpb only if no other companies remain
   IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_runtime_removal
+  Delete "${MCPB_FILE}"
   RMDir /r "${RUNTIME_DIR}"
   RMDir /r "${CHROMIUM_DIR}"
   RMDir /r "${INSTALL_DIR}\cache"
   RMDir /r "${INSTALL_DIR}\logs"
   RMDir "${INSTALL_DIR}"
   skip_runtime_removal:
-  DeleteRegKey HKLM "${UNINSTALL_KEY}"
+  DeleteRegKey HKCU "${UNINSTALL_KEY}"
+  ; The Conxa extension inside Claude Desktop must be removed in-app:
+  ; Claude Desktop → Settings → Extensions → Conxa → Remove.
+  MessageBox MB_OK "${COMPANY_NAME} skills have been removed.$\n$\nTo fully uninstall the Conxa extension from Claude Desktop:$\nOpen Claude → Settings → Extensions → Conxa → Remove."
 SectionEnd
 
 ; ── Uninstaller registry entry ─────────────────────────────────────────────────
 Section -Post
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayName"     "${COMPANY_NAME} for Claude"
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "UninstallString" "${INSTALL_DIR}\uninstall-${COMPANY_SLUG}.exe"
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayVersion"  "${VERSION}"
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher"       "Conxa"
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "URLInfoAbout"    "https://conxa.in"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName"     "${COMPANY_NAME} for Claude"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" "${INSTALL_DIR}\uninstall-${COMPANY_SLUG}.exe"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion"  "${VERSION}"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher"       "Conxa"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout"    "https://conxa.in"
   WriteUninstaller "${INSTALL_DIR}\uninstall-${COMPANY_SLUG}.exe"
 SectionEnd

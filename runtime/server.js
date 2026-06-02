@@ -10,7 +10,7 @@ const { loadInstallId } = require("./install_identity");
 // ─── 1. Resolve CONXA_DIR (install, read-only) and CONXA_DATA_DIR (user-writable) ─
 const CONXA_DIR = process.env.CONXA_DIR || (
   process.platform === "win32"
-    ? "C:\\Program Files\\Conxa"
+    ? path.join(os.homedir(), "AppData", "Local", "Conxa")
     : path.join(os.homedir(), ".conxa")
 );
 const CONXA_DATA_DIR = process.env.CONXA_DATA_DIR || (
@@ -36,7 +36,7 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
 process.env.CONXA_DIR      = CONXA_DIR;
 process.env.CONXA_DATA_DIR = CONXA_DATA_DIR;
 
-// ─── 3. Handle CLI flags (--install-playwright, --register-mcp, etc.) ─────────
+// ─── 3. Handle CLI flags (--install-playwright, --handle-auth-callback, etc.) ──
 const [,, ...cliArgs] = process.argv;
 if (cliArgs.includes("--install-playwright")) {
   process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(CONXA_DIR, "chromium");
@@ -58,14 +58,6 @@ if (cliArgs.includes("--install-playwright")) {
       process.exit(1);
     }
   }
-}
-if (cliArgs.includes("--register-mcp")) {
-  _registerMcp(cliArgs[cliArgs.indexOf("--register-mcp") + 1]);
-  process.exit(0);
-}
-if (cliArgs.includes("--unregister-mcp")) {
-  _unregisterMcp(cliArgs[cliArgs.indexOf("--unregister-mcp") + 1]);
-  process.exit(0);
 }
 
 // ─── 4. Logger ────────────────────────────────────────────────────────────────
@@ -825,33 +817,8 @@ async function _handleTool(name, args) {
   return err(`Unknown tool: ${name}`);
 }
 
-// ─── MCP config helpers ───────────────────────────────────────────────────────
-function _registerMcp(configPath) {
-  if (!configPath || !fs.existsSync(path.dirname(configPath))) return;
-  let cfg = {};
-  try { cfg = JSON.parse(fs.readFileSync(configPath, "utf8")); } catch (_) {}
-  cfg.mcpServers = cfg.mcpServers || {};
-  const runtimeExe = process.platform === "win32"
-    ? "C:\\Program Files\\Conxa\\runtime\\runtime.exe"
-    : path.join(CONXA_DIR, "runtime", "runtime");
-  if (cfg.mcpServers.conxa && cfg.mcpServers.conxa.command === runtimeExe) return;
-  cfg.mcpServers.conxa = { command: runtimeExe };
-  const tmp = configPath + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2));
-  fs.renameSync(tmp, configPath);
-}
-
-function _unregisterMcp(configPath) {
-  if (!configPath || !fs.existsSync(configPath)) return;
-  let cfg = {};
-  try { cfg = JSON.parse(fs.readFileSync(configPath, "utf8")); } catch (_) { return; }
-  if (!cfg.mcpServers || !cfg.mcpServers.conxa) return;
-  delete cfg.mcpServers.conxa;
-  const tmp = configPath + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2));
-  fs.renameSync(tmp, configPath);
-}
-
+// MCP registration is handled by the official .mcpb Desktop Extension mechanism.
+// Claude Desktop owns claude_desktop_config.json; we do not edit it directly.
 
 async function _phonehome() {
   const companies = [...new Set(Object.values(skillIndex).map(s => s.company))];

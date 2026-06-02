@@ -420,7 +420,7 @@ Build Studio publishes skill pack
   → publish response returns sync_token
   → Build Studio writes sync_token into local pack.json (backend.py)
   → installer_builder stages pack.json verbatim into NSIS
-  → installer ships pack.json to C:\Program Files\Conxa\skill-packs\{company}\
+  → installer ships pack.json to %LOCALAPPDATA%\Conxa\skill-packs\{company}\
 ```
 
 `installer_builder.py` guards that `pack.json` has `sync_token` before staging — build fails fast if the pack was never published.
@@ -719,11 +719,11 @@ output/skill_package/{company}-plugin/
 
 **Invariant:** Auth files (`auth.json`) are NEVER placed in the build output. The `build_installer` command explicitly checks and refuses if `auth.json` is found under the skill pack dir.
 
-The installer (`installer_builder.py`) wraps this with NSIS to produce a `.exe` that:
-1. Installs the skill pack to `~/.conxa/skill-packs/{company}/`.
-2. Installs `runtime-win.exe` to `C:\Program Files\Conxa\runtime\`.
-3. Installs Chromium to `C:\Program Files\Conxa\chromium\`.
-4. Registers the MCP server in Claude Desktop config.
+The installer (`installer_builder.py`) wraps this with NSIS to produce a per-user `.exe` (no UAC) that:
+1. Installs the skill pack to `%LOCALAPPDATA%\Conxa\skill-packs\{company}\`.
+2. Installs `runtime.exe` to `%LOCALAPPDATA%\Conxa\runtime\`.
+3. Installs Chromium to `%LOCALAPPDATA%\Conxa\chromium\`.
+4. Registers the MCP server via a bundled `.mcpb` Desktop Extension (Claude's official one-click install mechanism). We never edit `claude_desktop_config.json` directly — this is robust to Claude Desktop's MSIX config-path virtualization.
 
 ---
 
@@ -1033,9 +1033,11 @@ Distributed as a `.exe` installer built via `electron-builder` + NSIS. Ships:
 
 ### 16.4 Runtime (End-User Machine)
 
-Ships inside the company-specific installer produced by Build Studio. Installs to:
-- Windows: `C:\Program Files\Conxa\runtime\runtime-win.exe`
+Ships inside the company-specific installer produced by Build Studio. Per-user install (no UAC). Installs to:
+- Windows: `%LOCALAPPDATA%\Conxa\runtime\runtime.exe` (i.e. `C:\Users\<user>\AppData\Local\Conxa\runtime\`)
 - Mac: `~/.conxa/runtime/runtime` (planned; Mac support is in build scripts but Windows is the primary target)
+
+MCP registration uses the official **`.mcpb` Desktop Extension** mechanism (bundled in the installer). Claude Desktop handles config writes internally — we do not edit `claude_desktop_config.json` directly. This avoids MSIX filesystem virtualization issues that affect per-user config paths on Windows (see claude-code issue #26073).
 
 ---
 

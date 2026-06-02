@@ -267,9 +267,9 @@ flowchart TD
 
 **Installer contents:**
 - `skill-packs/{company}/` (pack.json with tracking config embedded)
-- `runtime-win.exe`
-- Chromium browser
-- NSIS installer logic (register MCP in Claude Desktop config)
+- `runtime.exe` + `keytar.node`
+- Chromium browser (fetched at install time, not bundled)
+- `conxa.mcpb` Desktop Extension (handles MCP registration via Claude's official mechanism)
 
 ---
 
@@ -277,30 +277,30 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Customer receives {Company}-Plugin-Setup.exe] --> B[Run installer]
-    B --> C[NSIS installs runtime-win.exe]
-    C --> D[NSIS installs Chromium]
-    D --> E[NSIS installs skill-packs/{company}/]
-    E --> F[NSIS writes Claude Desktop MCP config]
-    F --> G[Installer complete]
-    G --> H[Customer restarts Claude Desktop]
-    H --> I[Claude Desktop starts runtime-win.exe via MCP stdio]
-    I --> J[Runtime loads skill index from cache]
-    J --> K[Runtime connects MCP]
-    K --> L[list_skills tool available in Claude]
+    A[Customer receives Company-Claude-Setup.exe] --> B[Run installer - no UAC]
+    B --> C[NSIS installs runtime.exe to %LOCALAPPDATA%\Conxa\runtime\]
+    C --> D[NSIS runs runtime.exe --install-playwright]
+    D --> E[NSIS installs skill-packs to %LOCALAPPDATA%\Conxa\skill-packs\company\]
+    E --> F[NSIS copies conxa.mcpb to %LOCALAPPDATA%\Conxa\]
+    F --> G{Claude Desktop installed?}
+    G -->|.mcpb association found| H[ExecShell opens conxa.mcpb in Claude]
+    G -->|Not found| I[Show: install Claude then double-click conxa.mcpb]
+    H --> J[Claude shows extension install dialog]
+    J --> K[Customer clicks Install - one confirm]
+    K --> L[Customer restarts Claude Desktop]
+    L --> M[Claude Desktop starts runtime.exe via MCP stdio]
+    M --> N[Runtime sets CONXA_DIR from manifest env var]
+    N --> O[Runtime finds Chromium + skill packs via CONXA_DIR]
+    O --> P[list_skills tool available in Claude]
 ```
 
-**Claude Desktop MCP config registered:**
-```json
-{
-  "mcpServers": {
-    "conxa": {
-      "command": "C:\\Program Files\\Conxa\\runtime\\runtime-win.exe",
-      "args": []
-    }
-  }
-}
-```
+**Install scope:** Per-user (`RequestExecutionLevel user`), installs to `%LOCALAPPDATA%\Conxa`. No admin elevation required. Correctly resolves to the logged-in user's profile (avoids the elevated-admin-wrong-profile bug).
+
+**MCP registration:** Via official `.mcpb` Desktop Extension mechanism. Claude Desktop owns `claude_desktop_config.json` — we never write to it. This is robust to MSIX filesystem virtualization (Claude Desktop MSIX reads config from `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\`, not `%APPDATA%\Claude\`).
+
+**CONXA_DIR wiring:** The `manifest.json` inside `conxa.mcpb` sets `env.CONXA_DIR = ${HOME}\AppData\Local\Conxa`. `server.js` derives `PLAYWRIGHT_BROWSERS_PATH` and `SKILL_PACKS_DIR` from `CONXA_DIR`, so the `.mcpb`-launched runtime always finds the `.exe`-installed Chromium and skill packs.
+
+**Uninstall asymmetry:** The `.exe` uninstaller removes `%LOCALAPPDATA%\Conxa` and the HKCU deep-link key. The Claude-managed extension (`mcpServers.conxa` in Claude's config) must be removed in-app: Claude Desktop → Settings → Extensions → Conxa → Remove.
 
 ---
 
