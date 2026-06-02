@@ -416,48 +416,9 @@ function _toolDefinitions() {
       },
     },
     {
-      name: "get_execution_status",
-      description: "Return the status of any currently running execution.",
-      inputSchema: { type: "object", properties: {}, required: [] },
-    },
-    {
-      name: "get_runtime_status",
-      description: "Return non-mutating Conxa runtime diagnostics: loaded packs, tracking config presence, sync URLs, and log paths.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          company: { type: "string", description: "Filter to a specific company slug (optional)" },
-        },
-        required: [],
-      },
-    },
-    {
       name: "cancel_execution",
       description: "Cancel the currently running execution. Safe to call at any time.",
       inputSchema: { type: "object", properties: {}, required: [] },
-    },
-    {
-      name: "refresh_skills",
-      description: "Force an immediate skill pack sync from Conxa servers. Use if skills appear outdated.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          company: { type: "string", description: "Sync only this company (optional, default: all)" },
-        },
-        required: [],
-      },
-    },
-    {
-      name: "read_skill_files",
-      description: "DEBUG ONLY — inspect raw execution.json and recovery.json for a skill.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          skill:   { type: "string" },
-          company: { type: "string" },
-        },
-        required: ["skill"],
-      },
     },
   ];
 }
@@ -502,42 +463,6 @@ function _trackingStatus(pack) {
   };
 }
 
-function _runtimeStatus(filterCompany = null) {
-  const entries = Object.values(skillIndex)
-    .filter(s => !filterCompany || s.company === filterCompany);
-  const companies = {};
-  for (const entry of entries) {
-    if (!companies[entry.company]) {
-      companies[entry.company] = {
-        company: entry.company,
-        sync_status: _syncStatus(entry.pack),
-        skill_count: 0,
-        tracking: _trackingStatus(entry.pack),
-        skills: [],
-      };
-    }
-    companies[entry.company].skill_count += 1;
-    companies[entry.company].skills.push(entry.slug);
-  }
-  return {
-    runtime_version: RUNTIME_VERSION,
-    conxa_dir: CONXA_DIR,
-    conxa_data_dir: CONXA_DATA_DIR,
-    skill_packs_dir: SKILL_PACKS_DIR,
-    cache_dir: CACHE_DIR,
-    log_file: LOG_FILE,
-    loaded_skills: Object.keys(skillIndex).length,
-    companies: Object.values(companies),
-    active_execution: activeExecution ? {
-      status: "running",
-      skill: activeExecution.slug,
-      company: activeExecution.company,
-      step: activeExecution.step,
-      total: activeExecution.total,
-      started_at: activeExecution.startedAt,
-    } : { status: "idle" },
-  };
-}
 
 // ─── Build L4/L5 failure response ─────────────────────────────────────────────
 async function _buildFailureResponse(page, err, resolvedEntry) {
@@ -653,63 +578,11 @@ async function _handleTool(name, args) {
     return text(JSON.stringify(schema));
   }
 
-  // ── get_execution_status ─────────────────────────────────────────────────────
-  if (name === "get_execution_status") {
-    if (!activeExecution) return text('{"status":"idle"}');
-    return text(JSON.stringify({
-      status:     "running",
-      skill:      activeExecution.slug,
-      company:    activeExecution.company,
-      step:       activeExecution.step,
-      total:      activeExecution.total,
-      started_at: activeExecution.startedAt,
-    }));
-  }
-
-  // ── get_runtime_status ─────────────────────────────────────────────────────
-  if (name === "get_runtime_status") {
-    return text(JSON.stringify(_runtimeStatus(args.company ? String(args.company) : null)));
-  }
-
   // ── cancel_execution ─────────────────────────────────────────────────────────
   if (name === "cancel_execution") {
     if (!activeExecution) return text('{"cancelled":false,"reason":"no active execution"}');
     activeExecution.cancelRequested = true;
     return text('{"cancelled":true}');
-  }
-
-  // ── refresh_skills ───────────────────────────────────────────────────────────
-  if (name === "refresh_skills") {
-    try {
-      await sync.syncSkillPacks(SKILL_PACKS_DIR, { timeoutMs: 15000, log: (m) => log("info", m) });
-      skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR);
-      return text(`Refreshed. ${Object.keys(skillIndex).length} skills loaded.`);
-    } catch (e) {
-      return err(`Refresh failed: ${e.message}. Cached data in use.`);
-    }
-  }
-
-  // ── read_skill_files (debug) ─────────────────────────────────────────────────
-  if (name === "read_skill_files") {
-    const entry = _resolveSkill(String(args.skill || ""), args.company ? String(args.company) : null);
-    if (!entry) return err(`Skill not found: ${args.skill}. Call list_skills.`);
-    const { skillDir } = entry;
-    const execPath     = path.join(skillDir, "execution.json");
-    const recPath      = path.join(skillDir, "recovery.json");
-    const inputsPath   = path.join(skillDir, "inputs.json");
-    const legacyInput  = path.join(skillDir, "input.json");
-    const rawExec      = fs.existsSync(execPath) ? JSON.parse(fs.readFileSync(execPath, "utf8")) : null;
-    const rawRec       = fs.existsSync(recPath)  ? JSON.parse(fs.readFileSync(recPath, "utf8"))  : null;
-    const inputSchema  = fs.existsSync(inputsPath) ? JSON.parse(fs.readFileSync(inputsPath, "utf8"))
-                       : (fs.existsSync(legacyInput) ? JSON.parse(fs.readFileSync(legacyInput, "utf8")) : null);
-    const rawSteps = Array.isArray(rawExec) ? rawExec : (rawExec?.steps || []);
-    return text(JSON.stringify({
-      slug: entry.slug, company: entry.company,
-      manifest: entry.manifest,
-      input_schema: inputSchema,
-      execution: enrichStepsWithRecovery(rawSteps, rawRec),
-      recovery: rawRec,
-    }));
   }
 
   // ── execute_skill / execute_sequence ─────────────────────────────────────────
@@ -738,7 +611,7 @@ async function _handleTool(name, args) {
         sync.syncSkillPacks(SKILL_PACKS_DIR, { timeoutMs: 15000, log: (m) => log("info", m) })
           .then(() => { skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR); })
           .catch(() => {});
-        return err(`Skill integrity check failed: ${integrityErr.message}. A re-sync has been triggered — call refresh_skills, then retry.`);
+        return err(`Skill integrity check failed: ${integrityErr.message}. A background re-sync has been triggered — please retry in a moment.`);
       }
 
       // Runtime compatibility
