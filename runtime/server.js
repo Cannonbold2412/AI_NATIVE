@@ -37,14 +37,24 @@ process.env.CONXA_DATA_DIR = CONXA_DATA_DIR;
 // ─── 3. Handle CLI flags (--install-playwright, --register-mcp, etc.) ─────────
 const [,, ...cliArgs] = process.argv;
 if (cliArgs.includes("--install-playwright")) {
-  const { execSync } = require("child_process");
   process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(CONXA_DIR, "chromium");
+  // Use playwright-core's bundled CLI runner — works inside the pkg exe without
+  // requiring system npm/npx, which is not guaranteed on end-user machines.
   try {
-    execSync("npx playwright install chromium --with-deps", { stdio: "inherit" });
-    process.exit(0);
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
+    require("playwright-core/cli")
+      .main(["install", "--with-deps", "chromium"])
+      .then(() => process.exit(0))
+      .catch((e) => { process.stderr.write(e.message + "\n"); process.exit(1); });
+  } catch (_) {
+    // Dev / CI fallback: system npx (requires Node installed globally).
+    const { execSync } = require("child_process");
+    try {
+      execSync("npx playwright install chromium --with-deps", { stdio: "inherit" });
+      process.exit(0);
+    } catch (e) {
+      process.stderr.write(e.message + "\n");
+      process.exit(1);
+    }
   }
 }
 if (cliArgs.includes("--register-mcp")) {
@@ -182,10 +192,17 @@ async function _applyPendingUpdate() {
   const suffix = Math.random().toString(36).slice(2);
   const batPath = path.join(os.tmpdir(), `conxa-update-${suffix}.bat`);
   const runtimeExe = path.join(CONXA_DIR, "runtime.exe");
+  const keytarNext    = path.join(CONXA_DIR, "keytar.node.next");
+  const keytarCurrent = path.join(CONXA_DIR, "keytar.node");
   const batContent = [
     "@echo off",
     "timeout /t 3 /nobreak >nul",
     `move /Y "${nextExe}" "${runtimeExe}"`,
+    // Swap keytar.node if a new one was staged alongside the exe.
+    `if exist "${keytarNext}" move /Y "${keytarNext}" "${keytarCurrent}"`,
+    // Re-run Playwright browser install so Chromium revision matches the new exe.
+    // Idempotent: no-op if the revision is already present on disk.
+    `"${runtimeExe}" --install-playwright`,
     `del "${batPath}"`,
   ].join("\r\n");
   fs.writeFileSync(batPath, batContent);
@@ -260,8 +277,36 @@ async function _checkRuntimeUpdate() {
     }
     fs.mkdirSync(path.dirname(nextExe), { recursive: true });
     fs.writeFileSync(nextExe, buf);
-    fs.writeFileSync(RUNTIME_UPDATE_PENDING, JSON.stringify({ version: manifest.version, ready: true }));
-    log("info", `[runtime:update-pending] v${RUNTIME_VERSION}→${manifest.version} ready`);
+
+    // Download keytar.node.next alongside the exe — must match the new Node ABI.
+    let hasKeytar = false;
+    if (manifest.keytar_url) {
+      try {
+        const keytarBuf = await new Promise((resolve, reject) => {
+          const req = https.get(manifest.keytar_url, (res) => {
+            const chunks = [];
+            res.on("data", (c) => chunks.push(c));
+            res.on("end", () => resolve(Buffer.concat(chunks)));
+          });
+          req.setTimeout(60_000, () => { req.destroy(); reject(new Error("keytar download timeout")); });
+          req.on("error", reject);
+        });
+        if (manifest.keytar_sha256) {
+          const { createHash } = require("crypto");
+          const actual = createHash("sha256").update(keytarBuf).digest("hex");
+          if (actual.toLowerCase() !== manifest.keytar_sha256.toLowerCase())
+            throw new Error(`keytar SHA-256 mismatch: expected ${manifest.keytar_sha256} got ${actual}`);
+        }
+        fs.writeFileSync(path.join(CONXA_DIR, "keytar.node.next"), keytarBuf);
+        hasKeytar = true;
+      } catch (e) {
+        log("warn", "keytar_update_download_failed", { reason: e.message });
+        // Non-fatal: old keytar stays in place; token storage still works unless Node ABI changed.
+      }
+    }
+
+    fs.writeFileSync(RUNTIME_UPDATE_PENDING, JSON.stringify({ version: manifest.version, ready: true, has_keytar: hasKeytar }));
+    log("info", `[runtime:update-pending] v${RUNTIME_VERSION}→${manifest.version} ready (keytar=${hasKeytar})`);
   } catch (e) {
     log("warn", "runtime_update_download_failed", { reason: e.message });
   }

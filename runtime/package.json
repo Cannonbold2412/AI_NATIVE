@@ -22,7 +22,9 @@
       "auth_manager.js",
       "run.js",
       "browser.js",
-      "tracker.js"
+      "tracker.js",
+      "node_modules/playwright-core/cli.js",
+      "node_modules/playwright-core/lib/cli/**"
     ]
   },
   "dependencies": {

@@ -100,6 +100,8 @@ def runtime_manifest() -> dict:
         "version": _RUNTIME_VERSION,
         "url": _RUNTIME_WIN_URL,
         "sha256": _RUNTIME_WIN_SHA256,
+        "keytar_url": _RUNTIME_KEYTAR_URL,
+        "keytar_sha256": _RUNTIME_KEYTAR_SHA256,
         "min_skill_pack_version": _MIN_SKILL_PACK_VERSION,
         "playwright_version": _PLAYWRIGHT_VERSION,
         "chromium_revision": _CHROMIUM_REVISION,
