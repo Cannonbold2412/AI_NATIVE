@@ -5,14 +5,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   fetchPlugins,
   fetchTrackingCompanies,
-  fetchTrackingDiagnostics,
   fetchTrackingRun,
   fetchTrackingRuns,
   normalizePluginList,
   type TrackingEvent,
   type TrackingRunSummary,
 } from '@/api/pluginApi'
-import { fetchMe } from '@/api/productApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -351,11 +349,6 @@ export function DashboardPage() {
   const [selectedRun, setSelectedRun] = useState<TrackingRunSummary | null>(null)
   const [company, setCompany] = useState<string>('')
 
-  const { data: meData } = useQuery({
-    queryKey: ['me'],
-    queryFn: fetchMe,
-    staleTime: 60_000,
-  })
   const { data: pluginsData } = useQuery({
     queryKey: ['plugins'],
     queryFn: fetchPlugins,
@@ -366,12 +359,6 @@ export function DashboardPage() {
     queryFn: fetchTrackingCompanies,
     staleTime: 30_000,
     refetchInterval: 30_000,
-  })
-  const { data: diagnosticsData } = useQuery({
-    queryKey: ['tracking-diagnostics'],
-    queryFn: fetchTrackingDiagnostics,
-    staleTime: 30_000,
-    enabled: (trackingCompaniesData?.companies ?? []).length === 0,
   })
   const plugins   = normalizePluginList(pluginsData)
   const trackingCompanies = (trackingCompaniesData?.companies ?? [])
@@ -393,13 +380,8 @@ export function DashboardPage() {
   const stats = useAnalytics(runs)
 
   const lastUpdated = dataUpdatedAt ? fmtRelative(dataUpdatedAt) : null
-  const diagnosticWorkspaceId = diagnosticsData?.workspace_id || meData?.workspace?.id || ''
-  const isPersonalWorkspace = diagnosticWorkspaceId.startsWith('personal_')
-  const proxyTrusted = Boolean(diagnosticsData?.proxy_identity_trusted ?? meData?.proxy_identity_trusted)
-  const proxyStatus = diagnosticsData?.proxy_identity_status || meData?.proxy_identity_status
   const refreshDashboard = () => {
     void queryClient.invalidateQueries({ queryKey: ['tracking-companies'] })
-    void queryClient.invalidateQueries({ queryKey: ['tracking-diagnostics'] })
     void queryClient.invalidateQueries({ queryKey: ['plugins'] })
     if (activeCompany) {
       void queryClient.invalidateQueries({ queryKey: ['tracking-runs', activeCompany] })
@@ -456,33 +438,6 @@ export function DashboardPage() {
             <Activity className="mx-auto mb-3 size-8 text-zinc-700" />
             <p className="text-sm font-medium text-zinc-400">No tracking data found for this workspace</p>
             <p className="mt-1 text-xs text-zinc-600">Run an installed skill to start seeing execution data.</p>
-            {meData?.workspace?.id ? (
-              <p className="mt-3 text-[11px] text-zinc-700">
-                Workspace: {meData.workspace.name || meData.workspace.slug} ({meData.workspace.id})
-              </p>
-            ) : null}
-            {diagnosticsData ? (
-              <p className="mt-1 text-[11px] text-zinc-700">
-                Visible plugins: {diagnosticsData.plugin_count} · Visible companies: {diagnosticsData.visible_company_count}
-              </p>
-            ) : null}
-            {diagnosticsData ? (
-              <p className="mt-1 text-[11px] text-zinc-700">
-                Identity: {diagnosticsData.identity_source} · Proxy trusted: {diagnosticsData.proxy_identity_trusted ? 'yes' : 'no'}
-              </p>
-            ) : null}
-            {proxyStatus ? (
-              <p className="mt-1 font-mono text-[11px] text-zinc-700">
-                Proxy status: {proxyStatus}
-              </p>
-            ) : null}
-            {isPersonalWorkspace ? (
-              <p className="mx-auto mt-3 max-w-md text-xs text-amber-300/80">
-                {proxyTrusted
-                  ? 'The proxy secret is trusted, but Clerk did not provide an active organization. Select or create an organization, then sign in again.'
-                  : 'The backend is using a personal workspace. If you expected organization plugins or runs, configure the shared API proxy secret for the frontend and backend.'}
-              </p>
-            ) : null}
           </div>
         ) : (
           <>
