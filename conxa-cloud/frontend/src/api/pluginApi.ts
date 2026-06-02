@@ -420,6 +420,8 @@ export type TrackingRunDetail = {
 }
 
 export type TrackingDashboardRange = '7d' | '30d'
+export type TrackingRecoveryType = 'Selector' | 'Text Anchor' | 'Text Variant' | 'Vision'
+export type TrackingRecoveryTier = 'Tier 1' | 'Tier 2' | 'Tier 3' | 'Tier 4' | 'Unknown'
 
 export type TrackingDashboardResponse = {
   range: TrackingDashboardRange
@@ -434,15 +436,33 @@ export type TrackingDashboardResponse = {
     recovery_rate: number
     average_execution_time: number
   }
-  recovery_type_usage: Array<{ type: 'Selector' | 'Text Anchor' | 'Text Variant' | 'Vision'; count: number }>
+  recovery_type_usage: Array<{ type: TrackingRecoveryType; count: number }>
   recovery_usage_by_step: Array<{
     company: string
     workflow: string
     step_index: number | null
     step_label: string
-    recovery_type: 'Selector' | 'Text Anchor' | 'Text Variant' | 'Vision'
+    recovery_type: TrackingRecoveryType
+    tier: TrackingRecoveryTier
     count: number
     last_seen: number
+  }>
+  recovery_usage_by_workflow: Array<{
+    company: string
+    workflow: string
+    count: number
+    last_seen: number
+    steps: Array<{
+      step_index: number | null
+      step_label: string
+      total_count: number
+      last_seen: number
+      tier_counts: Array<{
+        tier: TrackingRecoveryTier
+        recovery_type: TrackingRecoveryType
+        count: number
+      }>
+    }>
   }>
   most_failed_workflows: Array<{
     workflow: string

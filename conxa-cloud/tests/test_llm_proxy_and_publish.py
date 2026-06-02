@@ -252,6 +252,7 @@ def test_tracking_dashboard_empty_workspace_has_v1_shape(monkeypatch, tmp_path):
         "Vision",
     ]
     assert body["recovery_usage_by_step"] == []
+    assert body["recovery_usage_by_workflow"] == []
     assert "recent_activity" not in body
     assert len(body["execution_trend"]) == 30
 
@@ -294,6 +295,8 @@ def test_tracking_dashboard_aggregates_workspace_metrics(monkeypatch, tmp_path):
             "evts": [
                 {"e": "wf_start", "ts": now_ms - 60_000},
                 {"e": "rec_ok", "ts": now_ms - 50_000, "si": 0, "sc": "selector"},
+                {"e": "tier_ok", "ts": now_ms - 49_000, "si": 0, "tier": "tier2_a11y"},
+                {"e": "rec_ok", "ts": now_ms - 48_000, "si": 0, "sc": "text_variant"},
                 {"e": "tier_ok", "ts": now_ms - 45_000, "si": 1, "tier": "tier2_a11y"},
                 {"e": "rec_ok", "ts": now_ms - 40_000, "si": 2, "sc": "text_variant"},
                 {"e": "rec_ok", "ts": now_ms - 35_000, "si": 3, "sc": "vision"},
@@ -347,16 +350,32 @@ def test_tracking_dashboard_aggregates_workspace_metrics(monkeypatch, tmp_path):
     assert body["metrics"]["average_execution_time"] == 2100
 
     recovery = {row["type"]: row["count"] for row in body["recovery_type_usage"]}
-    assert recovery == {"Selector": 1, "Text Anchor": 1, "Text Variant": 1, "Vision": 1}
+    assert recovery == {"Selector": 1, "Text Anchor": 2, "Text Variant": 2, "Vision": 1}
     recovery_by_step = {
         (row["workflow"], row["step_index"], row["recovery_type"]): row["count"]
         for row in body["recovery_usage_by_step"]
     }
     assert recovery_by_step == {
         ("workflow-a", 0, "Selector"): 1,
+        ("workflow-a", 0, "Text Anchor"): 1,
+        ("workflow-a", 0, "Text Variant"): 1,
         ("workflow-a", 1, "Text Anchor"): 1,
         ("workflow-a", 2, "Text Variant"): 1,
         ("workflow-a", 3, "Vision"): 1,
+    }
+    workflow_recovery = body["recovery_usage_by_workflow"][0]
+    assert workflow_recovery["company"] == "acme"
+    assert workflow_recovery["workflow"] == "workflow-a"
+    assert workflow_recovery["count"] == 6
+    step_zero = next(step for step in workflow_recovery["steps"] if step["step_index"] == 0)
+    assert step_zero["total_count"] == 3
+    assert {
+        (row["tier"], row["recovery_type"]): row["count"]
+        for row in step_zero["tier_counts"]
+    } == {
+        ("Tier 1", "Selector"): 1,
+        ("Tier 2", "Text Anchor"): 1,
+        ("Tier 3", "Text Variant"): 1,
     }
     assert body["most_failed_workflows"][0]["workflow"] == "workflow-b"
     assert body["most_failed_steps"][0]["step_index"] == 2

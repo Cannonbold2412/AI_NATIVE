@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ComponentType } from 'react'
+import { useMemo, useState, type ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchTrackingDashboard,
@@ -15,6 +15,7 @@ import {
   Activity,
   AlertTriangle,
   Building2,
+  ChevronRight,
   CheckCircle2,
   Clock3,
   Download,
@@ -245,38 +246,107 @@ function FailureLists({
   )
 }
 
-function RecoveryByStep({ rows }: { rows: TrackingDashboardResponse['recovery_usage_by_step'] }) {
+function RecoveryByStep({ workflows }: { workflows: TrackingDashboardResponse['recovery_usage_by_workflow'] }) {
+  return <RecoveryWorkflowDrilldown workflows={workflows} />
+}
+
+function RecoveryWorkflowDrilldown({
+  workflows,
+}: {
+  workflows: TrackingDashboardResponse['recovery_usage_by_workflow']
+}) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const selectedWorkflow = useMemo(() => {
+    if (workflows.length === 0) return null
+    return workflows.find((row) => `${row.company}:${row.workflow}` === selectedKey) ?? workflows[0]
+  }, [selectedKey, workflows])
+  const activeKey = selectedWorkflow ? `${selectedWorkflow.company}:${selectedWorkflow.workflow}` : null
+
   return (
     <Card className="border-white/8 bg-white/[0.025] shadow-none">
       <CardHeader className="border-b border-white/6 pb-3">
         <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
           <RotateCcw className="size-3.5" />
           Recovery By Workflow And Step
-          <span className="ml-auto text-[11px] font-normal text-zinc-600">workflow · step · recovery type</span>
+          <span className="ml-auto text-[11px] font-normal text-zinc-600">click a workflow for step tier counts</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        {rows.length === 0 ? (
+        {workflows.length === 0 || !selectedWorkflow ? (
           <p className="px-4 py-10 text-center text-xs text-zinc-600">No recovery usage recorded in this range.</p>
-        ) : rows.map((row) => (
-          <div
-            key={`${row.company}:${row.workflow}:${row.step_index ?? 'unknown'}:${row.recovery_type}`}
-            className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.2fr)_minmax(9rem,0.6fr)_auto_auto] md:items-center"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-xs font-medium text-zinc-200">{row.workflow}</p>
-              <p className="mt-0.5 truncate text-[11px] text-zinc-600">{row.company} · {fmtRelative(row.last_seen)}</p>
+        ) : (
+          <div className="grid min-h-[22rem] lg:grid-cols-[minmax(18rem,0.36fr)_minmax(0,1fr)]">
+            <div className="border-b border-white/6 lg:border-b-0 lg:border-r">
+              {workflows.map((row) => {
+                const key = `${row.company}:${row.workflow}`
+                const selected = key === activeKey
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSelectedKey(key)}
+                    className={`flex w-full items-center gap-3 border-t border-white/6 px-4 py-3 text-left transition-colors first:border-t-0 ${
+                      selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.035]'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-zinc-200">{row.workflow}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-zinc-600">{row.company} · {fmtRelative(row.last_seen)}</p>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-blue-200">{fmtNumber(row.count)}</span>
+                    <ChevronRight className={`size-3.5 shrink-0 ${selected ? 'text-zinc-200' : 'text-zinc-700'}`} />
+                  </button>
+                )
+              })}
             </div>
+
             <div className="min-w-0">
-              <p className="truncate text-xs text-zinc-300">{row.step_label}</p>
-              <p className="mt-0.5 text-[11px] text-zinc-600">{row.step_index === null ? 'step unknown' : `step ${row.step_index + 1}`}</p>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/6 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-zinc-100">{selectedWorkflow.workflow}</p>
+                  <p className="mt-0.5 text-[11px] text-zinc-600">
+                    {fmtNumber(selectedWorkflow.count)} recovery executions across {fmtNumber(selectedWorkflow.steps.length)} recovered steps
+                  </p>
+                </div>
+                <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-300">
+                  {selectedWorkflow.company}
+                </Badge>
+              </div>
+
+              {selectedWorkflow.steps.length === 0 ? (
+                <p className="px-4 py-10 text-center text-xs text-zinc-600">No step-level tier data recorded for this workflow.</p>
+              ) : selectedWorkflow.steps.map((step) => (
+                <div
+                  key={`${step.step_index ?? 'unknown'}:${step.step_label}`}
+                  className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,0.45fr)_minmax(0,1fr)] md:items-center"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-zinc-200">{step.step_label}</p>
+                    <p className="mt-0.5 text-[11px] text-zinc-600">
+                      {step.step_index === null ? 'step unknown' : `step ${step.step_index + 1}`} · {fmtNumber(step.total_count)} recoveries · {fmtRelative(step.last_seen)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {step.tier_counts.length === 0 ? (
+                      <span className="text-xs text-zinc-600">No tier counts</span>
+                    ) : step.tier_counts.map((tier) => (
+                      <Badge
+                        key={`${step.step_index ?? 'unknown'}:${tier.tier}:${tier.recovery_type}`}
+                        variant="outline"
+                        className="gap-1.5 border-white/10 bg-white/[0.035] px-2 py-1 text-[10px] text-zinc-300"
+                      >
+                        <span>{tier.tier}</span>
+                        <span className="text-zinc-600">·</span>
+                        <span className="text-zinc-500">{tier.recovery_type}</span>
+                        <span className="ml-1 font-semibold tabular-nums text-blue-200">{fmtNumber(tier.count)}</span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-            <Badge variant="outline" className="w-fit border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-300">
-              {row.recovery_type}
-            </Badge>
-            <span className="text-sm font-semibold tabular-nums text-blue-200">{fmtNumber(row.count)}</span>
           </div>
-        ))}
+        )}
       </CardContent>
     </Card>
   )
@@ -375,7 +445,7 @@ export function DashboardPage() {
           steps={data?.most_failed_steps ?? []}
         />
 
-        <RecoveryByStep rows={data?.recovery_usage_by_step ?? []} />
+        <RecoveryByStep workflows={data?.recovery_usage_by_workflow ?? []} />
 
         {!dashboardQ.isFetching && metrics.total_installs === 0 && metrics.total_executions === 0 && (
           <div className="rounded-lg border border-white/8 bg-white/[0.02] px-5 py-6 text-center">

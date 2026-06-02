@@ -30,6 +30,12 @@ public_router = APIRouter(prefix="/api/tracking", tags=["tracking"])
 
 _DAY_MS = 86_400_000
 _RECOVERY_TYPES = ("Selector", "Text Anchor", "Text Variant", "Vision")
+_RECOVERY_TIERS = (
+    ("Tier 1", "Selector"),
+    ("Tier 2", "Text Anchor"),
+    ("Tier 3", "Text Variant"),
+    ("Tier 4", "Vision"),
+)
 
 
 def current_principal(request: Request) -> Principal:
@@ -320,6 +326,22 @@ def _event_recovery_type(evt: dict[str, Any]) -> str:
     return ""
 
 
+def _event_recovery_tier(evt: dict[str, Any], recovery_type: str) -> str:
+    key = str(evt.get("rt") or evt.get("sc") or evt.get("tier") or evt.get("sel") or "").lower()
+    if key in {"selector", "selector_retry", "candidate_fallback", "dialog_scope", "tier1_compiled"}:
+        return "Tier 1"
+    if key.startswith("a11y") or key in {"text_anchor", "tier2_a11y"}:
+        return "Tier 2"
+    if key in {"text_variant", "fuzzy", "fuzzy_dom", "tier3_llm", "llm_intent"}:
+        return "Tier 3"
+    if key in {"vision", "vision_recovery", "tier4_vision"}:
+        return "Tier 4"
+    for tier, mapped_type in _RECOVERY_TIERS:
+        if recovery_type == mapped_type:
+            return tier
+    return "Unknown"
+
+
 def _run_has_recovery(record: dict[str, Any]) -> bool:
     summary = record.get("summary") or {}
     if int(_number(summary.get("recovered_steps"))) > 0:
@@ -391,6 +413,73 @@ def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]
 
     recovery_counts = {name: 0 for name in _RECOVERY_TYPES}
     recovery_step_usage: dict[str, dict[str, Any]] = {}
+    recovery_workflows: dict[str, dict[str, Any]] = {}
+
+    def record_recovery_usage(
+        *,
+        company: str,
+        workflow: str,
+        step_index: int | None,
+        recovery_type: str,
+        tier: str,
+        count: int,
+        last_seen: int,
+    ) -> None:
+        if count <= 0:
+            return
+        step_label = f"Step {step_index + 1}" if step_index is not None else "Unknown step"
+        flat_key = f"{company}:{workflow}:{step_index if step_index is not None else 'unknown'}:{recovery_type}"
+        current = recovery_step_usage.setdefault(
+            flat_key,
+            {
+                "company": company,
+                "workflow": workflow,
+                "step_index": step_index,
+                "step_label": step_label,
+                "recovery_type": recovery_type,
+                "tier": tier,
+                "count": 0,
+                "last_seen": 0,
+            },
+        )
+        current["count"] += count
+        current["last_seen"] = max(int(current["last_seen"]), last_seen)
+
+        workflow_key = f"{company}:{workflow}"
+        workflow_row = recovery_workflows.setdefault(
+            workflow_key,
+            {
+                "company": company,
+                "workflow": workflow,
+                "count": 0,
+                "last_seen": 0,
+                "steps": {},
+            },
+        )
+        workflow_row["count"] += count
+        workflow_row["last_seen"] = max(int(workflow_row["last_seen"]), last_seen)
+
+        steps = workflow_row["steps"]
+        step_key = str(step_index) if step_index is not None else "unknown"
+        step_row = steps.setdefault(
+            step_key,
+            {
+                "step_index": step_index,
+                "step_label": step_label,
+                "total_count": 0,
+                "last_seen": 0,
+                "tier_counts": {
+                    name: {"tier": name, "recovery_type": mapped_type, "count": 0}
+                    for name, mapped_type in _RECOVERY_TIERS
+                },
+            },
+        )
+        step_row["total_count"] += count
+        step_row["last_seen"] = max(int(step_row["last_seen"]), last_seen)
+        if tier not in step_row["tier_counts"]:
+            step_row["tier_counts"][tier] = {"tier": tier, "recovery_type": recovery_type, "count": 0}
+        step_row["tier_counts"][tier]["count"] += count
+
     for record in range_records:
         summary = record.get("summary") or {}
         company = str(record.get("company") or "")
@@ -400,21 +489,15 @@ def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]
             if recovery_type:
                 recovery_counts[recovery_type] += 1
                 step_index = _event_step_index(evt)
-                key = f"{company}:{workflow}:{step_index if step_index is not None else 'unknown'}:{recovery_type}"
-                current = recovery_step_usage.setdefault(
-                    key,
-                    {
-                        "company": company,
-                        "workflow": workflow,
-                        "step_index": step_index,
-                        "step_label": f"Step {step_index + 1}" if step_index is not None else "Unknown step",
-                        "recovery_type": recovery_type,
-                        "count": 0,
-                        "last_seen": 0,
-                    },
+                record_recovery_usage(
+                    company=company,
+                    workflow=workflow,
+                    step_index=step_index,
+                    recovery_type=recovery_type,
+                    tier=_event_recovery_tier(evt, recovery_type),
+                    count=1,
+                    last_seen=_epoch_ms(evt.get("ts")) or _record_time_ms(record),
                 )
-                current["count"] += 1
-                current["last_seen"] = max(int(current["last_seen"]), _epoch_ms(evt.get("ts")) or _record_time_ms(record))
     # Older runtimes may only send wf_ok.rec. Keep recovered runs visible as selector saves.
     if not any(recovery_counts.values()):
         recovery_counts["Selector"] = sum(
@@ -427,21 +510,15 @@ def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]
             summary = record.get("summary") or {}
             company = str(record.get("company") or "")
             workflow = str(summary.get("plugin_id") or "Unknown workflow")
-            key = f"{company}:{workflow}:unknown:Selector"
-            current = recovery_step_usage.setdefault(
-                key,
-                {
-                    "company": company,
-                    "workflow": workflow,
-                    "step_index": None,
-                    "step_label": "Unknown step",
-                    "recovery_type": "Selector",
-                    "count": 0,
-                    "last_seen": 0,
-                },
+            record_recovery_usage(
+                company=company,
+                workflow=workflow,
+                step_index=None,
+                recovery_type="Selector",
+                tier="Tier 1",
+                count=recovered_steps,
+                last_seen=_record_time_ms(record),
             )
-            current["count"] += recovered_steps
-            current["last_seen"] = max(int(current["last_seen"]), _record_time_ms(record))
 
     workflow_failures: dict[str, dict[str, Any]] = {}
     step_failures: dict[str, dict[str, Any]] = {}
@@ -522,6 +599,37 @@ def _dashboard_metrics(principal: Principal, range_value: str) -> dict[str, Any]
             key=lambda row: (row["count"], row["last_seen"]),
             reverse=True,
         )[:12],
+        "recovery_usage_by_workflow": [
+            {
+                "company": row["company"],
+                "workflow": row["workflow"],
+                "count": row["count"],
+                "last_seen": row["last_seen"],
+                "steps": [
+                    {
+                        "step_index": step["step_index"],
+                        "step_label": step["step_label"],
+                        "total_count": step["total_count"],
+                        "last_seen": step["last_seen"],
+                        "tier_counts": [
+                            step["tier_counts"][tier]
+                            for tier, _mapped_type in _RECOVERY_TIERS
+                            if step["tier_counts"][tier]["count"] > 0
+                        ],
+                    }
+                    for step in sorted(
+                        row["steps"].values(),
+                        key=lambda step: (step["total_count"], step["last_seen"]),
+                        reverse=True,
+                    )
+                ],
+            }
+            for row in sorted(
+                recovery_workflows.values(),
+                key=lambda row: (row["count"], row["last_seen"]),
+                reverse=True,
+            )[:8]
+        ],
         "most_failed_workflows": sorted(
             workflow_failures.values(),
             key=lambda row: (row["failed_executions"], row["last_seen"]),
