@@ -8,7 +8,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("conxa", {
   /** True when running from the packaged installer; false in `npm run dev`. */
-  isPackaged: !process.defaultApp,
+  isPackaged: process.env.CONXA_ELECTRON_IS_PACKAGED === "1",
 
   /** Invoke a backend command. Resolves to { ok, result } | { ok:false, code, message }. */
   cmd: (type, payload) => ipcRenderer.invoke("python:cmd", { type, payload }),
@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("conxa", {
   },
 
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
+
+  pickFile: (filters) => ipcRenderer.invoke("dialog:pick-file", filters),
 
   windowControls: {
     minimize: () => ipcRenderer.invoke("window:minimize"),

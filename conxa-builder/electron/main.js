@@ -17,6 +17,11 @@ const { Bridge } = require("./bridge");
 const IS_DEV = !app.isPackaged;
 const MAX_BACKEND_RESTARTS = 3;
 
+// Preload runs in a separate context where process.defaultApp is not reliable
+// for our node-launched dev wrapper. Pass the main-process packaging state
+// explicitly so the renderer can skip packaged-only bootstrap in dev.
+process.env.CONXA_ELECTRON_IS_PACKAGED = app.isPackaged ? "1" : "0";
+
 // Enforce single instance so second-instance fires (required for Windows deep-link handling).
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -146,6 +151,14 @@ ipcMain.handle("python:cmd", async (_e, { type, payload }) => {
 });
 
 ipcMain.handle("open-external", (_e, url) => shell.openExternal(url));
+
+ipcMain.handle("dialog:pick-file", async (_e, filters) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ["openFile"],
+    filters: filters ?? [{ name: "Images", extensions: ["png", "jpg", "jpeg", "ico"] }],
+  });
+  return canceled ? null : (filePaths[0] ?? null);
+});
 
 function windowFromEvent(event) {
   return BrowserWindow.fromWebContents(event.sender);

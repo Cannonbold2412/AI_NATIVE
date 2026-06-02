@@ -42,9 +42,7 @@ export function BuildInstallerPage() {
   const [installerDone, setInstallerDone] = useState(false)
   const [installerResult, setInstallerResult] = useState<InstallerBuildResult | null>(null)
   const [logoPath, setLogoPath] = useState<string | null>(null)
-  const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
-  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const plugins = useMemo(() => normalizePluginList(pluginsQ.data), [pluginsQ.data])
   const builtPlugins = useMemo(() => plugins.filter((plugin) => plugin.build), [plugins])
@@ -83,21 +81,15 @@ export function BuildInstallerPage() {
     setActivePluginId(null)
   }
 
-  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    // Electron exposes the native filesystem path on File objects
-    const nativePath = (file as File & { path?: string }).path ?? null
-    setLogoPath(nativePath)
-    if (logoPreview) URL.revokeObjectURL(logoPreview)
-    setLogoPreview(URL.createObjectURL(file))
+  async function handlePickLogo() {
+    const picked = await window.conxa.pickFile([
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'ico'] },
+    ])
+    if (picked) setLogoPath(picked)
   }
 
   function handleClearLogo() {
     setLogoPath(null)
-    if (logoPreview) URL.revokeObjectURL(logoPreview)
-    setLogoPreview(null)
-    if (logoInputRef.current) logoInputRef.current.value = ''
   }
 
   async function handleBuildInstaller() {
@@ -240,23 +232,11 @@ export function BuildInstallerPage() {
 
               {/* Logo picker */}
               <div className="mx-4 mt-1 flex items-center gap-3">
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept=".png,.jpg,.jpeg,.ico"
-                  className="hidden"
-                  onChange={handleLogoChange}
-                />
-                {logoPreview ? (
+                {logoPath ? (
                   <div className="flex items-center gap-2">
-                    <img
-                      src={logoPreview}
-                      alt="Installer logo"
-                      className="size-9 rounded border border-white/10 object-contain bg-black/20"
-                    />
                     <div className="flex flex-col">
-                      <span className="text-xs text-zinc-300 truncate max-w-[160px]">
-                        {logoPath?.split(/[\\/]/).pop()}
+                      <span className="text-xs text-zinc-300 truncate max-w-[200px]">
+                        {logoPath.split(/[\\/]/).pop()}
                       </span>
                       <span className="text-[10px] text-zinc-500">Installer logo</span>
                     </div>
@@ -272,7 +252,7 @@ export function BuildInstallerPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => logoInputRef.current?.click()}
+                    onClick={handlePickLogo}
                     className="flex items-center gap-1.5 rounded-md border border-dashed border-amber-500/40 px-2.5 py-1.5 text-xs text-amber-400 hover:border-amber-400/70 hover:text-amber-300 transition-colors"
                   >
                     <ImagePlus className="size-3.5" />

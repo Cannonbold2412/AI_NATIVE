@@ -26,6 +26,7 @@ declare global {
       cmd: <T = unknown>(type: string, payload?: unknown) => Promise<CmdResponse<T>>;
       onEvent: (handler: (event: BackendEvent) => void) => () => void;
       openExternal: (url: string) => Promise<void>;
+      pickFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
       windowControls: {
         minimize: () => Promise<void>;
         toggleMaximize: () => Promise<boolean>;

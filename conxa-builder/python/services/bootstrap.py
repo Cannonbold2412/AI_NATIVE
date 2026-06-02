@@ -71,14 +71,28 @@ def _download(url: str, dest: Path, on_event: EventSink | None, label: str) -> N
         raise
 
 
+def _find_nsis_in_dir(nsis_dir: Path) -> Path | None:
+    """Return a makensis.exe that has makensisw.exe alongside it, or None.
+
+    On Windows, makensis.exe (2 KB stub) delegates to makensisw.exe in the same
+    directory. A standalone makensis.exe without its companion fails with
+    'Unable to start child process, error 0x2'.
+    """
+    for p in nsis_dir.rglob("makensis.exe"):
+        if (p.parent / "makensisw.exe").is_file():
+            return p
+    return None
+
+
 def ensure_nsis(manifest: dict[str, Any], on_event: EventSink | None = None) -> Path:
     """Ensure makensis.exe is present; return its path. Sets MAKENSIS_PATH."""
     nsis_dir = _deps_dir() / "nsis"
-    makensis = nsis_dir / "makensis.exe"
-    if makensis.is_file():
-        os.environ["MAKENSIS_PATH"] = str(makensis)
+
+    ready = _find_nsis_in_dir(nsis_dir)
+    if ready:
+        os.environ["MAKENSIS_PATH"] = str(ready)
         _emit(on_event, dep="nsis", status="ready")
-        return makensis
+        return ready
 
     spec = manifest.get("nsis") or {}
     url, sha = spec.get("url"), spec.get("sha256")
@@ -92,19 +106,12 @@ def ensure_nsis(manifest: dict[str, Any], on_event: EventSink | None = None) -> 
     with zipfile.ZipFile(archive) as z:
         z.extractall(nsis_dir)
     archive.unlink(missing_ok=True)
-    # makensis.exe may be nested inside a version subdirectory (e.g. nsis-3.10/).
-    # Find it and copy it to the canonical top-level location so subsequent
-    # check_status() and _find_makensis() calls find it reliably.
-    found = next((p for p in nsis_dir.rglob("makensis.exe")), None)
-    if not found:
+    ready = _find_nsis_in_dir(nsis_dir)
+    if not ready:
         raise RuntimeError("makensis.exe not found in NSIS archive")
-    canonical = nsis_dir / "makensis.exe"
-    if not canonical.is_file():
-        import shutil as _shutil
-        _shutil.copy2(found, canonical)
-    os.environ["MAKENSIS_PATH"] = str(canonical)
+    os.environ["MAKENSIS_PATH"] = str(ready)
     _emit(on_event, dep="nsis", status="ready")
-    return canonical
+    return ready
 
 
 def ensure_chromium(on_event: EventSink | None = None) -> None:
@@ -174,7 +181,7 @@ def check_status() -> dict[str, Any]:
     """Fast, offline check of which deps are already present. No downloads."""
     deps = _deps_dir()
 
-    nsis_ready = (deps / "nsis" / "makensis.exe").is_file()
+    nsis_ready = _find_nsis_in_dir(deps / "nsis") is not None
 
     chromium_dir = deps / "chromium"
     chromium_ready = chromium_dir.is_dir() and any(
