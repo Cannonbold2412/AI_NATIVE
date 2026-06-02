@@ -27,7 +27,7 @@ export function LoginOverlay({ onLogin }: { onLogin: (identity: Identity) => voi
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#090b0d]/95 backdrop-blur-sm"
+      className="fixed inset-x-0 top-10 bottom-0 z-[9999] flex items-center justify-center bg-[#090b0d]/95 backdrop-blur-sm"
       aria-modal="true"
       role="dialog"
       aria-label="Sign in"
