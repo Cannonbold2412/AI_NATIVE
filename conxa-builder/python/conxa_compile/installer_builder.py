@@ -1,7 +1,7 @@
 """Build a signed Windows NSIS installer for a compiled skill pack.
 
 The installer bundles:
-- runtime.exe + keytar.node (fetched from Conxa CDN or a local build)
+- runtime.exe + keytar.node from the Build Studio runtime cache
 - skill-packs/{company}/ directory
 - NSIS install script that registers the Conxa MCP server in Claude Desktop
 
@@ -15,18 +15,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
-import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
 from conxa_core.config import settings
 
-_GITHUB_REPO      = os.getenv("CONXA_GITHUB_REPO", "Cannonbold2412/AI_NATIVE")
-RUNTIME_CDN_URL   = os.getenv("CONXA_RUNTIME_CDN_URL", f"https://github.com/{_GITHUB_REPO}/releases/download")
-RUNTIME_VERSION   = os.getenv("CONXA_RUNTIME_VERSION", "runtime-v1.0.0")
 SIGNTOOL_PATH     = os.getenv("CONXA_SIGNTOOL_PATH", "signtool.exe")
 SIGN_CERT_SHA1    = os.getenv("CONXA_SIGN_CERT_SHA1", "")
 MAKENSIS_PATH     = os.getenv("MAKENSIS_PATH", "makensis")
@@ -98,7 +95,6 @@ def build_installer(
     logo_path: str | None = None,
     version: str | None = None,
     release_notes: str = "",
-    cloud_api: str | None = None,
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Package an already-built plugin into a Windows installer EXE.
@@ -151,8 +147,8 @@ def build_installer(
     except Exception as exc:
         raise RuntimeError(f"Built skill pack has invalid pack.json: {exc}") from exc
 
-    runtime_spec = _resolve_runtime_spec(cloud_api, _log)
-    runtime_version = str(runtime_spec.get("version") or RUNTIME_VERSION)
+    studio_runtime_dir = _find_studio_cache_runtime_dir()
+    runtime_version = studio_runtime_dir.name
 
     # The installer must carry a sync_token so the runtime can pull updates without
     # any user-facing Conxa login. publish_skill_pack() writes this token after a
@@ -172,11 +168,11 @@ def build_installer(
         tmp = Path(tmpdir)
         _log(f"Working directory: {tmp}")
 
-        # ── 2. Fetch or copy runtime binary ───────────────────────────────────
-        _log(f"Fetching runtime {runtime_version}…")
+        # ── 2. Stage runtime binary ───────────────────────────────────────────
+        _log(f"Staging local Build Studio runtime from {studio_runtime_dir}")
         runtime_dir = tmp / "runtime"
         runtime_dir.mkdir()
-        _stage_runtime_binary(runtime_dir, _log, runtime_spec)
+        _stage_runtime_binary(runtime_dir, _log, studio_runtime_dir=studio_runtime_dir)
         _log("Runtime staged")
 
         # ── 3. Stage skill pack ───────────────────────────────────────────────
@@ -197,7 +193,14 @@ def build_installer(
         # ── 4. Render NSIS script ─────────────────────────────────────────────
         company_name = plugin.name
         _log(f"Rendering NSIS script (company={company_slug!r}, version={installer_version})…")
-        nsi_path = _render_nsis_script(tmp, company_slug, company_name, installer_version, icon_path=staged_icon)
+        nsi_path = _render_nsis_script(
+            tmp,
+            company_slug,
+            company_name,
+            installer_version,
+            runtime_version=runtime_version,
+            icon_path=staged_icon,
+        )
         _log(f"NSIS script written to {nsi_path}")
 
         # ── 5. Compile installer ──────────────────────────────────────────────
@@ -271,109 +274,96 @@ def build_installer(
     }
 
 
-def _default_runtime_spec() -> dict[str, str]:
-    return {
-        "version": RUNTIME_VERSION,
-        "win_url": f"{RUNTIME_CDN_URL}/{RUNTIME_VERSION}/runtime-win.exe",
-        "keytar_url": f"{RUNTIME_CDN_URL}/{RUNTIME_VERSION}/keytar.node",
-    }
+_STUDIO_RUNTIME_MISSING = (
+    "Local Build Studio runtime not found at ~/.conxa-build-studio/deps/runtime/<version>. "
+    "Run dependency bootstrap first."
+)
 
 
-def _resolve_runtime_spec(cloud_api: str | None, log: Callable[[str], None] | None = None) -> dict[str, str]:
-    """Return the runtime release metadata used for installer staging."""
-    if not cloud_api:
-        return _default_runtime_spec()
+def _studio_runtime_root() -> Path:
+    return Path.home() / ".conxa-build-studio" / "deps" / "runtime"
 
-    url = f"{cloud_api.rstrip('/')}/api/v1/updates/deps-manifest"
-    if log:
-        log(f"Fetching runtime manifest from {url}")
-    try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            manifest = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:
-        raise RuntimeError(f"Could not fetch runtime manifest from Conxa Cloud: {exc}") from exc
 
-    runtime = manifest.get("runtime") or {}
-    version = str(runtime.get("version") or "").strip()
-    win_url = str(runtime.get("win_url") or runtime.get("url") or "").strip()
-    keytar_url = str(runtime.get("keytar_url") or "").strip()
-    if not version or not win_url:
-        raise RuntimeError("Conxa Cloud deps manifest is missing runtime.version or runtime.win_url")
-    return {
-        "version": version,
-        "win_url": win_url,
-        "keytar_url": keytar_url,
-    }
+def _runtime_version_sort_key(path: Path) -> tuple[int, tuple[int, ...], str]:
+    numbers = tuple(int(part) for part in re.findall(r"\d+", path.name))
+    return (1 if numbers else 0, numbers, path.name)
+
+
+def _find_studio_cache_runtime_dir() -> Path:
+    """Return the latest Build Studio runtime cache directory."""
+    runtime_root = _studio_runtime_root()
+    if not runtime_root.is_dir():
+        raise RuntimeError(_STUDIO_RUNTIME_MISSING)
+
+    candidates = [
+        p for p in runtime_root.iterdir()
+        if p.is_dir() and not p.name.startswith(".") and not p.name.endswith(".prev")
+    ]
+    if not candidates:
+        raise RuntimeError(_STUDIO_RUNTIME_MISSING)
+
+    candidate = max(candidates, key=_runtime_version_sort_key)
+    runtime_exe = candidate / "runtime-win.exe"
+    keytar_node = candidate / "keytar.node"
+    if not runtime_exe.is_file():
+        raise RuntimeError(
+            f"Latest Build Studio runtime is missing runtime-win.exe: {runtime_exe}. "
+            "Run dependency bootstrap first."
+        )
+    if not keytar_node.is_file():
+        raise RuntimeError(
+            f"Latest Build Studio runtime is missing keytar.node: {keytar_node}. "
+            "Run dependency bootstrap first."
+        )
+    return candidate
+
+
+def _stage_studio_cache_runtime_binary(
+    dest: Path,
+    runtime_dir: Path,
+    log: Callable[[str], None] | None = None,
+) -> None:
+    def _info(msg: str) -> None:
+        if log:
+            log(msg)
+
+    runtime_exe = runtime_dir / "runtime-win.exe"
+    keytar_node = runtime_dir / "keytar.node"
+    if not runtime_exe.is_file():
+        raise RuntimeError(_STUDIO_RUNTIME_MISSING)
+    if not keytar_node.is_file():
+        raise RuntimeError(
+            f"Local Build Studio runtime is missing keytar.node: {keytar_node}. "
+            "Run dependency bootstrap first."
+        )
+
+    _info(f"Copying local Build Studio runtime.exe from {runtime_exe}")
+    shutil.copy2(runtime_exe, dest / "runtime.exe")
+    _info(f"runtime.exe staged ({(dest / 'runtime.exe').stat().st_size // 1024} KB)")
+
+    _info(f"Copying local Build Studio keytar.node from {keytar_node}")
+    shutil.copy2(keytar_node, dest / "keytar.node")
+    (dest / "version.json").write_text(
+        json.dumps({"runtime_version": runtime_dir.name}), encoding="utf-8"
+    )
+    _info("version.json written")
 
 
 def _stage_runtime_binary(
     dest: Path,
     log: Callable[[str], None] | None = None,
-    runtime_spec: dict[str, str] | None = None,
+    *,
+    studio_runtime_dir: Path | None = None,
 ) -> None:
     """Stage runtime.exe + keytar.node into dest/.
 
-    Tries the local repo build first (dev), then the CDN.
+    Always uses the hardcoded Build Studio deps cache.
     """
-    def _info(msg: str) -> None:
-        if log:
-            log(msg)
-
-    runtime_spec = runtime_spec or _default_runtime_spec()
-    runtime_version = str(runtime_spec.get("version") or RUNTIME_VERSION)
-    runtime_url = str(runtime_spec.get("win_url") or runtime_spec.get("url") or "")
-    keytar_url = str(runtime_spec.get("keytar_url") or "")
-
-    builder_root = Path(__file__).parent.parent.parent
-    repo_root = builder_root.parent
-    runtime_roots = [builder_root / "runtime", repo_root / "runtime"]
-    local_exe = next(
-        (root / "dist" / "runtime-win.exe" for root in runtime_roots if (root / "dist" / "runtime-win.exe").is_file()),
-        runtime_roots[0] / "dist" / "runtime-win.exe",
+    _stage_studio_cache_runtime_binary(
+        dest,
+        studio_runtime_dir or _find_studio_cache_runtime_dir(),
+        log,
     )
-    local_node = next(
-        (
-            root / "node_modules" / "keytar" / "build" / "Release" / "keytar.node"
-            for root in runtime_roots
-            if (root / "node_modules" / "keytar" / "build" / "Release" / "keytar.node").is_file()
-        ),
-        runtime_roots[0] / "node_modules" / "keytar" / "build" / "Release" / "keytar.node",
-    )
-
-    if local_exe.is_file():
-        _info(f"Copying local runtime.exe from {local_exe}")
-        shutil.copy2(local_exe, dest / "runtime.exe")
-    else:
-        if not runtime_url:
-            raise RuntimeError("Runtime download URL is missing")
-        _info(f"Downloading runtime.exe from {runtime_url}")
-        _download_file(runtime_url, dest / "runtime.exe")
-    _info(f"runtime.exe staged ({(dest / 'runtime.exe').stat().st_size // 1024} KB)")
-
-    if local_node.is_file():
-        _info(f"Copying local keytar.node from {local_node}")
-        shutil.copy2(local_node, dest / "keytar.node")
-    elif keytar_url:
-        try:
-            _info(f"Downloading keytar.node from {keytar_url}")
-            _download_file(keytar_url, dest / "keytar.node")
-        except Exception:
-            _info("keytar.node not available — using placeholder (CI pipeline provides real file)")
-            (dest / "keytar.node").write_bytes(b"")
-    else:
-        _info("keytar.node URL not available — using placeholder (CI pipeline provides real file)")
-        (dest / "keytar.node").write_bytes(b"")
-
-    # version.json
-    (dest / "version.json").write_text(
-        json.dumps({"runtime_version": runtime_version}), encoding="utf-8"
-    )
-    _info("version.json written")
-
-
-def _download_file(url: str, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    urllib.request.urlretrieve(url, dest)
 
 
 def _render_nsis_script(
@@ -381,6 +371,7 @@ def _render_nsis_script(
     company_slug: str,
     company_name: str,
     version: str,
+    runtime_version: str | None = None,
     icon_path: Path | None = None,
 ) -> Path:
     import conxa_core.storage as _storage
@@ -395,7 +386,7 @@ def _render_nsis_script(
         .replace("{{COMPANY_SLUG}}", company_slug)
         .replace("{{COMPANY_NAME}}", company_name)
         .replace("{{VERSION}}", version)
-        .replace("{{RUNTIME_VERSION}}", RUNTIME_VERSION)
+        .replace("{{RUNTIME_VERSION}}", runtime_version or "runtime-v0.0.0")
         .replace("{{STAGING_DIR}}", str(tmp))
         .replace("{{ICON_DIRECTIVE}}", icon_directive)
     )

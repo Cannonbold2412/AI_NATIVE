@@ -11,45 +11,6 @@ def test_rendered_nsis_uses_skill_packs_paths(tmp_path):
     assert r"${STAGING_DIR}\plugins\${COMPANY_SLUG}\*.*" not in rendered
 
 
-def test_resolve_runtime_spec_uses_cloud_deps_manifest(monkeypatch):
-    from conxa_compile import installer_builder
-
-    class FakeResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def read(self):
-            return (
-                b'{"runtime":{"version":"runtime-v1.2.3",'
-                b'"win_url":"https://example.test/runtime-win.exe",'
-                b'"keytar_url":"https://example.test/keytar.node"}}'
-            )
-
-    seen = {}
-
-    def fake_urlopen(url, timeout):
-        seen["url"] = url
-        seen["timeout"] = timeout
-        return FakeResponse()
-
-    monkeypatch.setattr(installer_builder.urllib.request, "urlopen", fake_urlopen)
-
-    spec = installer_builder._resolve_runtime_spec("https://cloud.example", None)
-
-    assert seen == {
-        "url": "https://cloud.example/api/v1/updates/deps-manifest",
-        "timeout": 30,
-    }
-    assert spec == {
-        "version": "runtime-v1.2.3",
-        "win_url": "https://example.test/runtime-win.exe",
-        "keytar_url": "https://example.test/keytar.node",
-    }
-
-
 def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, monkeypatch):
     import subprocess
 
@@ -79,10 +40,13 @@ def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, 
     def fail_rebuild(*args, **kwargs):
         raise AssertionError("build_installer must not rebuild the plugin")
 
-    def fake_stage_runtime(dest, log=None, runtime_spec=None):
+    studio_runtime_dir = tmp_path / ".conxa-build-studio" / "deps" / "runtime" / "runtime-v-local"
+    studio_runtime_dir.mkdir(parents=True)
+
+    def fake_stage_runtime(dest, log=None, *, studio_runtime_dir=None):
         (dest / "runtime.exe").write_bytes(b"runtime")
         (dest / "keytar.node").write_bytes(b"keytar")
-        (dest / "version.json").write_text('{"runtime_version":"v1.0.0"}', encoding="utf-8")
+        (dest / "version.json").write_text('{"runtime_version":"runtime-v-local"}', encoding="utf-8")
 
     def fake_run(args, **kwargs):
         output_arg = next(arg for arg in args if str(arg).startswith("/DOUTPUT_PATH="))
@@ -96,6 +60,7 @@ def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, 
     monkeypatch.setattr(plugin_store, "get_plugin", lambda plugin_id: plugin)
     monkeypatch.setattr(plugin_store, "set_installer", lambda *args, **kwargs: None)
     monkeypatch.setattr(installer_builder, "_find_makensis", lambda: "makensis")
+    monkeypatch.setattr(installer_builder, "_find_studio_cache_runtime_dir", lambda: studio_runtime_dir)
     monkeypatch.setattr(installer_builder, "_stage_runtime_binary", fake_stage_runtime)
     monkeypatch.setattr(installer_builder.subprocess, "run", fake_run)
 
