@@ -68,7 +68,7 @@ Section "SkillPacks" SEC_SKILLS
   ; Copy company skill pack — preserves other companies' directories
   File /r "${STAGING_DIR}\skill-packs\${COMPANY_SLUG}\*.*"
   ; Force runtime.exe to rescan the newly installed pack instead of using stale cache.
-  Delete "$LOCALAPPDATA\Conxa\cache\manifests.json"
+  Delete "${INSTALL_DIR}\cache\manifests.json"
 SectionEnd
 
 ; ── MCP registration ──────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ Section "MCPRegistration" SEC_MCP
   ; the PS script can write the file even if Claude has never been launched.
   CreateDirectory "$APPDATA\Claude"
 
-  FileOpen $0 "$TEMP\conxa_mcp.ps1" w
+  FileOpen $0 "${RUNTIME_DIR}\conxa_mcp.ps1" w
   FileWrite $0 "$$p = '$APPDATA\Claude\claude_desktop_config.json'$\r$\n"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { $$c = [PSCustomObject]@{} }$\r$\n"
   FileWrite $0 "if (-not $$c.mcpServers) { $$c | Add-Member mcpServers ([PSCustomObject]@{}) }$\r$\n"
@@ -93,16 +93,16 @@ Section "MCPRegistration" SEC_MCP
   FileWrite $0 "$$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8$\r$\n"
   FileClose $0
 
-  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '$TEMP\conxa_mcp.ps1'"
+  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '${RUNTIME_DIR}\conxa_mcp.ps1'"
   Pop $0
-  Delete "$TEMP\conxa_mcp.ps1"
+  Delete "${RUNTIME_DIR}\conxa_mcp.ps1"
 
   ; ── Claude Code (~/.claude.json) ────────────────────────────────────────────
   ; Only update if the file already exists — never create it.
   IfFileExists "$PROFILE\.claude.json" claudecode_update claudecode_skip
 
   claudecode_update:
-  FileOpen $1 "$TEMP\conxa_claude_code.ps1" w
+  FileOpen $1 "${RUNTIME_DIR}\conxa_claude_code.ps1" w
   FileWrite $1 "$$p = '$PROFILE\.claude.json'$\r$\n"
   FileWrite $1 "if (-not (Test-Path $$p)) { exit 0 }$\r$\n"
   FileWrite $1 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { exit 0 }$\r$\n"
@@ -112,9 +112,9 @@ Section "MCPRegistration" SEC_MCP
   FileWrite $1 "$$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8$\r$\n"
   FileClose $1
 
-  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '$TEMP\conxa_claude_code.ps1'"
+  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '${RUNTIME_DIR}\conxa_claude_code.ps1'"
   Pop $1
-  Delete "$TEMP\conxa_claude_code.ps1"
+  Delete "${RUNTIME_DIR}\conxa_claude_code.ps1"
 
   claudecode_skip:
 
@@ -140,21 +140,21 @@ Section "Uninstall"
 
   ; Remove Conxa entry from Claude Desktop config
   IfFileExists "$APPDATA\Claude\claude_desktop_config.json" 0 check_claudecode_rm
-  FileOpen $0 "$TEMP\conxa_mcp_rm.ps1" w
+  FileOpen $0 "${INSTALL_DIR}\conxa_mcp_rm.ps1" w
   FileWrite $0 "$$p = '$APPDATA\Claude\claude_desktop_config.json'$\r$\n"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { exit 0 }$\r$\n"
   FileWrite $0 "if ($$c.mcpServers -and ($$c.mcpServers.PSObject.Properties['conxa'])) {$\r$\n"
   FileWrite $0 "  $$c.mcpServers.PSObject.Properties.Remove('conxa')$\r$\n"
   FileWrite $0 "  $$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8 }$\r$\n"
   FileClose $0
-  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '$TEMP\conxa_mcp_rm.ps1'"
+  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '${INSTALL_DIR}\conxa_mcp_rm.ps1'"
   Pop $0
-  Delete "$TEMP\conxa_mcp_rm.ps1"
+  Delete "${INSTALL_DIR}\conxa_mcp_rm.ps1"
 
   check_claudecode_rm:
   ; Remove Conxa entry from Claude Code config if it exists
   IfFileExists "$PROFILE\.claude.json" 0 mcp_remove_done
-  FileOpen $0 "$TEMP\conxa_mcp_rm2.ps1" w
+  FileOpen $0 "${INSTALL_DIR}\conxa_mcp_rm2.ps1" w
   FileWrite $0 "$$p = '$PROFILE\.claude.json'$\r$\n"
   FileWrite $0 "if (-not (Test-Path $$p)) { exit 0 }$\r$\n"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { exit 0 }$\r$\n"
@@ -162,9 +162,9 @@ Section "Uninstall"
   FileWrite $0 "  $$c.mcpServers.PSObject.Properties.Remove('conxa')$\r$\n"
   FileWrite $0 "  $$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8 }$\r$\n"
   FileClose $0
-  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '$TEMP\conxa_mcp_rm2.ps1'"
+  nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File '${INSTALL_DIR}\conxa_mcp_rm2.ps1'"
   Pop $0
-  Delete "$TEMP\conxa_mcp_rm2.ps1"
+  Delete "${INSTALL_DIR}\conxa_mcp_rm2.ps1"
 
   mcp_remove_done:
   RMDir /r "${RUNTIME_DIR}"
