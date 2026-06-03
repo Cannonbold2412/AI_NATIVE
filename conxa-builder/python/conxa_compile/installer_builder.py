@@ -19,7 +19,6 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
-import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -176,10 +175,6 @@ def build_installer(
         _stage_runtime_binary(runtime_dir, _log)
         _log("Runtime staged")
 
-        # ── 2b. Build .mcpb Desktop Extension ────────────────────────────────
-        _log("Building conxa.mcpb…")
-        _build_mcpb(tmp, RUNTIME_VERSION, _log)
-
         # ── 3. Stage skill pack ───────────────────────────────────────────────
         staged_packs = tmp / "skill-packs" / company_slug
         _log(f"Staging skill pack from {skill_pack_dir}…")
@@ -270,69 +265,6 @@ def build_installer(
         "runtime_version": RUNTIME_VERSION,
         "release_notes":   release_notes,
     }
-
-
-def _build_mcpb(dest: Path, runtime_version: str, log: Callable[[str], None] | None = None) -> Path:
-    """Generate conxa.mcpb (a zip containing manifest.json) and place it in dest/.
-
-    The manifest uses the MCPB Desktop Extension spec:
-      https://github.com/anthropics/mcpb/blob/main/MANIFEST.md
-
-    Strategy (pointer model, preferred):
-      mcp_config.command points at the externally-installed runtime.exe via the
-      ${HOME} template variable, which Claude Desktop expands to the user's home dir.
-      env.CONXA_DIR tells runtime.exe where to find Chromium + skill packs.
-
-    If Claude Desktop does not support external command paths (Step 1 from the plan):
-      swap entry_point to a bundled runtime.exe copy inside the zip and update command
-      to the relative path "runtime/runtime.exe". The CONXA_DIR env var continues to
-      work in either case — it is the key that decouples the extension from the data.
-    """
-    def _info(msg: str) -> None:
-        if log:
-            log(msg)
-
-    # Windows path separator in the manifest uses backslashes inside ${HOME}/… template.
-    # Claude Desktop on Windows expands ${HOME} to the user's home directory.
-    manifest = {
-        "schema_version": "v1",
-        "name": "Conxa",
-        "version": runtime_version,
-        "description": "Run your company's Conxa automation skills inside Claude Desktop.",
-        "author": "Conxa",
-        "server": {
-            "type": "binary",
-            # Pointer model: command is the shared self-updating runtime installed by the .exe.
-            # Claude Desktop expands ${HOME} to the current user's home directory.
-            "mcp_config": {
-                "command": "${HOME}\\AppData\\Local\\Conxa\\runtime\\runtime.exe",
-                "args": [],
-                "env": {
-                    # CONXA_DIR tells runtime.exe where its Chromium + skill packs live.
-                    # This is the same value the NSIS installer unpacks files into.
-                    "CONXA_DIR": "${HOME}\\AppData\\Local\\Conxa",
-                },
-                "platform_overrides": {
-                    "darwin": {
-                        "command": "${HOME}/.conxa/runtime/runtime",
-                        "env": {
-                            "CONXA_DIR": "${HOME}/.conxa",
-                        },
-                    },
-                },
-            },
-        },
-        "compatibility": {
-            "claude_desktop": ">=0.1.0",
-            "platforms": ["win32", "darwin"],
-        },
-    }
-
-    mcpb_path = dest / "conxa.mcpb"
-    with zipfile.ZipFile(mcpb_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
-    _info(f"conxa.mcpb built ({mcpb_path.stat().st_size // 1024} KB): {mcpb_path}")
-    return mcpb_path
 
 
 def _stage_runtime_binary(dest: Path, log: Callable[[str], None] | None = None) -> None:

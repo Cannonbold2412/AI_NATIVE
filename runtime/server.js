@@ -817,8 +817,8 @@ async function _handleTool(name, args) {
   return err(`Unknown tool: ${name}`);
 }
 
-// MCP registration is handled by the official .mcpb Desktop Extension mechanism.
-// Claude Desktop owns claude_desktop_config.json; we do not edit it directly.
+// MCP registration is written to claude_desktop_config.json (and ~/.claude.json if present)
+// by the NSIS installer via PowerShell at install time.
 
 async function _phonehome() {
   const companies = [...new Set(Object.values(skillIndex).map(s => s.company))];
