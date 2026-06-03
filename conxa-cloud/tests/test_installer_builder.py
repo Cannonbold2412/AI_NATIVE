@@ -11,6 +11,45 @@ def test_rendered_nsis_uses_skill_packs_paths(tmp_path):
     assert r"${STAGING_DIR}\plugins\${COMPANY_SLUG}\*.*" not in rendered
 
 
+def test_resolve_runtime_spec_uses_cloud_deps_manifest(monkeypatch):
+    from conxa_compile import installer_builder
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return (
+                b'{"runtime":{"version":"runtime-v1.2.3",'
+                b'"win_url":"https://example.test/runtime-win.exe",'
+                b'"keytar_url":"https://example.test/keytar.node"}}'
+            )
+
+    seen = {}
+
+    def fake_urlopen(url, timeout):
+        seen["url"] = url
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(installer_builder.urllib.request, "urlopen", fake_urlopen)
+
+    spec = installer_builder._resolve_runtime_spec("https://cloud.example", None)
+
+    assert seen == {
+        "url": "https://cloud.example/api/v1/updates/deps-manifest",
+        "timeout": 30,
+    }
+    assert spec == {
+        "version": "runtime-v1.2.3",
+        "win_url": "https://example.test/runtime-win.exe",
+        "keytar_url": "https://example.test/keytar.node",
+    }
+
+
 def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, monkeypatch):
     import subprocess
 
@@ -23,7 +62,7 @@ def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, 
     skill_pack = tmp_path / "skill-packs" / "render"
     skill_pack.mkdir(parents=True)
     (skill_pack / "pack.json").write_text(
-        '{"skill_pack_version":"v9.9.9","skills":["delete-a-service","create-a-service"]}',
+        '{"skill_pack_version":"v9.9.9","skills":["delete-a-service","create-a-service"],"sync_token":"sync-token"}',
         encoding="utf-8",
     )
 
@@ -40,7 +79,7 @@ def test_build_installer_packages_existing_skill_pack_without_rebuild(tmp_path, 
     def fail_rebuild(*args, **kwargs):
         raise AssertionError("build_installer must not rebuild the plugin")
 
-    def fake_stage_runtime(dest, log=None):
+    def fake_stage_runtime(dest, log=None, runtime_spec=None):
         (dest / "runtime.exe").write_bytes(b"runtime")
         (dest / "keytar.node").write_bytes(b"keytar")
         (dest / "version.json").write_text('{"runtime_version":"v1.0.0"}', encoding="utf-8")

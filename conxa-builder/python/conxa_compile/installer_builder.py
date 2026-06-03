@@ -26,7 +26,7 @@ from conxa_core.config import settings
 
 _GITHUB_REPO      = os.getenv("CONXA_GITHUB_REPO", "Cannonbold2412/AI_NATIVE")
 RUNTIME_CDN_URL   = os.getenv("CONXA_RUNTIME_CDN_URL", f"https://github.com/{_GITHUB_REPO}/releases/download")
-RUNTIME_VERSION   = os.getenv("CONXA_RUNTIME_VERSION", "v1.0.0")
+RUNTIME_VERSION   = os.getenv("CONXA_RUNTIME_VERSION", "runtime-v1.0.0")
 SIGNTOOL_PATH     = os.getenv("CONXA_SIGNTOOL_PATH", "signtool.exe")
 SIGN_CERT_SHA1    = os.getenv("CONXA_SIGN_CERT_SHA1", "")
 MAKENSIS_PATH     = os.getenv("MAKENSIS_PATH", "makensis")
@@ -98,6 +98,7 @@ def build_installer(
     logo_path: str | None = None,
     version: str | None = None,
     release_notes: str = "",
+    cloud_api: str | None = None,
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Package an already-built plugin into a Windows installer EXE.
@@ -150,6 +151,9 @@ def build_installer(
     except Exception as exc:
         raise RuntimeError(f"Built skill pack has invalid pack.json: {exc}") from exc
 
+    runtime_spec = _resolve_runtime_spec(cloud_api, _log)
+    runtime_version = str(runtime_spec.get("version") or RUNTIME_VERSION)
+
     # The installer must carry a sync_token so the runtime can pull updates without
     # any user-facing Conxa login. publish_skill_pack() writes this token after a
     # successful publish. If it is absent the installer would silently fail to sync.
@@ -161,7 +165,7 @@ def build_installer(
         )
 
     skills = [str(skill) for skill in pack.get("skills", []) if skill]
-    installer_version = str(version or pack.get("skill_pack_version") or plugin.build.version or RUNTIME_VERSION)
+    installer_version = str(version or pack.get("skill_pack_version") or plugin.build.version or runtime_version)
     _log(f"Using existing skill pack ({len(skills)} skill(s): {', '.join(skills) if skills else 'none'})")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -169,10 +173,10 @@ def build_installer(
         _log(f"Working directory: {tmp}")
 
         # ── 2. Fetch or copy runtime binary ───────────────────────────────────
-        _log(f"Fetching runtime {RUNTIME_VERSION}…")
+        _log(f"Fetching runtime {runtime_version}…")
         runtime_dir = tmp / "runtime"
         runtime_dir.mkdir()
-        _stage_runtime_binary(runtime_dir, _log)
+        _stage_runtime_binary(runtime_dir, _log, runtime_spec)
         _log("Runtime staged")
 
         # ── 3. Stage skill pack ───────────────────────────────────────────────
@@ -250,7 +254,7 @@ def build_installer(
             installer_path=str(dest),
             filename=installer_name,
             version=installer_version,
-            runtime_version=RUNTIME_VERSION,
+            runtime_version=runtime_version,
             release_notes=release_notes,
         )
     except Exception:
@@ -262,12 +266,51 @@ def build_installer(
         "company":        company_slug,
         "plugin_id":      plugin_id,
         "version":        installer_version,
-        "runtime_version": RUNTIME_VERSION,
+        "runtime_version": runtime_version,
         "release_notes":   release_notes,
     }
 
 
-def _stage_runtime_binary(dest: Path, log: Callable[[str], None] | None = None) -> None:
+def _default_runtime_spec() -> dict[str, str]:
+    return {
+        "version": RUNTIME_VERSION,
+        "win_url": f"{RUNTIME_CDN_URL}/{RUNTIME_VERSION}/runtime-win.exe",
+        "keytar_url": f"{RUNTIME_CDN_URL}/{RUNTIME_VERSION}/keytar.node",
+    }
+
+
+def _resolve_runtime_spec(cloud_api: str | None, log: Callable[[str], None] | None = None) -> dict[str, str]:
+    """Return the runtime release metadata used for installer staging."""
+    if not cloud_api:
+        return _default_runtime_spec()
+
+    url = f"{cloud_api.rstrip('/')}/api/v1/updates/deps-manifest"
+    if log:
+        log(f"Fetching runtime manifest from {url}")
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            manifest = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"Could not fetch runtime manifest from Conxa Cloud: {exc}") from exc
+
+    runtime = manifest.get("runtime") or {}
+    version = str(runtime.get("version") or "").strip()
+    win_url = str(runtime.get("win_url") or runtime.get("url") or "").strip()
+    keytar_url = str(runtime.get("keytar_url") or "").strip()
+    if not version or not win_url:
+        raise RuntimeError("Conxa Cloud deps manifest is missing runtime.version or runtime.win_url")
+    return {
+        "version": version,
+        "win_url": win_url,
+        "keytar_url": keytar_url,
+    }
+
+
+def _stage_runtime_binary(
+    dest: Path,
+    log: Callable[[str], None] | None = None,
+    runtime_spec: dict[str, str] | None = None,
+) -> None:
     """Stage runtime.exe + keytar.node into dest/.
 
     Tries the local repo build first (dev), then the CDN.
@@ -275,6 +318,11 @@ def _stage_runtime_binary(dest: Path, log: Callable[[str], None] | None = None) 
     def _info(msg: str) -> None:
         if log:
             log(msg)
+
+    runtime_spec = runtime_spec or _default_runtime_spec()
+    runtime_version = str(runtime_spec.get("version") or RUNTIME_VERSION)
+    runtime_url = str(runtime_spec.get("win_url") or runtime_spec.get("url") or "")
+    keytar_url = str(runtime_spec.get("keytar_url") or "")
 
     builder_root = Path(__file__).parent.parent.parent
     repo_root = builder_root.parent
@@ -296,26 +344,29 @@ def _stage_runtime_binary(dest: Path, log: Callable[[str], None] | None = None) 
         _info(f"Copying local runtime.exe from {local_exe}")
         shutil.copy2(local_exe, dest / "runtime.exe")
     else:
-        url = f"{RUNTIME_CDN_URL}/{RUNTIME_VERSION}/runtime-win.exe"
-        _info(f"Downloading runtime.exe from {url}")
-        _download_file(url, dest / "runtime.exe")
+        if not runtime_url:
+            raise RuntimeError("Runtime download URL is missing")
+        _info(f"Downloading runtime.exe from {runtime_url}")
+        _download_file(runtime_url, dest / "runtime.exe")
     _info(f"runtime.exe staged ({(dest / 'runtime.exe').stat().st_size // 1024} KB)")
 
     if local_node.is_file():
         _info(f"Copying local keytar.node from {local_node}")
         shutil.copy2(local_node, dest / "keytar.node")
-    else:
-        url = f"{RUNTIME_CDN_URL}/{RUNTIME_VERSION}/keytar.node"
+    elif keytar_url:
         try:
-            _info(f"Downloading keytar.node from {url}")
-            _download_file(url, dest / "keytar.node")
+            _info(f"Downloading keytar.node from {keytar_url}")
+            _download_file(keytar_url, dest / "keytar.node")
         except Exception:
             _info("keytar.node not available — using placeholder (CI pipeline provides real file)")
             (dest / "keytar.node").write_bytes(b"")
+    else:
+        _info("keytar.node URL not available — using placeholder (CI pipeline provides real file)")
+        (dest / "keytar.node").write_bytes(b"")
 
     # version.json
     (dest / "version.json").write_text(
-        json.dumps({"runtime_version": RUNTIME_VERSION}), encoding="utf-8"
+        json.dumps({"runtime_version": runtime_version}), encoding="utf-8"
     )
     _info("version.json written")
 

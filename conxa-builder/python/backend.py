@@ -799,6 +799,7 @@ class Backend:
             logo_path=logo_path,
             version=version,
             release_notes=release_notes,
+            cloud_api=self._cloud_api_base() if self._auto_publish_enabled() else None,
             realtime_sink=sink,
         )
         if publish_info:

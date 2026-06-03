@@ -19,6 +19,7 @@ def build_installer(
     logo_path: str | None = None,
     version: str | None = None,
     release_notes: str = "",
+    cloud_api: str | None = None,
     realtime_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     # Point the shared builder at the bootstrapped NSIS if not already set.
@@ -40,5 +41,6 @@ def build_installer(
         logo_path=logo_path,
         version=version,
         release_notes=release_notes,
+        cloud_api=cloud_api,
         realtime_sink=realtime_sink,
     )
