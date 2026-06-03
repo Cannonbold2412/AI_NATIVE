@@ -43,7 +43,7 @@ def _find_makensis() -> str | None:
 
     Priority:
       1. MAKENSIS_PATH env var (set by bootstrap.ensure_nsis to the managed copy)
-      2. bootstrap cache location (~/.conxa/deps/nsis/makensis.exe)
+      2. bootstrap cache location (~/.conxa-build-studio/deps/nsis/makensis.exe)
       3. System PATH
       4. Well-known Windows install locations (last resort)
     """
@@ -57,7 +57,7 @@ def _find_makensis() -> str | None:
     # 2. Bootstrap cache location (in case env var was not propagated).
     # makensis.exe on Windows is a stub that needs makensisw.exe in the same dir,
     # so search for a copy that has its companion rather than using the top-level stub.
-    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa")
+    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa-build-studio")
     nsis_dir = Path(base) / "deps" / "nsis"
     if nsis_dir.is_dir():
         for p in nsis_dir.rglob("makensis.exe"):

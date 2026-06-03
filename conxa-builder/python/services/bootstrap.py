@@ -36,7 +36,7 @@ EventSink = Callable[[dict[str, Any]], None]
 
 
 def _deps_dir() -> Path:
-    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa")
+    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa-build-studio")
     d = Path(base) / "deps"
     d.mkdir(parents=True, exist_ok=True)
     return d

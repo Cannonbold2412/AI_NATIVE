@@ -25,7 +25,7 @@ def build_installer(
     # Point the shared builder at the bootstrapped NSIS if not already set.
     # Verify makensisw.exe is beside any candidate — the top-level copy is a stub without it.
     if not os.environ.get("MAKENSIS_PATH"):
-        base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa")
+        base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa-build-studio")
         nsis_dir = Path(base) / "deps" / "nsis"
         if nsis_dir.is_dir():
             for p in nsis_dir.rglob("makensis.exe"):

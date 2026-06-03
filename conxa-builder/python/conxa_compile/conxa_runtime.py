@@ -38,12 +38,12 @@ def _is_runtime_dir(path: Path) -> bool:
 
 
 def _bootstrap_runtime_dir() -> Path | None:
-    """Locate the Studio deps-managed runtime (~/.conxa/deps/runtime/<version>/).
+    """Locate the Studio deps-managed runtime (~/.conxa-build-studio/deps/runtime/<version>/).
 
     Mirrors services.bootstrap._deps_dir(); kept inline so this module stays
     dependency-free. Returns the highest-versioned dir that holds a packed exe.
     """
-    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa")
+    base = os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa-build-studio")
     runtime_root = Path(base) / "deps" / "runtime"
     if not runtime_root.is_dir():
         return None
@@ -60,7 +60,7 @@ def resolve_runtime_dir() -> Path | None:
     Priority:
       1. $CONXA_DIR env var (explicit override — trusted as-is)
       2. $CONXA_RUNTIME_LOCAL_DIR env var (selected by bootstrap)
-      3. Studio deps-managed runtime (~/.conxa/deps/runtime/<version>/)
+      3. Studio deps-managed runtime (~/.conxa-build-studio/deps/runtime/<version>/)
 
     Returns None if no valid runtime is found.
     """
