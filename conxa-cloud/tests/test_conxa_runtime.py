@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -14,76 +13,64 @@ import pytest
 class TestResolveRuntimeDir:
     def test_env_override_takes_priority(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         (tmp_path / "server.js").touch()
+        (tmp_path / "package.json").touch()
         monkeypatch.setenv("CONXA_DIR", str(tmp_path))
-        from conxa_compile import conxa_runtime
-        monkeypatch.delattr(conxa_runtime, "resolve_runtime_dir", raising=False)
-        import importlib
-        importlib.reload(conxa_runtime)
-        result = conxa_runtime.resolve_runtime_dir()
+        monkeypatch.delenv("CONXA_RUNTIME_LOCAL_DIR", raising=False)
+
+        from conxa_compile.conxa_runtime import resolve_runtime_dir
+
+        result = resolve_runtime_dir()
+
         assert result == tmp_path
 
-    def test_env_override_ignored_if_missing_server_js(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # tmp_path exists but has no server.js
+    def test_env_override_ignored_if_invalid(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CONXA_DIR", str(tmp_path))
+        monkeypatch.delenv("CONXA_RUNTIME_LOCAL_DIR", raising=False)
+        monkeypatch.setenv("SKILL_DATA_DIR", str(tmp_path / "data"))
+
         from conxa_compile.conxa_runtime import resolve_runtime_dir
-        with patch.dict("os.environ", {"CONXA_DIR": str(tmp_path)}):
-            result = resolve_runtime_dir()
-        # Should fall through to installed or dev fallback, not return tmp_path
-        assert result != tmp_path
 
-    def test_dev_fallback_found_when_server_js_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Repo's ./runtime/ should be returned when server.js + package.json exist."""
+        result = resolve_runtime_dir()
+
+        assert result is None
+
+    def test_runtime_local_dir_takes_priority(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        invalid_env = tmp_path / "invalid"
+        runtime_dir = tmp_path / "runtime-v1.2.3"
+        runtime_dir.mkdir()
+        (runtime_dir / "runtime-win.exe").touch()
+        monkeypatch.setenv("CONXA_DIR", str(invalid_env))
+        monkeypatch.setenv("CONXA_RUNTIME_LOCAL_DIR", str(runtime_dir))
+
         from conxa_compile.conxa_runtime import resolve_runtime_dir
-        repo_root = Path(__file__).resolve().parent.parent
-        dev = repo_root / "runtime"
-        if not (dev / "server.js").is_file():
-            pytest.skip("Dev runtime not present")
-        with patch.dict("os.environ", {}, clear=False):
-            if "CONXA_DIR" in __import__("os").environ:
-                monkeypatch.delenv("CONXA_DIR", raising=False)
-            result = resolve_runtime_dir()
-        assert result is not None
-        assert (result / "server.js").is_file()
 
-    def test_dev_fallback_candidates_include_workspace_runtime(self, tmp_path: Path) -> None:
-        """Nested Build Studio source should still discover the workspace runtime/ dir."""
-        from conxa_compile.conxa_runtime import _dev_runtime_candidates, _is_runtime_dir
+        result = resolve_runtime_dir()
 
-        source = tmp_path / "workspace" / "conxa-builder" / "python" / "conxa_compile" / "conxa_runtime.py"
-        source.parent.mkdir(parents=True)
-        source.touch()
-        runtime = tmp_path / "workspace" / "runtime"
-        runtime.mkdir()
-        (runtime / "server.js").touch()
-        (runtime / "package.json").touch()
+        assert result == runtime_dir
 
-        candidates = _dev_runtime_candidates(source)
+    def test_deps_managed_runtime_is_used(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CONXA_DIR", raising=False)
+        monkeypatch.delenv("CONXA_RUNTIME_LOCAL_DIR", raising=False)
+        monkeypatch.setenv("SKILL_DATA_DIR", str(tmp_path / "data"))
+        runtime_dir = tmp_path / "data" / "deps" / "runtime" / "runtime-v1.0.0"
+        runtime_dir.mkdir(parents=True)
+        (runtime_dir / "runtime-win.exe").touch()
 
-        assert runtime in candidates
-        assert _is_runtime_dir(runtime)
+        from conxa_compile.conxa_runtime import resolve_runtime_dir
+
+        result = resolve_runtime_dir()
+
+        assert result == runtime_dir
 
     def test_returns_none_when_nothing_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("CONXA_DIR", raising=False)
-        from conxa_compile.conxa_runtime import resolve_runtime_dir
-        # Patch Path.home() and the repo-root lookup to point at empty tmp dirs
-        with patch("conxa_compile.conxa_runtime.Path") as mock_path:
-            mock_path.home.return_value = tmp_path / "fakehome"
-            mock_path.return_value.__truediv__ = lambda s, o: tmp_path / o
-            # This is hard to mock cleanly due to __file__ usage; just assert None is possible
-            # by ensuring the installed path doesn't exist
-            pass
-        # Pragmatic: if runtime/ exists in repo, skip this test
-        from conxa_compile.conxa_runtime import _dev_runtime_candidates
+        monkeypatch.delenv("CONXA_RUNTIME_LOCAL_DIR", raising=False)
+        monkeypatch.setenv("SKILL_DATA_DIR", str(tmp_path / "data"))
 
-        if any((candidate / "server.js").is_file() for candidate in _dev_runtime_candidates(Path(__file__))):
-            pytest.skip("Dev runtime present — cannot test None case")
-        if sys.platform == "win32":
-            installed = Path(r"C:\Program Files\Conxa")
-        else:
-            installed = Path.home() / ".conxa"
-        if (installed / "server.js").is_file():
-            pytest.skip("Installed runtime present — cannot test None case")
+        from conxa_compile.conxa_runtime import resolve_runtime_dir
+
         result = resolve_runtime_dir()
+
         assert result is None
 
 

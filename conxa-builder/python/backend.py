@@ -872,7 +872,7 @@ class Backend:
         if runtime_dir is None:
             raise _CommandError(
                 "runtime_not_found",
-                "Conxa runtime not found. Install the runtime (or set CONXA_DIR) to test workflows.",
+                "Conxa runtime not found. Run dependency bootstrap so Build Studio downloads the cloud runtime, or set CONXA_DIR explicitly.",
             )
 
         company = _plugin_company_slug(plugin)

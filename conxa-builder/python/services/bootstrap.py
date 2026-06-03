@@ -244,6 +244,7 @@ def ensure_runtime(manifest: dict[str, Any], on_event: EventSink | None = None) 
     keytar_url = spec.get("keytar_url")
     keytar = runtime_dir / "keytar.node"
     if exe.is_file() and (not keytar_url or keytar.is_file()):
+        os.environ["CONXA_RUNTIME_LOCAL_DIR"] = str(runtime_dir)
         _emit(on_event, dep="runtime", status="ready", version=version)
         return runtime_dir
 

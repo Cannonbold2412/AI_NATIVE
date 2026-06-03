@@ -54,60 +54,31 @@ def _bootstrap_runtime_dir() -> Path | None:
     return candidates[-1]
 
 
-def _dev_runtime_candidates(source_file: Path) -> list[Path]:
-    """Return repo-local runtime candidates for both standalone and monorepo layouts."""
-    resolved = source_file.resolve()
-    candidates: list[Path] = []
-    seen: set[Path] = set()
-
-    for parent in resolved.parents:
-        candidate = parent / "runtime"
-        if candidate not in seen:
-            candidates.append(candidate)
-            seen.add(candidate)
-
-    return candidates
-
-
 def resolve_runtime_dir() -> Path | None:
     """Find a runnable Conxa runtime directory (packed exe or server.js tree).
 
-    Priority (tuned for Studio testing, which stages a freshly built skill pack
-    into CONXA_DIR/skill-packs and therefore needs a writable location):
+    Priority:
       1. $CONXA_DIR env var (explicit override — trusted as-is)
-      2. Repo-local runtime/ (only matches in a source checkout — the developer's
-         working copy, preferred in dev; never present inside a frozen install)
-      3. Studio deps-managed runtime (~/.conxa/deps/runtime/<version>/) — the packed
-         exe; writable, used by frozen builds
-      4. Installed location (C:\\Program Files\\Conxa on Windows, ~/.conxa else) —
-         read-only last resort
+      2. $CONXA_RUNTIME_LOCAL_DIR env var (selected by bootstrap)
+      3. Studio deps-managed runtime (~/.conxa/deps/runtime/<version>/)
 
     Returns None if no valid runtime is found.
     """
-    # 1. Explicit env override
     env_dir = os.environ.get("CONXA_DIR", "").strip()
     if env_dir:
         p = Path(env_dir)
         if _is_runtime_dir(p):
             return p
 
-    # 2. Repo-local dev source tree (matches only when running from a checkout)
-    for dev in _dev_runtime_candidates(Path(__file__)):
-        if _is_runtime_dir(dev):
-            return dev
+    local_dir = os.environ.get("CONXA_RUNTIME_LOCAL_DIR", "").strip()
+    if local_dir:
+        p = Path(local_dir)
+        if _is_runtime_dir(p):
+            return p
 
-    # 3. Studio deps-managed runtime (packed exe; writable — the frozen path)
     deps_runtime = _bootstrap_runtime_dir()
     if deps_runtime is not None:
         return deps_runtime
-
-    # 4. Installed location (packed runtime.exe or server.js; may be read-only)
-    if sys.platform == "win32":
-        installed = Path(r"C:\Program Files\Conxa")
-    else:
-        installed = Path.home() / ".conxa"
-    if _is_runtime_dir(installed):
-        return installed
 
     return None
 
