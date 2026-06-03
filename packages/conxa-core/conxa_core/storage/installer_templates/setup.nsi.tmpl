@@ -88,9 +88,9 @@ Section "MCPRegistration" SEC_MCP
   FileWrite $0 "$$p = '$APPDATA\Claude\claude_desktop_config.json'$\r$\n"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { $$c = [PSCustomObject]@{} }$\r$\n"
   FileWrite $0 "if (-not $$c.mcpServers) { $$c | Add-Member mcpServers ([PSCustomObject]@{}) }$\r$\n"
-  FileWrite $0 "$$entry = [PSCustomObject]@{ command = '${RUNTIME_DIR}\runtime.exe'; env = [PSCustomObject]@{ CONXA_DIR = '${INSTALL_DIR}' } }$\r$\n"
+  FileWrite $0 "$$entry = [PSCustomObject]@{ command = '${RUNTIME_DIR}\runtime.exe'; args = @(); env = [PSCustomObject]@{ CONXA_DIR = '${INSTALL_DIR}' } }$\r$\n"
   FileWrite $0 "$$c.mcpServers | Add-Member conxa $$entry -Force$\r$\n"
-  FileWrite $0 "$$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8$\r$\n"
+  FileWrite $0 "[System.IO.File]::WriteAllText($$p, ($$c | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding $$false))$\r$\n"
   FileClose $0
 
   nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File $\"${RUNTIME_DIR}\conxa_mcp.ps1$\""
@@ -107,9 +107,9 @@ Section "MCPRegistration" SEC_MCP
   FileWrite $1 "if (-not (Test-Path $$p)) { exit 0 }$\r$\n"
   FileWrite $1 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { exit 0 }$\r$\n"
   FileWrite $1 "if (-not $$c.mcpServers) { $$c | Add-Member mcpServers ([PSCustomObject]@{}) }$\r$\n"
-  FileWrite $1 "$$entry = [PSCustomObject]@{ command = '${RUNTIME_DIR}\runtime.exe'; env = [PSCustomObject]@{ CONXA_DIR = '${INSTALL_DIR}' } }$\r$\n"
+  FileWrite $1 "$$entry = [PSCustomObject]@{ command = '${RUNTIME_DIR}\runtime.exe'; args = @(); env = [PSCustomObject]@{ CONXA_DIR = '${INSTALL_DIR}' } }$\r$\n"
   FileWrite $1 "$$c.mcpServers | Add-Member conxa $$entry -Force$\r$\n"
-  FileWrite $1 "$$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8$\r$\n"
+  FileWrite $1 "[System.IO.File]::WriteAllText($$p, ($$c | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding $$false))$\r$\n"
   FileClose $1
 
   nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File $\"${RUNTIME_DIR}\conxa_claude_code.ps1$\""
@@ -145,7 +145,7 @@ Section "Uninstall"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { exit 0 }$\r$\n"
   FileWrite $0 "if ($$c.mcpServers -and ($$c.mcpServers.PSObject.Properties['conxa'])) {$\r$\n"
   FileWrite $0 "  $$c.mcpServers.PSObject.Properties.Remove('conxa')$\r$\n"
-  FileWrite $0 "  $$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8 }$\r$\n"
+  FileWrite $0 "  [System.IO.File]::WriteAllText($$p, ($$c | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding $$false)) }$\r$\n"
   FileClose $0
   nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File $\"${INSTALL_DIR}\conxa_mcp_rm.ps1$\""
   Pop $0
@@ -160,7 +160,7 @@ Section "Uninstall"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { exit 0 }$\r$\n"
   FileWrite $0 "if ($$c.mcpServers -and ($$c.mcpServers.PSObject.Properties['conxa'])) {$\r$\n"
   FileWrite $0 "  $$c.mcpServers.PSObject.Properties.Remove('conxa')$\r$\n"
-  FileWrite $0 "  $$c | ConvertTo-Json -Depth 10 | Set-Content $$p -Encoding UTF8 }$\r$\n"
+  FileWrite $0 "  [System.IO.File]::WriteAllText($$p, ($$c | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding $$false)) }$\r$\n"
   FileClose $0
   nsExec::ExecToLog "powershell -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File $\"${INSTALL_DIR}\conxa_mcp_rm2.ps1$\""
   Pop $0
