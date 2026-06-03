@@ -243,6 +243,9 @@ function initAutoUpdate() {
     return; // dependency not bundled in this build
   }
   autoUpdater.channel = process.env.CONXA_UPDATE_CHANNEL || "stable";
+  // Install silently on next natural quit if the user dismisses the dialog.
+  autoUpdater.autoInstallOnAppQuit = true;
+
   autoUpdater.on("update-downloaded", () => {
     const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
     dialog
@@ -255,7 +258,13 @@ function initAutoUpdate() {
         if (res.response === 0) autoUpdater.quitAndInstall();
       });
   });
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+
+  // Delay the first check until the renderer has finished painting so the dialog
+  // is never attached to an invisible loading window (which caused it to be missed
+  // silently when the cached installer was already present from a prior session).
+  mainWindow.webContents.once("did-finish-load", () => {
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  });
   setInterval(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 4 * 60 * 60 * 1000);
 }
 
