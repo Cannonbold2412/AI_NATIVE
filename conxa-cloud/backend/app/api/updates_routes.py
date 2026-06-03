@@ -30,7 +30,7 @@ _NSIS_SHA256 = os.environ.get("CONXA_NSIS_SHA256", "")
 # publishes runtime and studio releases.
 _GITHUB_REPO = os.environ.get("CONXA_GITHUB_REPO", "Cannonbold2412/AI_NATIVE")
 
-_RUNTIME_VERSION = os.environ.get("CONXA_RUNTIME_VERSION", "v1.0.0")
+_RUNTIME_VERSION = os.environ.get("CONXA_RUNTIME_VERSION", "runtime-v1.0.0")
 _RUNTIME_WIN_URL = os.environ.get(
     "CONXA_RUNTIME_WIN_URL",
     f"https://github.com/{_GITHUB_REPO}/releases/download/{_RUNTIME_VERSION}/runtime-win.exe",
