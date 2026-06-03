@@ -195,7 +195,7 @@ On cold start (packaged only):
   When download complete:
   Dialog: "A new version is ready. Restart to apply?"
     → "Restart now" → autoUpdater.quitAndInstall()
-    → "Later"       → installs on next quit
+    → "Later"       → dismissed; re-prompted on next cold start
 ```
 
 **In dev (`IS_DEV = !app.isPackaged`):** `initAutoUpdate()` returns immediately. No update checks in dev.

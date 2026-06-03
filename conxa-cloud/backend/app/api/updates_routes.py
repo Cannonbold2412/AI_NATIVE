@@ -11,6 +11,7 @@ on each cold start (cached 24h locally).
 """
 
 import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
@@ -46,10 +47,10 @@ _MIN_SKILL_PACK_VERSION = os.environ.get("CONXA_MIN_SKILL_PACK_VERSION", "0.3.0"
 _PLAYWRIGHT_VERSION = os.environ.get("CONXA_PLAYWRIGHT_VERSION", "1.49.0")
 _CHROMIUM_REVISION = os.environ.get("CONXA_CHROMIUM_REVISION", "1148460")
 
-_STUDIO_VERSION = os.environ.get("CONXA_STUDIO_VERSION", "v1.0.0")
+_STUDIO_VERSION = os.environ.get("CONXA_STUDIO_VERSION", "studio-v1.0.0")
 _STUDIO_WIN_URL = os.environ.get(
     "CONXA_STUDIO_WIN_URL",
-    f"https://github.com/{_GITHUB_REPO}/releases/download/{_STUDIO_VERSION}/conxa-build-studio-setup.exe",
+    f"https://github.com/{_GITHUB_REPO}/releases/download/{_STUDIO_VERSION}/Conxa%20Build%20Studio%20Setup%201.0.0.exe",
 )
 _STUDIO_WIN_SHA256 = os.environ.get("CONXA_STUDIO_WIN_SHA256", "")
 
@@ -57,10 +58,20 @@ _STUDIO_WIN_SHA256 = os.environ.get("CONXA_STUDIO_WIN_SHA256", "")
 @router.get("/updates/deps-manifest", include_in_schema=False)
 def deps_manifest() -> dict:
     """
-    Build Studio bootstrap.py fetches this on first launch to locate NSIS and
-    the bundled runtime. Public — called before the user logs in.
+    Build Studio bootstrap.py fetches this on every startup to check for
+    dependency updates. Public — called before the user logs in.
+
+    Returns both legacy top-level keys (for pre-v2 Build Studio installs) and
+    a generic ``deps`` dict that the v2 update loop iterates over. Adding a new
+    dep only requires updating cloud env vars and the ``deps`` dict below —
+    no Build Studio release needed as long as the dep's action is a known type
+    ("copy" or "extract_zip").
     """
     return {
+        # ── v2 envelope ──────────────────────────────────────────────────────
+        "manifest_version": 2,
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        # ── legacy keys (v1 clients) ─────────────────────────────────────────
         "nsis": {
             "version": _NSIS_VERSION,
             "url": _NSIS_URL,
@@ -72,6 +83,37 @@ def deps_manifest() -> dict:
             "win_sha256": _RUNTIME_WIN_SHA256,
             "keytar_url": _RUNTIME_KEYTAR_URL,
             "keytar_sha256": _RUNTIME_KEYTAR_SHA256,
+        },
+        # ── v2 generic deps dict ─────────────────────────────────────────────
+        "deps": {
+            "nsis": {
+                "version": _NSIS_VERSION,
+                "files": [
+                    {
+                        "filename": "nsis.zip",
+                        "url": _NSIS_URL,
+                        "sha256": _NSIS_SHA256,
+                        "action": "extract_zip",
+                    }
+                ],
+            },
+            "runtime": {
+                "version": _RUNTIME_VERSION,
+                "files": [
+                    {
+                        "filename": "runtime-win.exe",
+                        "url": _RUNTIME_WIN_URL,
+                        "sha256": _RUNTIME_WIN_SHA256,
+                        "action": "copy",
+                    },
+                    {
+                        "filename": "keytar.node",
+                        "url": _RUNTIME_KEYTAR_URL,
+                        "sha256": _RUNTIME_KEYTAR_SHA256,
+                        "action": "copy",
+                    },
+                ],
+            },
         },
     }
 

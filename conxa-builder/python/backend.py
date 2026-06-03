@@ -420,6 +420,24 @@ class Backend:
         """Fast offline check — returns which deps are already present."""
         return _bootstrap_pkg.check_status()
 
+    def cmd_deps_check(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        """Fetch the cloud manifest and return which deps are outdated.
+
+        Pass {"force": true} to bypass the 24 h TTL cache.
+        Returns {"outdated": [{"dep": str, "installed": str|None, "available": str}]}
+        """
+        force = bool(payload.get("force", False))
+        outdated = _bootstrap_pkg.check_for_updates(self._cloud_api, force=force)
+        return {"outdated": outdated}
+
+    def cmd_deps_apply(self, _payload: dict[str, Any], rid: str) -> dict[str, Any]:
+        """Apply all pending dependency updates.
+
+        Downloads, verifies, and atomically installs each outdated dep.
+        Streams progress events. Returns {"ok": true} on success.
+        """
+        return _bootstrap_pkg.ensure_all(self._cloud_api, on_event=_event_sink(rid))
+
     def cmd_bootstrap(self, _payload: dict[str, Any], rid: str) -> dict[str, Any]:
         return _bootstrap_pkg.ensure_all(self._cloud_api, on_event=_event_sink(rid))
 

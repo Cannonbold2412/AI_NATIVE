@@ -244,8 +244,9 @@ function initAutoUpdate() {
   }
   autoUpdater.channel = process.env.CONXA_UPDATE_CHANNEL || "stable";
   autoUpdater.on("update-downloaded", () => {
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
     dialog
-      .showMessageBox({
+      .showMessageBox(parent, {
         type: "info",
         buttons: ["Restart now", "Later"],
         message: "A new version of Build Studio is ready. Restart to apply.",
@@ -254,8 +255,8 @@ function initAutoUpdate() {
         if (res.response === 0) autoUpdater.quitAndInstall();
       });
   });
-  autoUpdater.checkForUpdatesAndNotify();
-  setInterval(() => autoUpdater.checkForUpdatesAndNotify(), 4 * 60 * 60 * 1000);
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  setInterval(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 4 * 60 * 60 * 1000);
 }
 
 // ─── App lifecycle ──────────────────────────────────────────────────────────

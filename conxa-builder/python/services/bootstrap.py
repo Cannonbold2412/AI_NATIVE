@@ -1,23 +1,29 @@
-"""First-run dependency bootstrap for Build Studio.
+"""Dependency bootstrap and update manager for Build Studio.
 
 The installer ships only the irreducible app (Electron + PyInstaller backend).
-Everything large or license-encumbered is fetched on first launch into
-``%LOCALAPPDATA%\\Conxa\\deps\\`` and SHA-256 verified:
+All other dependencies are managed independently from the app version:
 
-- NSIS (makensis.exe)  -> deps\\nsis\\       (download per cloud manifest)
-- Chromium             -> playwright-managed  (playwright install chromium)
-- runtime-win.exe      -> deps\\runtime\\{ver} (GitHub Releases via manifest)
+- NSIS (makensis.exe)  -> deps/nsis/{version}/   (versioned, cloud manifest)
+- Chromium             -> playwright-managed       (playwright install chromium)
+- runtime-win.exe      -> deps/runtime/{version}/  (versioned, cloud manifest)
 
-Each ``ensure_*`` is idempotent. Progress is reported through ``on_event`` so
-the Electron setup screen can render it. Failures surface the exact URL so IT
-teams on proxied networks can whitelist or pre-seed manually.
+On every startup, ``ensure_all()`` fetches the cloud manifest (cached 24 h),
+compares each dep version against ``deps/installed.json``, and downloads only
+what changed. Progress is reported through ``on_event`` so the Electron setup
+screen can render it. Failures surface the exact URL so IT teams on proxied
+networks can whitelist or pre-seed manually.
+
+Updating a dep (e.g. runtime v1.0.1) requires only a cloud env-var change —
+no new Build Studio release needed.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -34,6 +40,189 @@ def _deps_dir() -> Path:
     d = Path(base) / "deps"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+# ── Installed-versions ledger ─────────────────────────────────────────────────
+
+def _installed_path() -> Path:
+    return _deps_dir() / "installed.json"
+
+
+def _manifest_cache_path() -> Path:
+    return _deps_dir() / "manifest-cache.json"
+
+
+def load_installed() -> dict[str, Any]:
+    """Return the installed-versions ledger, or {} if it doesn't exist yet."""
+    p = _installed_path()
+    if not p.is_file():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_installed(data: dict[str, Any]) -> None:
+    """Atomically write the installed-versions ledger."""
+    p = _installed_path()
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(p)
+
+
+# ── Manifest TTL cache ────────────────────────────────────────────────────────
+
+def load_manifest_cache(cloud_api: str, *, force: bool = False) -> dict[str, Any]:
+    """Return the deps manifest, using a local 24 h cache to avoid repeated fetches.
+
+    Pass ``force=True`` to bypass the cache and always hit the cloud.
+    """
+    ttl = int(os.environ.get("CONXA_DEPS_MANIFEST_TTL_SECONDS", 86400))
+    cache_path = _manifest_cache_path()
+
+    if not force and cache_path.is_file():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            if time.time() - float(cached.get("_cached_at", 0)) < ttl:
+                return cached
+        except Exception:
+            pass
+
+    manifest = fetch_manifest(cloud_api)
+    manifest["_cached_at"] = time.time()
+    tmp = cache_path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(cache_path)
+    return manifest
+
+
+# ── Update detection ──────────────────────────────────────────────────────────
+
+def check_for_updates(cloud_api: str, *, force: bool = False) -> list[dict[str, Any]]:
+    """Return a list of deps that have a newer version available in the manifest.
+
+    Each entry: {"dep": str, "installed": str|None, "available": str}
+    Deps with ``managed_by`` (e.g. chromium managed by Playwright) are skipped.
+    """
+    manifest = load_manifest_cache(cloud_api, force=force)
+    installed = load_installed()
+    outdated: list[dict[str, Any]] = []
+    for dep_name, dep_spec in manifest.get("deps", {}).items():
+        if dep_spec.get("managed_by"):
+            continue
+        avail_ver = dep_spec.get("version")
+        if not avail_ver:
+            continue
+        inst_ver = installed.get(dep_name, {}).get("version")
+        version_dir = _deps_dir() / dep_name / avail_ver
+        if inst_ver != avail_ver or not version_dir.is_dir():
+            outdated.append({"dep": dep_name, "installed": inst_ver, "available": avail_ver})
+    return outdated
+
+
+# ── Generic atomic installer ──────────────────────────────────────────────────
+
+def _configure_dep_env(dep_name: str, version_dir: Path) -> None:
+    """Set the env var that downstream tools use to locate this dep."""
+    if dep_name == "nsis":
+        ready = _find_nsis_in_dir(version_dir)
+        if ready:
+            os.environ["MAKENSIS_PATH"] = str(ready)
+    elif dep_name == "runtime":
+        os.environ["CONXA_RUNTIME_LOCAL_DIR"] = str(version_dir)
+
+
+def apply_dep_update(
+    dep_name: str,
+    dep_spec: dict[str, Any],
+    on_event: EventSink | None = None,
+) -> None:
+    """Download, verify, and atomically install a new dep version.
+
+    On success the previous version dir is kept as ``{version}.prev`` for
+    one-step rollback. The installed-versions ledger is updated atomically.
+    Leaves no partial state on failure — the temp dir is cleaned up.
+    """
+    version = dep_spec["version"]
+    dep_dir = _deps_dir() / dep_name
+    version_dir = dep_dir / version
+    tmp_dir = dep_dir / f".tmp-{int(time.time())}"
+
+    try:
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        for file_spec in dep_spec.get("files", []):
+            filename = file_spec["filename"]
+            url = file_spec["url"]
+            sha = file_spec.get("sha256", "")
+            action = file_spec.get("action", "copy")
+            dest = tmp_dir / filename
+
+            _download(url, dest, on_event, dep_name, file_name=filename)
+            _emit(on_event, dep=dep_name, status="verifying", file_name=filename)
+            if sha and _sha256(dest) != sha:
+                dest.unlink(missing_ok=True)
+                _emit(on_event, dep=dep_name, status="error",
+                      message=f"{filename} checksum mismatch")
+                raise RuntimeError(f"{dep_name} {filename} checksum mismatch")
+
+            if action == "extract_zip":
+                _emit(on_event, dep=dep_name, status="extracting", file_name=filename)
+                with zipfile.ZipFile(dest) as z:
+                    z.extractall(tmp_dir)
+                dest.unlink(missing_ok=True)
+
+        # Keep previous version as .prev for rollback
+        if version_dir.exists():
+            prev_dir = dep_dir / f"{version}.prev"
+            if prev_dir.exists():
+                shutil.rmtree(prev_dir)
+            version_dir.rename(prev_dir)
+
+        tmp_dir.rename(version_dir)
+
+        installed = load_installed()
+        installed[dep_name] = {"version": version}
+        save_installed(installed)
+
+        _configure_dep_env(dep_name, version_dir)
+        _emit(on_event, dep=dep_name, status="ready", version=version)
+
+    except Exception:
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
+def rollback_dep(dep_name: str) -> bool:
+    """Restore the previous version of a dep from its .prev dir.
+
+    Returns True if a rollback was available and applied, False otherwise.
+    Updates installed.json so the next startup reflects the reverted version.
+    """
+    installed = load_installed()
+    current_ver = installed.get(dep_name, {}).get("version", "")
+    dep_dir = _deps_dir() / dep_name
+    prev_dir = dep_dir / f"{current_ver}.prev" if current_ver else None
+
+    if not prev_dir or not prev_dir.exists():
+        # Try any .prev directory as a last resort
+        prev_candidates = list(dep_dir.glob("*.prev")) if dep_dir.is_dir() else []
+        if not prev_candidates:
+            return False
+        prev_dir = prev_candidates[0]
+
+    prev_version = prev_dir.name.removesuffix(".prev")
+    current_dir = dep_dir / current_ver if current_ver else None
+    if current_dir and current_dir.exists():
+        shutil.rmtree(current_dir, ignore_errors=True)
+    prev_dir.rename(dep_dir / prev_version)
+
+    installed[dep_name] = {"version": prev_version}
+    save_installed(installed)
+    _configure_dep_env(dep_name, dep_dir / prev_version)
+    return True
 
 
 def chromium_dir() -> Path:
@@ -270,16 +459,23 @@ def ensure_runtime(manifest: dict[str, Any], on_event: EventSink | None = None) 
 def check_status() -> dict[str, Any]:
     """Fast, offline check of which deps are already present. No downloads."""
     deps = _deps_dir()
+    installed = load_installed()
 
-    nsis_ready = _find_nsis_in_dir(deps / "nsis") is not None
+    # NSIS: check installed version dir, fall back to legacy flat dir
+    nsis_ver = installed.get("nsis", {}).get("version")
+    if nsis_ver:
+        nsis_ready = _find_nsis_in_dir(deps / "nsis" / nsis_ver) is not None
+    else:
+        nsis_ready = _find_nsis_in_dir(deps / "nsis") is not None
 
-    chromium_dir = deps / "chromium"
-    chromium_ready = chromium_dir.is_dir() and any(
-        d.is_dir() and d.name.startswith("chromium-") for d in chromium_dir.iterdir()
-    ) if chromium_dir.is_dir() else False
+    chromium_dir_ = deps / "chromium"
+    chromium_ready = (
+        chromium_dir_.is_dir()
+        and any(d.is_dir() and d.name.startswith("chromium-") for d in chromium_dir_.iterdir())
+    ) if chromium_dir_.is_dir() else False
 
-    runtime_dir = deps / "runtime"
     runtime_ready = False
+    runtime_dir = deps / "runtime"
     if runtime_dir.is_dir():
         for ver_dir in runtime_dir.iterdir():
             if (ver_dir / "runtime-win.exe").is_file():
@@ -292,6 +488,9 @@ def check_status() -> dict[str, Any]:
         "chromium": chromium_ready,
         "runtime": runtime_ready,
         "all_ready": all_ready,
+        "versions": {
+            k: v.get("version") for k, v in installed.items() if isinstance(v, dict)
+        },
     }
 
 
@@ -305,10 +504,44 @@ def fetch_manifest(cloud_api: str) -> dict[str, Any]:
 
 
 def ensure_all(cloud_api: str, on_event: EventSink | None = None) -> dict[str, Any]:
-    """Run every ensure_* step. Returns a summary the UI can display."""
-    manifest = fetch_manifest(cloud_api)
+    """Ensure all deps are present and up-to-date. Runs on every startup.
+
+    Always fetches the cloud manifest fresh (cache bypassed), then for each dep:
+    - If already at the correct version: set env var, emit ready.
+    - If missing or outdated: download, verify, atomically install.
+    Falls back gracefully when the network is unavailable.
+    """
+    # Chromium is managed by Playwright; always ensure it first
     ensure_chromium(on_event)
-    ensure_nsis(manifest, on_event)
-    ensure_runtime(manifest, on_event)
+
+    # Fetch manifest (with TTL cache; tolerate network failures)
+    try:
+        manifest = load_manifest_cache(cloud_api, force=True)
+    except Exception as exc:
+        _emit(on_event, status="warning",
+              message=f"Manifest fetch failed: {exc}. Using installed deps.")
+        manifest = {}
+
+    deps = manifest.get("deps", {})
+    if deps:
+        installed = load_installed()
+        for dep_name, dep_spec in deps.items():
+            if dep_spec.get("managed_by"):
+                continue
+            avail_ver = dep_spec.get("version")
+            if not avail_ver:
+                continue
+            inst_ver = installed.get(dep_name, {}).get("version")
+            version_dir = _deps_dir() / dep_name / avail_ver
+            if inst_ver == avail_ver and version_dir.is_dir():
+                _configure_dep_env(dep_name, version_dir)
+                _emit(on_event, dep=dep_name, status="ready", version=avail_ver)
+            else:
+                apply_dep_update(dep_name, dep_spec, on_event=on_event)
+    else:
+        # Legacy fallback: cloud manifest predates v2 (no deps dict)
+        ensure_nsis(manifest, on_event)
+        ensure_runtime(manifest, on_event)
+
     _emit(on_event, status="complete")
-    return {"ok": True, "manifest_version": manifest.get("version")}
+    return {"ok": True, "manifest_version": manifest.get("manifest_version", manifest.get("version"))}
