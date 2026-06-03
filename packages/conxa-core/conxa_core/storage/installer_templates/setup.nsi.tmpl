@@ -73,19 +73,22 @@ SectionEnd
 
 ; ── MCP registration ──────────────────────────────────────────────────────────
 ; Registers the Conxa MCP server in two places:
-;   1. %APPDATA%\Claude\claude_desktop_config.json — always (create file if absent)
+;   1. claude_desktop_config.json — auto-detects Store app path (Packages\Claude_*) or falls back to %APPDATA%\Claude
 ;   2. %USERPROFILE%\.claude.json (Claude Code) — only if the file already exists
 ; Uses PowerShell for a non-destructive JSON merge (preserves existing MCP servers).
 ; RequestExecutionLevel=user ensures $APPDATA/$LOCALAPPDATA/$PROFILE always resolve
 ; to this user's profile — no admin wrong-profile bug.
 Section "MCPRegistration" SEC_MCP
   ; ── Claude Desktop ──────────────────────────────────────────────────────────
-  ; %APPDATA%\Claude is the single canonical path. Create the directory now so
-  ; the PS script can write the file even if Claude has never been launched.
+  ; The Microsoft Store version of Claude Desktop virtualizes AppData to
+  ; %LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude. The PS script
+  ; detects this at runtime; the CreateDirectory below is a non-Store fallback.
   CreateDirectory "$APPDATA\Claude"
 
   FileOpen $0 "${RUNTIME_DIR}\conxa_mcp.ps1" w
-  FileWrite $0 "$$p = '$APPDATA\Claude\claude_desktop_config.json'$\r$\n"
+  FileWrite $0 "$$d = (Get-ChildItem $\"$$env:LOCALAPPDATA\Packages$\" -Filter 'Claude_*' -Directory -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName)$\r$\n"
+  FileWrite $0 "if ($$d) { $$p = $\"$$d\LocalCache\Roaming\Claude\claude_desktop_config.json$\" } else { $$p = $\"$$env:APPDATA\Claude\claude_desktop_config.json$\" }$\r$\n"
+  FileWrite $0 "$$dir = Split-Path $$p; if (-not (Test-Path $$dir)) { New-Item -ItemType Directory -Force $$dir | Out-Null }$\r$\n"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { $$c = [PSCustomObject]@{} }$\r$\n"
   FileWrite $0 "if (-not $$c.mcpServers) { $$c | Add-Member mcpServers ([PSCustomObject]@{}) }$\r$\n"
   FileWrite $0 "$$entry = [PSCustomObject]@{ command = '${RUNTIME_DIR}\runtime.exe'; args = @(); env = [PSCustomObject]@{ CONXA_DIR = '${INSTALL_DIR}' } }$\r$\n"
@@ -126,7 +129,7 @@ Section "MCPRegistration" SEC_MCP
   Goto mcp_done
 
   mcp_err:
-  MessageBox MB_OK "Setup complete — skill files installed.$\n$\nCould not auto-configure Claude Desktop (code $0).$\n$\nTo finish manually, add this to:$\n$APPDATA\Claude\claude_desktop_config.json$\n$\n  mcpServers > conxa:$\n    command: ${RUNTIME_DIR}\runtime.exe$\n    env.CONXA_DIR: ${INSTALL_DIR}$\n$\nThen restart Claude Desktop."
+  MessageBox MB_OK "Setup complete — skill files installed.$\n$\nCould not auto-configure Claude Desktop (code $0).$\n$\nTo finish manually, add this to claude_desktop_config.json:$\n  Store app: %LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\$\n  Standard:  %APPDATA%\Claude\$\n$\n  mcpServers > conxa:$\n    command: ${RUNTIME_DIR}\runtime.exe$\n    env.CONXA_DIR: ${INSTALL_DIR}$\n$\nThen restart Claude Desktop."
   mcp_done:
 SectionEnd
 
@@ -138,10 +141,10 @@ Section "Uninstall"
   ; Remove runtime and configs only if no other companies' skill packs remain
   IfFileExists "${INSTALL_DIR}\skill-packs\*.*" skip_shared_removal
 
-  ; Remove Conxa entry from Claude Desktop config
-  IfFileExists "$APPDATA\Claude\claude_desktop_config.json" 0 check_claudecode_rm
+  ; Remove Conxa entry from Claude Desktop config (handles both Store and standard install paths)
   FileOpen $0 "${INSTALL_DIR}\conxa_mcp_rm.ps1" w
-  FileWrite $0 "$$p = '$APPDATA\Claude\claude_desktop_config.json'$\r$\n"
+  FileWrite $0 "$$d = (Get-ChildItem $\"$$env:LOCALAPPDATA\Packages$\" -Filter 'Claude_*' -Directory -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName)$\r$\n"
+  FileWrite $0 "if ($$d) { $$p = $\"$$d\LocalCache\Roaming\Claude\claude_desktop_config.json$\" } else { $$p = $\"$$env:APPDATA\Claude\claude_desktop_config.json$\" }$\r$\n"
   FileWrite $0 "try { $$c = Get-Content $$p -Raw -EA Stop | ConvertFrom-Json } catch { exit 0 }$\r$\n"
   FileWrite $0 "if ($$c.mcpServers -and ($$c.mcpServers.PSObject.Properties['conxa'])) {$\r$\n"
   FileWrite $0 "  $$c.mcpServers.PSObject.Properties.Remove('conxa')$\r$\n"
