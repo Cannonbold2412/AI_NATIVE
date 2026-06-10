@@ -30,7 +30,17 @@ const INSTALL_ID      = loadInstallId(CONXA_DATA_DIR);
 // Respect a caller-supplied PLAYWRIGHT_BROWSERS_PATH (e.g. dev mode where CONXA_DIR
 // points to a data dir that has no chromium/ subfolder).
 if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
-  process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(CONXA_DIR, "chromium");
+  const primaryChromium = path.join(CONXA_DIR, "chromium");
+  // The NSIS installer historically places Chromium under AppData\Local\Conxa\chromium
+  // (independent of CONXA_DIR).  Fall back to that location on Windows when the
+  // primary path doesn't exist — avoids "Executable doesn't exist" on existing installs.
+  const winInstallerChromium = process.platform === "win32"
+    ? path.join(os.homedir(), "AppData", "Local", "Conxa", "chromium")
+    : null;
+  process.env.PLAYWRIGHT_BROWSERS_PATH =
+    (winInstallerChromium && !fs.existsSync(primaryChromium) && fs.existsSync(winInstallerChromium))
+      ? winInstallerChromium
+      : primaryChromium;
 }
 // Pass both dirs to browser.js
 process.env.CONXA_DIR      = CONXA_DIR;
@@ -134,7 +144,7 @@ try {
 // ─── 8. MCP server ────────────────────────────────────────────────────────────
 const server = new Server(
   { name: "conxa", version: RUNTIME_VERSION },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: { listChanged: true } } }
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: _toolDefinitions() }));
@@ -330,6 +340,8 @@ log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR })
     await sync.syncSkillPacks(SKILL_PACKS_DIR, { timeoutMs: 15000, log: (m) => log("info", m) });
     skillIndex = skillLoader.loadSkillRegistry(SKILL_PACKS_DIR, CACHE_DIR);
     log("info", "sync_complete", { count: Object.keys(skillIndex).length });
+    // Notify client that the tool list changed (skill-specific tools may have updated).
+    server.sendToolListChanged().catch(() => {});
   } catch (e) {
     log("warn", "sync_skipped", { reason: e.message });
   }
@@ -345,12 +357,46 @@ log("info", "mcp_connected", { version: RUNTIME_VERSION, conxa_dir: CONXA_DIR })
 process.on("SIGINT",  () => gracefulShutdown());
 process.on("SIGTERM", () => gracefulShutdown());
 
+// ─── Skill-specific tool definitions (generated from loaded skill index) ─────
+// One tool per installed skill so Claude can match intent directly without
+// a discovery round-trip. Tool names: skill_{company}_{slug_underscored}.
+function _skillToolDefinitions() {
+  const tools = [];
+  for (const entry of Object.values(skillIndex)) {
+    const inputsPath = path.join(entry.skillDir, "inputs.json");
+    const legacyPath = path.join(entry.skillDir, "input.json");
+    let inputFields = [];
+    try {
+      const src = fs.existsSync(inputsPath) ? inputsPath : (fs.existsSync(legacyPath) ? legacyPath : null);
+      if (src) {
+        const raw = JSON.parse(fs.readFileSync(src, "utf8"));
+        if (Array.isArray(raw.inputs)) inputFields = raw.inputs;
+      }
+    } catch (_) {}
+
+    const properties = {};
+    const required = [];
+    for (const f of inputFields) {
+      properties[f.name] = { type: f.type || "string", description: f.description || f.name };
+      required.push(f.name);
+    }
+
+    const needsStr = required.length ? ` Needs: ${required.join(", ")}.` : "";
+    tools.push({
+      name: `skill_${entry.company}_${entry.slug.replace(/-/g, "_")}`,
+      description: `Conxa: ${entry.manifest.name || entry.slug} on ${entry.company}. ${entry.manifest.description || ""}${needsStr}`,
+      inputSchema: { type: "object", properties, required },
+    });
+  }
+  return tools;
+}
+
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 function _toolDefinitions() {
   return [
     {
       name: "list_skills",
-      description: "List all installed company workflow skills. Call once before planning — returns sync_status per company.",
+      description: "Conxa automation: list all installed workflow skills. ALWAYS call this first when the user mentions Conxa or wants to automate any task on a web app (Render, GitHub, Jira, Stripe, etc.). Returns available companies and skill slugs so you can match the user's intent to the right skill.",
       inputSchema: {
         type: "object",
         properties: {
@@ -361,7 +407,7 @@ function _toolDefinitions() {
     },
     {
       name: "execute_skill",
-      description: "Execute a workflow skill. Default watch: true (visible browser). Pass watch: false only if the user explicitly asks to run in the background. Returns result on success, or failure data for recovery.",
+      description: "Conxa automation: execute a recorded browser workflow skill. Call list_skills first to get the skill slug, then get_skill_inputs to see required fields, then call this. Default watch: true (visible browser). Pass watch: false only if user explicitly asks for background execution.",
       inputSchema: {
         type: "object",
         properties: {
@@ -376,7 +422,7 @@ function _toolDefinitions() {
     },
     {
       name: "execute_sequence",
-      description: "Execute an ordered list of skills in one shared browser session. Default watch: true (visible browser). Pass watch: false only if the user explicitly asks to run in the background.",
+      description: "Conxa automation: execute an ordered list of workflow skills in one shared browser session. Use when the user wants to run multiple skills back-to-back. Default watch: true (visible browser).",
       inputSchema: {
         type: "object",
         properties: {
@@ -399,7 +445,7 @@ function _toolDefinitions() {
     },
     {
       name: "get_skill_inputs",
-      description: "Return the input schema for a skill. Always call this before execute_skill to know what to ask the user.",
+      description: "Conxa automation: return the required input fields for a skill. Always call this after list_skills and before execute_skill so you know exactly what to ask the user for.",
       inputSchema: {
         type: "object",
         properties: {
@@ -411,9 +457,11 @@ function _toolDefinitions() {
     },
     {
       name: "cancel_execution",
-      description: "Cancel the currently running execution. Safe to call at any time.",
+      description: "Conxa automation: cancel the currently running skill execution. Safe to call at any time.",
       inputSchema: { type: "object", properties: {}, required: [] },
     },
+    // Skill-specific tools: one per installed skill for direct intent routing
+    ..._skillToolDefinitions(),
   ];
 }
 
@@ -812,6 +860,21 @@ async function _handleTool(name, args) {
     } finally {
       activeExecution = null;
     }
+  }
+
+  // ── skill_{company}_{slug} — direct skill execution without discovery round-trip ──
+  if (name.startsWith("skill_")) {
+    const withoutPrefix = name.slice(6); // e.g. "render_create_a_service"
+    const entry = Object.values(skillIndex).find(
+      (e) => `${e.company}_${e.slug.replace(/-/g, "_")}` === withoutPrefix
+    );
+    if (!entry) return err(`Skill tool not found: ${name}. Call list_skills to see available skills.`);
+    return _handleTool("execute_skill", {
+      skill:   entry.slug,
+      company: entry.company,
+      inputs:  args,
+      watch:   true,
+    });
   }
 
   return err(`Unknown tool: ${name}`);
