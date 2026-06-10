@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchInstallerVersions, fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { EntitlementMeters } from '@/components/EntitlementMeters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -109,6 +110,7 @@ export function PluginsPage() {
         description="Published skills available to your customers."
       />
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6">
+        <EntitlementMeters meters={['installer_slots']} />
 
         {/* Search bar — only shown when plugins exist */}
         {plugins.length > 0 ? (

@@ -72,6 +72,23 @@ export type UsageResponse = {
   limits: Record<string, number | null>
 }
 
+export type EntitlementMeterKey = 'seats' | 'installer_slots' | 'compile_credits' | 'human_edit_tokens'
+
+export type EntitlementMeter = {
+  used: number
+  limit: number | null
+  remaining: number | null
+  unlimited: boolean
+}
+
+export type EntitlementsResponse = {
+  workspace_id: string
+  plan: string
+  period: string
+  reset_at: string
+  meters: Record<EntitlementMeterKey, EntitlementMeter>
+}
+
 export type SubscriptionResponse = {
   subscription: {
     plan: string
@@ -129,6 +146,10 @@ export function fetchDashboard(): Promise<DashboardResponse> {
 
 export function fetchUsage(): Promise<UsageResponse> {
   return apiFetch('/usage').then((r) => json<UsageResponse>(r))
+}
+
+export function fetchEntitlements(): Promise<EntitlementsResponse> {
+  return apiFetch('/entitlements/current').then((r) => json<EntitlementsResponse>(r))
 }
 
 export function fetchSubscription(): Promise<SubscriptionResponse> {

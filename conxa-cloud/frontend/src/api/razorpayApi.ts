@@ -38,7 +38,7 @@ export function listPlans(): Promise<{ plans: Plan[] }> {
   return apiFetch('/subscriptions/plans').then((r) => json<{ plans: Plan[] }>(r))
 }
 
-export function createRazorpaySubscription(tier: 'basic' | 'pro'): Promise<CreateSubscriptionResponse> {
+export function createRazorpaySubscription(tier: 'starter' | 'pro'): Promise<CreateSubscriptionResponse> {
   return apiFetch('/subscriptions/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

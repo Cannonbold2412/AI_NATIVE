@@ -26,22 +26,33 @@ def current_principal(request: Request) -> Principal:
 
 
 TIER_INFO = {
-    "free": {"name": "Free", "amount": 0, "currency": "INR", "period": None, "features": []},
-    "basic": {
-        "name": "Basic",
+    "free": {
+        "name": "Free",
+        "amount": 0,
+        "currency": "INR",
+        "period": None,
+        "features": ["1 seat", "1 installer slot", "50 compile credits/month", "1M Human Edit tokens/month"],
+    },
+    "starter": {
+        "name": "Starter",
         "amount": 49900,  # 499 INR in paise
         "currency": "INR",
         "period": "monthly",
-        "features": ["Up to 10 skills", "5 packaged workflows", "Standard support"],
+        "features": ["3 seats", "3 installer slots", "300 compile credits/month", "10M Human Edit tokens/month"],
     },
     "pro": {
         "name": "Pro",
         "amount": 99900,  # 999 INR in paise
         "currency": "INR",
         "period": "monthly",
-        "features": ["Unlimited skills", "Unlimited packages", "Priority support", "Advanced analytics"],
+        "features": ["10 seats", "10 installer slots", "1000 compile credits/month", "50M Human Edit tokens/month"],
     },
 }
+
+
+def _normalize_tier(tier: str) -> str:
+    value = str(tier or "").strip().lower()
+    return "starter" if value == "basic" else value
 
 
 def _client() -> razorpay.Client:
@@ -75,9 +86,13 @@ def _write_plan_store(store: dict[str, str]) -> None:
 
 def _ensure_plan(tier: str) -> str:
     """Create or retrieve Razorpay plan ID for tier. Returns plan_id."""
+    tier = _normalize_tier(tier)
     if tier not in TIER_INFO or tier == "free":
         raise HTTPException(status_code=400, detail=f"invalid tier: {tier}")
     store = _read_plan_store()
+    if tier == "starter" and "starter" not in store and "basic" in store:
+        store["starter"] = store["basic"]
+        _write_plan_store(store)
     if tier in store:
         return store[tier]
     info = TIER_INFO[tier]
@@ -114,12 +129,12 @@ def list_plans() -> dict[str, Any]:
                 "features": TIER_INFO["free"]["features"],
             },
             {
-                "tier": "basic",
-                "name": TIER_INFO["basic"]["name"],
+                "tier": "starter",
+                "name": TIER_INFO["starter"]["name"],
                 "amount": 499,
                 "currency": "INR",
                 "period": "monthly",
-                "features": TIER_INFO["basic"]["features"],
+                "features": TIER_INFO["starter"]["features"],
             },
             {
                 "tier": "pro",
@@ -137,9 +152,9 @@ def list_plans() -> dict[str, Any]:
 async def create_subscription(body: dict[str, str], principal: Principal = Depends(current_principal)) -> dict[str, Any]:
     """Create a Razorpay subscription for a tier. Returns subscription_id."""
     require_admin(principal)
-    tier = body.get("tier", "").lower()
-    if tier not in ["basic", "pro"]:
-        raise HTTPException(status_code=400, detail="tier must be 'basic' or 'pro'")
+    tier = _normalize_tier(body.get("tier", ""))
+    if tier not in ["starter", "pro"]:
+        raise HTTPException(status_code=400, detail="tier must be 'starter' or 'pro'")
     try:
         plan_id = _ensure_plan(tier)
         info = TIER_INFO[tier]
@@ -184,7 +199,7 @@ async def verify_subscription(body: dict[str, str], principal: Principal = Depen
         tier = None
         for t, plan_id in _read_plan_store().items():
             if subscription.get("plan_id") == plan_id:
-                tier = t
+                tier = _normalize_tier(t)
                 break
         if not tier:
             raise HTTPException(status_code=400, detail="unknown_plan")
@@ -228,7 +243,7 @@ async def handle_razorpay_webhook(request: Request) -> dict[str, bool]:
             tier = None
             for t, plan_id in _read_plan_store().items():
                 if subscription.get("plan_id") == plan_id:
-                    tier = t
+                    tier = _normalize_tier(t)
                     break
             if tier:
                 workspace_id = payload.get("notes", {}).get("workspace_id", "")

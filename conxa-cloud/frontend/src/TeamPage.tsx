@@ -2,6 +2,7 @@
 
 import { OrganizationProfile } from '@clerk/nextjs'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { EntitlementMeters } from '@/components/EntitlementMeters'
 import { clerkAppearance } from '@/lib/clerkAppearance'
 
 export function TeamPage() {
@@ -9,6 +10,7 @@ export function TeamPage() {
     <div className="h-full overflow-y-auto">
       <PageHeader title="Team" description="Workspace membership and organization controls." />
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6 sm:px-6">
+        <EntitlementMeters meters={['seats']} />
         <OrganizationProfile
           routing="hash"
           appearance={{
