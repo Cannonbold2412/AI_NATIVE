@@ -204,7 +204,12 @@ class Backend:
             )
         return self._auth
 
-    def _install_proxy_router(self, sink: Callable[[dict[str, Any]], None] | None = None) -> None:
+    def _install_proxy_router(
+        self,
+        sink: Callable[[dict[str, Any]], None] | None = None,
+        *,
+        usage_class: str = "compile",
+    ) -> None:
         """Redirect every compiler LLM call to the metered cloud proxy."""
         from services.llm_proxy_client import LLMProxyClient
         from conxa_core import llm as core_llm
@@ -217,6 +222,7 @@ class Backend:
             self._cloud_api,
             token_provider=lambda: self._auth_service().get_token(),
             client_header=os.environ.get("CONXA_PROXY_CLIENT", "build-studio"),
+            usage_class=usage_class,
             on_api_call=_on_api_call,
         )
         core_llm.set_router(client)
@@ -244,6 +250,82 @@ class Backend:
                 "Sign in to Conxa Build Studio before building a cloud-connected installer.",
             )
         return token
+
+    def _cloud_json(self, path: str, *, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
+        import urllib.request
+
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(f"{self._cloud_api_base()}{path}", data=data, method=method)
+        if body is not None:
+            req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", f"Bearer {self._cloud_token()}")
+        try:
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                error_payload = json.loads(exc.read().decode("utf-8"))
+                detail = str(error_payload.get("detail") or "")
+            except Exception:
+                detail = ""
+            if detail:
+                raise _CommandError(detail, self._entitlement_error_message(detail)) from exc
+            raise _CommandError("entitlements_unavailable", f"Cloud entitlement check failed: HTTP {exc.code}") from exc
+        except Exception as exc:
+            raise _CommandError("entitlements_unavailable", f"Cloud entitlement service unavailable: {exc}") from exc
+        return payload if isinstance(payload, dict) else {}
+
+    def _entitlement_error_message(self, code: str) -> str:
+        messages = {
+            "compile_credit_limit_exceeded": "Monthly compile credits are exhausted for this workspace.",
+            "human_edit_pool_exceeded": "Monthly Human Edit pool is exhausted for this workspace.",
+            "installer_limit_exceeded": "Installer slot limit reached for this workspace.",
+            "seat_limit_exceeded": "Seat limit reached for this workspace.",
+            "entitlements_unavailable": "Cloud entitlements are unavailable, so quota-gated actions are blocked.",
+            "invalid_usage_class": "Invalid LLM usage class.",
+        }
+        return messages.get(code, code)
+
+    def _compile_reservation_id(self, rid: str, plugin_id: str, workflow_id: str, session_id: str) -> str:
+        raw = f"cmp_{rid}_{plugin_id}_{workflow_id}_{session_id}"
+        return re.sub(r"[^A-Za-z0-9_.:-]+", "_", raw)[:240]
+
+    def _reserve_compile_credit(
+        self,
+        *,
+        reservation_id: str,
+        plugin_id: str,
+        workflow_id: str,
+        session_id: str,
+    ) -> dict[str, Any]:
+        return self._cloud_json(
+            "/api/v1/usage/compile/reserve",
+            method="POST",
+            body={
+                "reservation_id": reservation_id,
+                "plugin_id": plugin_id,
+                "workflow_id": workflow_id,
+                "session_id": session_id,
+            },
+        )
+
+    def _commit_compile_credit(self, reservation_id: str) -> dict[str, Any]:
+        return self._cloud_json(
+            "/api/v1/usage/compile/commit",
+            method="POST",
+            body={"reservation_id": reservation_id},
+        )
+
+    def _release_compile_credit(self, reservation_id: str) -> None:
+        try:
+            self._cloud_json(
+                "/api/v1/usage/compile/release",
+                method="POST",
+                body={"reservation_id": reservation_id},
+            )
+        except Exception:
+            pass
 
     def _publish_skill_pack_for_installer(
         self,
@@ -384,6 +466,14 @@ class Backend:
             with urllib.request.urlopen(req, timeout=180) as resp:
                 uploaded = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                error_payload = json.loads(exc.read().decode("utf-8"))
+                detail = str(error_payload.get("detail") or "")
+            except Exception:
+                detail = ""
+            if detail in {"installer_limit_exceeded", "entitlements_unavailable"}:
+                raise _CommandError(detail, self._entitlement_error_message(detail)) from exc
             if exc.code == 409:
                 raise _CommandError(
                     "installer_version_exists",
@@ -625,7 +715,7 @@ class Backend:
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_core.storage.plugin_store import get_plugin, save_plugin
         from conxa_core.storage.session_events import read_session_events
-        from services.llm_proxy_client import CloudUnreachable, QuotaExceeded
+        from services.llm_proxy_client import CloudUnreachable, EntitlementBlocked, QuotaExceeded
         registry = _recorder_registry
 
         session_id = _safe_id(payload.get("session_id"), "session_id")
@@ -647,27 +737,67 @@ class Backend:
         if not title:
             raise _CommandError("invalid_input", "skill_title is required")
 
+        is_recompile = bool(workflow and workflow.skill_id) or str(payload.get("mode") or "").strip() == "recompile"
+        usage_class = "human_edit" if is_recompile else "compile"
+        reservation_id: str | None = None
+        reservation_committed = False
+
         sink = _event_sink(rid)
 
         def _log(message: str, level: str = "info") -> None:
             sink({"phase": "compile_log", "message": message, "level": level, "ts": _time.time()})
 
-        self._install_proxy_router(sink=sink)
+        if not is_recompile:
+            workflow_id = str(getattr(workflow, "id", "") or "")
+            reservation_id = self._compile_reservation_id(rid, plugin_id, workflow_id, session_id)
+            _log("Reserving one compile credit...")
+            reserve = self._reserve_compile_credit(
+                reservation_id=reservation_id,
+                plugin_id=plugin_id,
+                workflow_id=workflow_id,
+                session_id=session_id,
+            )
+            sink({"phase": "quota", "meter": "compile_credits", "status": "reserved", **reserve})
+        else:
+            _log("Recompile selected: LLM work will use the Human Edit pool.")
+
         sink({"phase": "pipeline_start"})
         sink({"phase": "compile_step", "step": "normalize", "status": "running"})
         _log("Loading session events…")
 
-        sess = registry.get(session_id)
-        raw = sess.snapshot_events() if sess else read_session_events(session_id)
+        try:
+            sess = registry.get(session_id)
+            raw = sess.snapshot_events() if sess else read_session_events(session_id)
+        except Exception:
+            if reservation_id and not reservation_committed:
+                self._release_compile_credit(reservation_id)
+            raise
         if not raw:
+            if reservation_id and not reservation_committed:
+                self._release_compile_credit(reservation_id)
             raise _CommandError("no_events", "No recorded events for this session.")
 
+        if reservation_id:
+            _log("Committing compile credit before LLM-assisted compiler work...")
+            try:
+                commit = self._commit_compile_credit(reservation_id)
+                reservation_committed = True
+                sink({"phase": "quota", "meter": "compile_credits", "status": "committed", **commit})
+            except Exception:
+                self._release_compile_credit(reservation_id)
+                raise
+
+        self._install_proxy_router(sink=sink, usage_class=usage_class)
         _log(f"Running normalization pipeline on {len(raw)} events…")
         try:
             normalized = run_pipeline(raw)
-        except (CloudUnreachable, QuotaExceeded) as exc:
+        except (CloudUnreachable, EntitlementBlocked, QuotaExceeded) as exc:
             _log(str(exc), level="error")
             sink({"phase": "compile_error", "message": str(exc), "failed_step": "normalize"})
+            if isinstance(exc, EntitlementBlocked):
+                raise _CommandError(exc.code, self._entitlement_error_message(exc.code)) from exc
+            if isinstance(exc, QuotaExceeded):
+                raise _CommandError("quota_exceeded", str(exc)) from exc
             raise _CommandError("cloud_unreachable", str(exc)) from exc
         except Exception as exc:
             _log(str(exc), level="error")
@@ -694,9 +824,13 @@ class Backend:
                 title=title,
                 version=version,
             )
-        except (CloudUnreachable, QuotaExceeded) as exc:
+        except (CloudUnreachable, EntitlementBlocked, QuotaExceeded) as exc:
             _log(str(exc), level="error")
             sink({"phase": "compile_error", "message": str(exc), "failed_step": "selectors"})
+            if isinstance(exc, EntitlementBlocked):
+                raise _CommandError(exc.code, self._entitlement_error_message(exc.code)) from exc
+            if isinstance(exc, QuotaExceeded):
+                raise _CommandError("quota_exceeded", str(exc)) from exc
             raise _CommandError("cloud_unreachable", str(exc)) from exc
         except Exception as exc:
             _log(str(exc), level="error")
@@ -995,11 +1129,25 @@ class Backend:
     def cmd_get_usage(self, _payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         import urllib.request
 
-        req = urllib.request.Request(f"{self._cloud_api}/api/v1/llm/proxy/usage")
-        req.add_header("X-Conxa-Client", os.environ.get("CONXA_PROXY_CLIENT", "build-studio"))
-        req.add_header("Authorization", f"Bearer {self._auth_service().get_token()}")
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        try:
+            entitlements = self._cloud_json("/api/v1/entitlements/current")
+        except _CommandError as exc:
+            entitlements = {
+                "entitlements_unavailable": True,
+                "error": {"code": exc.code, "message": exc.message},
+            }
+
+        try:
+            req = urllib.request.Request(f"{self._cloud_api}/api/v1/llm/proxy/usage")
+            req.add_header("X-Conxa-Client", os.environ.get("CONXA_PROXY_CLIENT", "build-studio"))
+            req.add_header("Authorization", f"Bearer {self._auth_service().get_token()}")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                legacy = json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            legacy = {}
+        if "meters" in entitlements:
+            return {**entitlements, "legacy_llm_usage": legacy}
+        return {**entitlements, "legacy_llm_usage": legacy}
 
     # ─── helpers ────────────────────────────────────────────────────────────
 
@@ -1264,6 +1412,7 @@ class Backend:
     def cmd_apply_recording_visual(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.recording_visual import apply_recording_event_visual_to_step_or_raise
+        from services.llm_proxy_client import CloudUnreachable, EntitlementBlocked, QuotaExceeded
 
         skill_id = _safe_id(payload.get("skill_id"), "skill_id")
         step_index = int(payload.get("step_index") or 0)
@@ -1271,7 +1420,15 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
-        doc = apply_recording_event_visual_to_step_or_raise(doc, step_index, event_index)
+        self._install_proxy_router(usage_class="human_edit")
+        try:
+            doc = apply_recording_event_visual_to_step_or_raise(doc, step_index, event_index)
+        except EntitlementBlocked as exc:
+            raise _CommandError(exc.code, self._entitlement_error_message(exc.code)) from exc
+        except QuotaExceeded as exc:
+            raise _CommandError("quota_exceeded", str(exc)) from exc
+        except CloudUnreachable as exc:
+            raise _CommandError("cloud_unreachable", str(exc)) from exc
         write_skill(skill_id, doc)
         return self._skill_response(skill_id, doc)
 
@@ -1293,6 +1450,7 @@ class Backend:
         from conxa_compile.editor.recording_visual import (
             update_step_visual_bbox_and_regenerate_anchors_or_raise,
         )
+        from services.llm_proxy_client import CloudUnreachable, EntitlementBlocked, QuotaExceeded
 
         skill_id = _safe_id(payload.get("skill_id"), "skill_id")
         step_index = int(payload.get("step_index") or 0)
@@ -1300,7 +1458,15 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
-        doc = update_step_visual_bbox_and_regenerate_anchors_or_raise(doc, step_index, bbox)
+        self._install_proxy_router(usage_class="human_edit")
+        try:
+            doc = update_step_visual_bbox_and_regenerate_anchors_or_raise(doc, step_index, bbox)
+        except EntitlementBlocked as exc:
+            raise _CommandError(exc.code, self._entitlement_error_message(exc.code)) from exc
+        except QuotaExceeded as exc:
+            raise _CommandError("quota_exceeded", str(exc)) from exc
+        except CloudUnreachable as exc:
+            raise _CommandError("cloud_unreachable", str(exc)) from exc
         write_skill(skill_id, doc)
         return self._skill_response(skill_id, doc)
 

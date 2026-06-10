@@ -9,6 +9,7 @@ import {
   type Plugin,
 } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { EntitlementMeters } from '@/components/EntitlementMeters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -184,7 +185,11 @@ export function BuildInstallerPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader title="Build Installer" description="Turn a built plugin package into a Windows installer." />
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="mb-4">
+        <EntitlementMeters meters={['installer_slots']} compact />
+      </div>
+      <div className="flex min-h-0 gap-4">
         <div className="flex min-h-0 w-80 flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03]">
           <div className="border-b border-white/8 px-4 py-3">
             <h2 className="text-sm font-medium text-white">Built Packages</h2>
@@ -247,6 +252,9 @@ export function BuildInstallerPage() {
                   <div className="min-w-0">
                     <h3 className="text-sm font-medium text-white">{selectedPlugin.name}</h3>
                     <p className="mt-0.5 break-all text-xs text-zinc-500">{selectedPlugin.build?.output_path}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {selectedPlugin.installer ? 'Installer upload updates an existing slot.' : 'Installer upload will consume a new slot.'}
+                    </p>
                   </div>
                   <Badge
                     variant="outline"
@@ -375,6 +383,7 @@ export function BuildInstallerPage() {
             </div>
           )}
         </div>
+      </div>
       </div>
       <Dialog open={releaseDialogOpen} onOpenChange={setReleaseDialogOpen}>
         <DialogContent className="sm:max-w-md">

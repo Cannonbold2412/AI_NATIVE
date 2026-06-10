@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { EntitlementMeters } from '@/components/EntitlementMeters'
 import type { WorkflowResponse } from '@/types/workflow'
 import {
   deleteStep,
@@ -752,8 +753,11 @@ export function HumanEditPage() {
         </div>
       }
     />
-      <div
-        ref={splitPaneRef}
+    <div className="border-b border-white/8 px-4 py-2">
+      <EntitlementMeters meters={['human_edit_tokens']} compact />
+    </div>
+    <div
+      ref={splitPaneRef}
         className="relative grid flex-1 min-h-0 w-full min-w-0 grid-cols-1 overflow-hidden border-t border-white/8 md:min-h-0 md:[grid-template-columns:var(--workflow-pane-width)_minmax(0,1fr)_var(--tools-pane-width)] md:items-stretch"
         style={splitPaneStyle}
       >

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPlugins, normalizePluginList } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { EntitlementMeters } from '@/components/EntitlementMeters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -47,6 +48,7 @@ export function CompilePage() {
       <PageHeader title="Compile" description="Compile and inspect plugin workflow recordings." />
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+          <EntitlementMeters meters={['compile_credits', 'human_edit_tokens']} compact />
           {workflows.length === 0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-white/8 bg-white/[0.03] text-center">
               <Puzzle className="size-6 text-zinc-500" />
@@ -76,8 +78,8 @@ export function CompilePage() {
                 {workflows.map(({ plugin, workflow }) => {
                   const compiled = Boolean(workflow.skill_id)
                   const to = compiled
-                    ? `/plugins/${encodeURIComponent(plugin.id)}/workflows/${encodeURIComponent(workflow.id)}/compile?start=1&mode=recompile`
-                    : `/plugins/${encodeURIComponent(plugin.id)}/workflows/${encodeURIComponent(workflow.id)}/compile?start=1`
+                    ? `/plugins/${encodeURIComponent(plugin.id)}/compile/${encodeURIComponent(workflow.session_id)}?mode=recompile`
+                    : `/plugins/${encodeURIComponent(plugin.id)}/compile/${encodeURIComponent(workflow.session_id)}`
                   return (
                     <div key={`${plugin.id}:${workflow.id}`} className="flex items-center justify-between gap-4 px-4 py-3">
                       <div className="min-w-0">
@@ -95,7 +97,9 @@ export function CompilePage() {
                             {compiled ? 'compiled' : 'recorded'}
                           </Badge>
                         </div>
-                        <p className="mt-1 truncate text-xs text-zinc-500">{plugin.name}</p>
+                        <p className="mt-1 truncate text-xs text-zinc-500">
+                          {plugin.name} - {compiled ? 'Recompile uses Human Edit pool' : 'Compile uses 1 compile credit'}
+                        </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <Button size="sm" variant="outline" asChild>

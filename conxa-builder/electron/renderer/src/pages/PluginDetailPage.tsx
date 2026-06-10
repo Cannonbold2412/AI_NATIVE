@@ -13,7 +13,6 @@ import {
   startWorkflowRecord,
   type Plugin,
 } from '@/api/pluginApi'
-import { postCompileUpdated } from '@/api/workflowApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -222,7 +221,6 @@ function WorkflowRow({
   onCompiled: () => void
 }) {
   const navigate = useNavigate()
-  const [isRecompiling, setIsRecompiling] = useState(false)
 
   const deleteMut = useMutation({
     mutationFn: () => deleteWorkflow(pluginId, workflow.id),
@@ -233,18 +231,9 @@ function WorkflowRow({
     navigate(`/plugins/${encodeURIComponent(pluginId)}/compile/${encodeURIComponent(workflow.session_id)}`)
   }
 
-  const handleRecompile = async () => {
+  const handleRecompile = () => {
     if (!workflow.skill_id) return
-    setIsRecompiling(true)
-    try {
-      await postCompileUpdated(workflow.skill_id)
-      toast.success('Skill rebuilt from recording')
-      onCompiled()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Recompile failed')
-    } finally {
-      setIsRecompiling(false)
-    }
+    navigate(`/plugins/${encodeURIComponent(pluginId)}/compile/${encodeURIComponent(workflow.session_id)}?mode=recompile`)
   }
 
   return (
@@ -285,29 +274,24 @@ function WorkflowRow({
                   size="sm"
                   variant="outline"
                   className="border-amber-500/30 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10"
-                  disabled={isRecompiling}
                   title="Recompile"
                 >
-                  {isRecompiling ? (
-                    <><Loader2 className="size-3.5 animate-spin" /> Rebuilding…</>
-                  ) : (
-                    <><RefreshCw className="size-3.5" /> Recompile</>
-                  )}
+                  <><RefreshCw className="size-3.5" /> Recompile</>
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent className="border-white/10 bg-[#0d0f12] text-zinc-100">
                 <AlertDialogHeader>
                   <AlertDialogTitle className="text-white">Recompile &ldquo;{workflow.name}&rdquo;?</AlertDialogTitle>
                   <AlertDialogDescription className="text-zinc-400">
-                    This rebuilds the skill package from the original raw recording. Saved editor changes to
-                    selectors, validation, screenshots, and inputs will be replaced by the fresh compile.
+                    This rebuilds the skill package from the original raw recording and uses the Human Edit pool.
+                    Saved editor changes to selectors, validation, screenshots, and inputs will be replaced by the fresh compile.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel className="border-white/10 bg-white/5 text-zinc-200">Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-amber-600 text-white hover:bg-amber-700"
-                    onClick={() => void handleRecompile()}
+                    onClick={handleRecompile}
                   >
                     Recompile
                   </AlertDialogAction>

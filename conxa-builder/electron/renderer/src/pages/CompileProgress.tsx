@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { cmd, CmdError } from "@/lib/ipc";
 import { useBackendEvents } from "@/hooks/usePythonCmd";
 
@@ -45,6 +45,8 @@ const PIPELINE_STEPS: Omit<CompileStep, "state">[] = [
 export function CompileProgress() {
   const { pluginId, sessionId } = useParams<{ pluginId: string; sessionId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get("mode") === "recompile" ? "recompile" : "compile";
   const [steps, setSteps] = useState<CompileStep[]>(
     PIPELINE_STEPS.map((s) => ({ ...s, state: "pending" as StepState }))
   );
@@ -70,7 +72,7 @@ export function CompileProgress() {
         endedAt: undefined,
       }))
     );
-    cmd<CompileResult>("compile", { plugin_id: pluginId, session_id: sessionId })
+    cmd<CompileResult>("compile", { plugin_id: pluginId, session_id: sessionId, mode })
       .then((result) => {
         setSkillId(result.skill_id);
         setOverallStatus("done");
@@ -87,7 +89,7 @@ export function CompileProgress() {
           )
         );
       });
-  }, [pluginId, sessionId]);
+  }, [pluginId, sessionId, mode]);
 
   // auto-scroll log panel
   useEffect(() => {
@@ -216,7 +218,9 @@ export function CompileProgress() {
           >
             ← Back
           </button>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Compiling workflow</h2>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+            {mode === "recompile" ? "Recompiling workflow" : "Compiling workflow"}
+          </h2>
           <span
             style={{
               fontSize: 11,

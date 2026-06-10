@@ -24,6 +24,14 @@ class QuotaExceeded(RuntimeError):
     """The org hit its monthly LLM token quota (HTTP 429)."""
 
 
+class EntitlementBlocked(RuntimeError):
+    """The cloud entitlement service blocked this LLM request."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 class CloudUnreachable(RuntimeError):
     """The proxy could not be reached (network error / no internet)."""
 
@@ -35,11 +43,13 @@ class LLMProxyClient:
         token_provider: Callable[[], str],
         *,
         client_header: str = "build-studio",
+        usage_class: str = "compile",
         on_api_call: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._cloud_api = cloud_api.rstrip("/")
         self._token_provider = token_provider
         self._client_header = client_header
+        self._usage_class = usage_class
         self._on_api_call = on_api_call
 
     # -- public interface mirroring LLMRouter --------------------------------
@@ -78,7 +88,12 @@ class LLMProxyClient:
     ) -> dict[str, Any] | None:
         url = f"{self._cloud_api}/api/v1/llm/proxy/{kind}"
         body = json.dumps(
-            {"task": task, "payload": payload, "timeout_ms": int(timeout_ms)}
+            {
+                "task": task,
+                "payload": payload,
+                "timeout_ms": int(timeout_ms),
+                "usage_class": self._usage_class,
+            }
         ).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("Content-Type", "application/json")
@@ -108,6 +123,19 @@ class LLMProxyClient:
                 )
             if exc.code == 429:
                 raise QuotaExceeded("Monthly LLM quota reached") from exc
+            detail = ""
+            try:
+                error_body = json.loads(exc.read().decode("utf-8"))
+                detail = str(error_body.get("detail") or "")
+            except Exception:
+                detail = ""
+            if detail in {
+                "compile_credit_limit_exceeded",
+                "human_edit_pool_exceeded",
+                "entitlements_unavailable",
+                "invalid_usage_class",
+            }:
+                raise EntitlementBlocked(detail) from exc
             if error_detail is not None:
                 error_detail.append(f"proxy HTTP {exc.code}")
             return None

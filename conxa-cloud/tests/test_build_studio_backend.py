@@ -81,6 +81,48 @@ def test_proxy_router_injection_swaps_singleton(backend, monkeypatch):
     assert isinstance(core_llm.get_router(), LLMProxyClient)
 
 
+def test_compile_updated_only_bumps_metadata(backend, monkeypatch, tmp_path):
+    b, _out = backend
+
+    from conxa_core.config import settings
+    from conxa_core.storage.json_store import read_skill, write_skill
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+
+    def fail_compile(*_args, **_kwargs):
+        raise AssertionError("compile_updated must not recompile from recording")
+
+    monkeypatch.setattr(b, "cmd_compile", fail_compile)
+
+    skill_id = "skill_meta_bump"
+    saved_step = {
+        "id": "step_1",
+        "selector": "#saved-human-edit-selector",
+        "signals": {"human_edit_marker": "preserve"},
+    }
+    write_skill(
+        skill_id,
+        {
+            "meta": {"id": skill_id, "title": "Original title", "version": 3},
+            "skills": [{"id": skill_id, "steps": [saved_step]}],
+            "inputs": [{"name": "service_name"}],
+        },
+    )
+
+    result = b.cmd_compile_updated(
+        {"skill_id": skill_id, "skill_title": "Renamed title"},
+        "rid",
+    )
+
+    updated = read_skill(skill_id)
+    assert result == {"skill_id": skill_id, "ok": True}
+    assert updated["meta"]["title"] == "Renamed title"
+    assert updated["meta"]["version"] == 4
+    assert updated["skills"][0]["steps"] == [saved_step]
+    assert updated["inputs"] == [{"name": "service_name"}]
+
+
 def test_installer_publish_rewrites_pack_with_cloud_tracking(backend, monkeypatch, tmp_path):
     import urllib.request
 
@@ -390,7 +432,24 @@ def test_compile_derives_title_from_plugin_workflow_and_marks_compiled(
 
     monkeypatch.setattr(settings, "data_dir", tmp_path)
     monkeypatch.setattr(settings, "database_url", "")
-    monkeypatch.setattr(b, "_install_proxy_router", lambda sink=None: None)
+    monkeypatch.setattr(b, "_install_proxy_router", lambda sink=None, usage_class="compile": None)
+    monkeypatch.setattr(
+        b,
+        "_reserve_compile_credit",
+        lambda **kwargs: {
+            "reservation_id": kwargs["reservation_id"],
+            "remaining_compile_credits": 99,
+        },
+    )
+    monkeypatch.setattr(
+        b,
+        "_commit_compile_credit",
+        lambda reservation_id: {
+            "reservation_id": reservation_id,
+            "remaining_compile_credits": 98,
+        },
+    )
+    monkeypatch.setattr(b, "_release_compile_credit", lambda reservation_id: None)
     monkeypatch.setattr(session_events, "read_session_events", lambda session_id: [{"type": "click"}])
     monkeypatch.setattr(pipeline_run, "run_pipeline", lambda raw: raw)
 

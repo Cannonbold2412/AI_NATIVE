@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { performLogout } from '@/contexts/AuthContext'
 import { LogOut } from 'lucide-react'
+import { EntitlementMeters } from '@/components/EntitlementMeters'
 
 export function SettingsPage() {
   const { identity, setIdentity } = useAuth()
@@ -48,6 +49,15 @@ export function SettingsPage() {
             ) : (
               <p className="text-sm text-zinc-500">Not signed in.</p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-white/8 bg-white/[0.03] shadow-none">
+          <CardHeader className="border-b border-white/8">
+            <CardTitle className="text-white">Usage</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <EntitlementMeters />
           </CardContent>
         </Card>
 
