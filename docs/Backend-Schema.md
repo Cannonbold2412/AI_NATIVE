@@ -1,6 +1,6 @@
 # Backend Schema Document
 
-**Status:** Current as of 2026-06-01  
+**Status:** Current as of 2026-06-10
 **Scope:** All data models, storage architecture, and API contracts
 
 ---
@@ -155,6 +155,47 @@ class PluginInstaller(BaseModel):
     version: str
     runtime_version: str       # Version of bundled runtime
 ```
+
+### 2.6 EntitlementUsage
+
+Stored in KV namespace `entitlement_usage`, keyed by `workspace_id:YYYY-MM`.
+
+```python
+class EntitlementUsage(TypedDict):
+    workspace_id: str
+    period: str                         # UTC calendar month, e.g. "2026-06"
+    compile_credits_used: int
+    compile_input_tokens: int
+    compile_output_tokens: int
+    compile_requests: int               # proxied compile LLM requests
+    human_edit_input_tokens: int
+    human_edit_output_tokens: int
+    human_edit_requests: int            # proxied Human Edit LLM requests
+    created_at: str                     # ISO-8601 UTC
+    updated_at: str                     # ISO-8601 UTC
+```
+
+### 2.7 CompileReservation
+
+Stored in KV namespace `compile_reservations`, keyed by `reservation_id`.
+
+```python
+class CompileReservation(TypedDict):
+    reservation_id: str
+    workspace_id: str
+    period: str
+    amount: int                         # currently always 1
+    status: Literal["reserved", "committed", "released", "expired"]
+    plugin_id: str
+    workflow_id: str
+    session_id: str
+    idempotency_key: str
+    created_at: str
+    updated_at: str
+    expires_at: float                   # Unix timestamp
+```
+
+Production enforcement uses database transactions plus a Postgres advisory transaction lock. Local development uses the file/KV fallback with a process-local lock.
 
 ---
 
@@ -423,6 +464,84 @@ Response (200):
 }
 ```
 
+### 5.3 Entitlements
+
+**GET /api/v1/entitlements/current**
+
+Response:
+```json
+{
+  "workspace_id": "org_123",
+  "plan": "starter",
+  "period": "2026-06",
+  "reset_at": "2026-07-01T00:00:00Z",
+  "meters": {
+    "seats": {"used": 2, "limit": 3, "remaining": 1, "unlimited": false},
+    "installer_slots": {"used": 1, "limit": 3, "remaining": 2, "unlimited": false},
+    "compile_credits": {"used": 42, "limit": 300, "remaining": 258, "unlimited": false},
+    "human_edit_tokens": {"used": 230000, "limit": 10000000, "remaining": 9770000, "unlimited": false}
+  }
+}
+```
+
+**POST /api/v1/usage/compile/reserve**
+
+Request:
+```json
+{
+  "reservation_id": "cmp_org_123_plugin_wf_session_attempt",
+  "plugin_id": "plugin_123",
+  "workflow_id": "wf_123",
+  "session_id": "sess_123"
+}
+```
+
+Response:
+```json
+{
+  "reservation_id": "cmp_org_123_plugin_wf_session_attempt",
+  "status": "reserved",
+  "remaining_compile_credits": 257
+}
+```
+
+**POST /api/v1/usage/compile/commit**
+
+Request:
+```json
+{"reservation_id": "cmp_org_123_plugin_wf_session_attempt"}
+```
+
+**POST /api/v1/usage/compile/release**
+
+Request:
+```json
+{"reservation_id": "cmp_org_123_plugin_wf_session_attempt"}
+```
+
+Stable entitlement error details:
+- `compile_credit_limit_exceeded`
+- `human_edit_pool_exceeded`
+- `installer_limit_exceeded`
+- `seat_limit_exceeded`
+- `entitlements_unavailable`
+- `invalid_usage_class`
+
+### 5.4 LLM Proxy Usage Class
+
+`POST /api/v1/llm/proxy/text` and `/vision` accept:
+
+```json
+{
+  "task": "anchor_vision",
+  "payload": {},
+  "timeout_ms": 120000,
+  "usage_class": "human_edit"
+}
+```
+
+Allowed `usage_class` values are `compile` and `human_edit`. Missing `usage_class` defaults to `compile`.
+
 Response when up-to-date:
 ```json
 {
@@ -432,7 +551,7 @@ Response when up-to-date:
 }
 ```
 
-### 5.3 Telemetry Ingest
+### 5.5 Telemetry Ingest
 
 **POST /api/tracking/{company}/events**
 **Header: X-Tracking-Token: {token}**
@@ -444,7 +563,7 @@ Response (202):
 {"ok": true}
 ```
 
-### 5.4 Tracking Runs Query
+### 5.6 Tracking Runs Query
 
 **GET /api/v1/tracking/{company}/runs?limit=50&offset=0**
 **Header: Authorization: Bearer {clerk_jwt}**
@@ -475,7 +594,7 @@ Response:
 }
 ```
 
-### 5.5 Runtime Manifest
+### 5.7 Runtime Manifest
 
 **GET /api/v1/updates/runtime-manifest**
 
@@ -491,7 +610,7 @@ Response:
 }
 ```
 
-### 5.6 Skill-Pack Delta Sync
+### 5.8 Skill-Pack Delta Sync
 
 **GET /api/v1/skill-packs/{company}/delta?since={version}**
 
@@ -516,7 +635,7 @@ The sync_token is also returned in the publish response so the Build Studio can 
 
 **KV namespace:** `sync_tokens` — keyed by slug, stores `{token, company, version, workspace_id, owner_user_id, updated_at}`.
 
-### 5.7 Backend JSON-RPC Protocol (Build Studio)
+### 5.9 Backend JSON-RPC Protocol (Build Studio)
 
 **Protocol:** Newline-delimited JSON over stdin/stdout.
 
@@ -532,7 +651,7 @@ Result:
 
 Error:
 ```json
-{"id": "req_abc", "type": "error", "code": "quota_exceeded", "message": "Monthly token quota exceeded"}
+{"id": "req_abc", "type": "error", "code": "compile_credit_limit_exceeded", "message": "Monthly compile credits are exhausted for this workspace."}
 ```
 
 Streaming event:
@@ -724,6 +843,8 @@ erDiagram
 | Namespace | Key | Value | Used by |
 |---|---|---|---|
 | `plugins` | `{plugin_id}` | `Plugin` JSON | Build Studio, Cloud |
+| `entitlement_usage` | `{workspace_id}:{YYYY-MM}` | Monthly compile/Human Edit usage row | Cloud entitlements |
+| `compile_reservations` | `{reservation_id}` | Compile reservation row | Cloud entitlements |
 | `publish_owners` | `{slug}` | `{workspace_id, claimed_at}` | Cloud publish |
 | `tracking_tokens` | `{company}` | `{token, workspace_id, ...}` | Cloud tracking |
 | `tracking/{company}` | `{run_id}` | `[event_batch, ...]` | Runtime, Cloud dashboard |

@@ -145,6 +145,7 @@ The `research/frontend/` directory contains a prototype/research copy of both th
 - `SuggestionsPanel.tsx` — AI-suggested improvements
 - `ValidationReportPanel.tsx` — compile report summary
 - `CompiledSkillsTab.tsx` — view raw compiled output
+- `EntitlementMeters.tsx` — shows Human Edit pool for LLM-assisted edits
 
 **UX issues:**
 - Step editor opens in a panel but there's no visual "save" feedback — saves are implicit.
@@ -163,11 +164,15 @@ The `research/frontend/` directory contains a prototype/research copy of both th
 **Outputs:** Compiled skill ID + step count.  
 **User goal:** Compile the recording into a skill and see it succeed.
 
+**Meter behavior:**
+- First compile consumes 1 compile credit.
+- Recompile uses the Human Edit pool.
+- The compile queue shows compile credits and Human Edit pool together.
+
 **UX issues:**
 - Progress steps (normalize → dedupe → enrich → selectors → assertions → recovery → package) are shown but LLM sub-steps are hidden.
 - No estimate of time remaining.
 - On failure, the error message is shown but there's no "retry" affordance.
-- If quota is exceeded, the error `cloud_unreachable` is shown — not `quota_exceeded` — which is confusing.
 - No persistent compile history (re-opening the page doesn't show previous compiles).
 
 ---
@@ -193,11 +198,15 @@ The `research/frontend/` directory contains a prototype/research copy of both th
 **Outputs:** Installer path, cloud download URL, tracking URL.  
 **User goal:** Generate a distributable .exe for customers.
 
+**Meter behavior:**
+- The page shows installer slots.
+- Uploading an installer for a new slug consumes one slot.
+- Uploading a newer version for a slug that already has an installer is an existing-slot update.
+
 **UX issues:**
 - The cloud publish step and installer build step are not visually separated — users don't understand the two-step process.
 - No copy-to-clipboard for the download URL.
 - `cloud_upload_error: installer_upload_too_large` shows a technical error code — should say "Installer too large for cloud hosting (max 250MB)."
-- No installer history — can't see previous installer versions.
 
 ---
 
@@ -257,6 +266,18 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 
 ---
 
+### 3.1.1 Public Docs (`app/(marketing)/docs/...`)
+
+**Paths:** `/docs`, `/docs/[slug]`
+**Purpose:** Public documentation and customer-facing policy pages for product behavior, security, privacy, terms, cookies, billing, acceptable use, data processing, and support.
+**Inputs:** Static typed content from `src/content/publicDocs.ts`.
+**Outputs:** Docs index, sidebar navigation, mobile docs navigation, page table of contents, related docs, and drafting-reference links for policy pages.
+**User goal:** Understand how Conxa works, what data moves where, what policies govern use, and how to contact support before signing in.
+
+**Status:** Public marketing route group; does not require Clerk auth.
+
+---
+
 ### 3.2 Dashboard (`app/(protected)/dashboard/page.tsx`)
 
 **Purpose:** Company-level overview after login.  
@@ -277,6 +298,8 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 **Inputs:** Clerk auth.  
 **Outputs:** Plugin cards with status and run count.  
 **User goal:** Navigate to plugin detail.
+
+**Meter behavior:** Shows installer slots. Plugin cards with installers count toward this meter; same slug version history is an existing-slot update.
 
 ---
 
@@ -308,6 +331,8 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 **Outputs:** Subscription status, plan tier.  
 **User goal:** Upgrade or manage subscription.
 
+**Meter behavior:** Shows all four customer meters: seats, installer slots, compile credits, and Human Edit pool.
+
 **UX issues:**
 - Razorpay integration specifics not visible in the frontend code reviewed.
 - No invoice history.
@@ -317,6 +342,7 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 ### 3.7 Team Page (`app/(protected)/team/page.tsx`)
 
 **Purpose:** Manage workspace members.  
+**Meter behavior:** Shows the seat meter above Clerk organization controls. Hard enforcement requires Conxa-owned invites or Clerk webhook cleanup; raw `OrganizationProfile` alone is metered/audited, not a complete hard gate.
 **Status:** UI exists but backend RBAC is not fully implemented (scaffolded in `app/services/rbac.py` but not wired to routes).
 
 ---
@@ -365,6 +391,8 @@ AppChrome (layout)
 ```
 (marketing)/
 ├── / (landing page)
+├── /docs
+│   └── /docs/[slug]
 
 (protected)/  [requires Clerk auth]
 ├── /dashboard
@@ -521,7 +549,7 @@ The Cloud Dashboard has Team and Settings pages but RBAC is not enforced. All wo
 
 ### Priority 1: Fix critical UX gaps (blockers for reliable use)
 
-1. **Translate error codes to human messages.** Map all `_CommandError` codes to user-friendly strings in the renderer. `quota_exceeded` should say "Monthly LLM quota reached. Contact Conxa to increase your limit." `cloud_unreachable` should say "Cannot reach Conxa Cloud. Check your internet connection."
+1. **Translate error codes to human messages.** Map all `_CommandError` codes to user-friendly strings in the renderer. `compile_credit_limit_exceeded`, `human_edit_pool_exceeded`, and `installer_limit_exceeded` should produce upgrade/blocking messages. `cloud_unreachable` should say "Cannot reach Conxa Cloud. Check your internet connection."
 
 2. **Runtime token acquisition flow.** Add an MCP tool (`setup_company`) or installer step that guides the end user through authenticating the runtime for a company on first use. Without this, skill sync silently fails for new installations.
 

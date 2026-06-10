@@ -178,7 +178,11 @@ flowchart TD
     T --> U[Compile complete — step count shown to user]
 ```
 
-**LLM calls** route through `conxa_core.llm.get_router()`, which is replaced at compile time with `LLMProxyClient` forwarding to `POST /api/v1/llm/proxy/{text,vision}` with monthly quota enforcement.
+**Fresh compile quota:** Before local compile starts, Build Studio reserves 1 compile credit through `POST /api/v1/usage/compile/reserve`. The reservation is committed before the first LLM-assisted pipeline/compiler stage. If compile fails before commit, Build Studio releases the reservation; after commit, the credit remains consumed.
+
+**Recompile quota:** Existing workflows with `skill_id` skip compile-credit reservation. Their proxied LLM calls use `usage_class="human_edit"` and draw from the monthly Human Edit pool.
+
+**LLM calls** route through `conxa_core.llm.get_router()`, which is replaced at compile time with `LLMProxyClient` forwarding to `POST /api/v1/llm/proxy/{text,vision}` with `usage_class` set to `compile` or `human_edit`.
 
 **Real-time events** stream from backend to renderer during compilation:
 - `pipeline_start`, `pipeline_done`
@@ -210,6 +214,8 @@ flowchart TD
 
 **Patch gate:** Each edit increments the skill version. `revalidate_step()` checks that selector and intent remain coherent after the patch.
 
+Deterministic Human Edit actions are available without quota: patch, reorder, delete, input edits, validation edits, and sign-off. LLM-assisted actions such as selector regeneration, visual re-anchor, screenshot/bbox anchor regeneration, semantic repair, and raw-recording recompile require remaining Human Edit pool.
+
 ---
 
 ## 8. Build Plugin
@@ -219,15 +225,15 @@ flowchart TD
     A[User clicks Build Plugin] --> B[Backend: cmd_build_plugin]
     B --> C[Read all compiled skills for plugin]
     C --> D[plugin_builder.build_plugin]
-    D --> E[Create output/{company}-plugin/ folder]
+    D --> E["Create output/{company}-plugin/ folder"]
     E --> F[Write plugin.json manifest]
     E --> G[Render CLAUDE.md from template]
     E --> H[Render index.md from template]
     E --> I[For each workflow:]
-    I --> J[Write skills/{slug}/execution.json]
-    I --> K[Write skills/{slug}/recovery.json]
-    I --> L[Write skills/{slug}/inputs.json]
-    J & K & L --> M[Copy to data/skill-packs/{company}/]
+    I --> J["Write skills/{slug}/execution.json"]
+    I --> K["Write skills/{slug}/recovery.json"]
+    I --> L["Write skills/{slug}/inputs.json"]
+    J & K & L --> M["Copy to data/skill-packs/{company}/"]
     M --> N[Write pack.json with version + skills list]
     N --> O[Plugin build record saved: PluginBuild]
     O --> P[Build complete — version shown]
@@ -246,23 +252,28 @@ flowchart TD
     C --> D[Check no auth.json in build input]
     D --> E[_publish_skill_pack_for_installer]
     
-    E --> F[Read all files from data/skill-packs/{company}/]
+    E --> F["Read all files from data/skill-packs/{company}/"]
     F --> G[POST /api/v1/plugins/publish to Cloud]
     G --> H[Cloud: claim slug ownership]
     H --> I[Cloud: write skill pack files]
     I --> J[Cloud: generate tracking token]
-    J --> K[Cloud: return {tracking_token, sync_url}]
+    J --> K["Cloud: return {tracking_token, sync_url}"]
     K --> L[Rewrite pack.json with tracking + sync_endpoint]
     
     L --> M[build_installer via NSIS]
-    M --> N[.exe created at output/{company}-Plugin-Setup.exe]
+    M --> N[".exe created at output/{company}-Plugin-Setup.exe"]
     
     N --> O[_upload_installer_for_download]
-    O --> P[POST /api/v1/plugins/{slug}/installer/upload]
-    P --> Q[Cloud stores installer.exe + meta.json]
-    Q --> R[Cloud returns download_url]
+    O --> P["POST /api/v1/plugins/{slug}/installer/upload"]
+    P --> Q{Slug already has installer?}
+    Q -->|Yes| R[Allow newer version upload]
+    Q -->|No| S{Installer slot remaining?}
+    S -->|No| T[Block: installer_limit_exceeded]
+    S -->|Yes| R
+    R --> U[Cloud stores installer.exe + meta.json]
+    U --> V[Cloud returns download_url]
     
-    R --> S[Show installer path + cloud download URL to user]
+    V --> W[Show installer path + cloud download URL to user]
 ```
 
 **Installer contents:**
@@ -270,6 +281,14 @@ flowchart TD
 - `runtime.exe` + `keytar.node`
 - Chromium browser (fetched at install time, not bundled)
 - `conxa.mcpb` Desktop Extension (handles MCP registration via Claude's official mechanism)
+
+**Customer-visible meters shown during this flow:**
+- Settings/Billing: seats, installer slots, compile credits, Human Edit pool.
+- Compile: compile credits for first compile and Human Edit pool for recompile.
+- Human Edit: Human Edit pool only for LLM-assisted actions.
+- Build Installer / Plugins: installer slots; same-slug version uploads are shown as existing-slot updates.
+
+Workflow recording and local plugin creation remain unlimited.
 
 ---
 
@@ -319,7 +338,7 @@ flowchart TD
     I --> J[For each company in skill-packs/:]
     J --> K[getToken from OS keychain]
     K -->|No token| L[Skip — log warning]
-    K -->|Has token| M[GET /skill-packs/{co}/delta?since=version]
+    K -->|Has token| M["GET /skill-packs/{co}/delta?since=version"]
     M -->|Empty delta| N[Up to date]
     M -->|Files delta| O[Backup skills → atomic write + SHA-256 verify]
     O --> P[Update pack.json version]
@@ -404,7 +423,7 @@ flowchart TD
     B --> C[Build plugin with new version string]
     C --> D[Build installer — OR — publish only]
     D --> E[POST /api/v1/plugins/publish]
-    E --> F[Cloud writes new files to skill-packs/{co}/]
+    E --> F["Cloud writes new files to skill-packs/{co}/"]
     F --> G[Cloud updates pack.json skill_pack_version]
     G --> H[Customer runtimes detect version change on next sync]
     H --> I[Delta delivered, files updated atomically]
@@ -422,7 +441,7 @@ flowchart TD
     A[Runtime cold start or refresh_skills tool call] --> B[Iterate skill-packs/ directories]
     B --> C[Read pack.json — get sync_endpoint + current version]
     C --> D[Get company token from keytar]
-    D --> E[GET {sync_endpoint}?since={version}]
+    D --> E["GET {sync_endpoint}?since={version}"]
     E --> F{Delta response}
     F -->|files empty| G[Up to date — skip]
     F -->|files non-empty| H[Backup all affected skill dirs]

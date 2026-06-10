@@ -196,6 +196,10 @@ All under `/api/v1/` except health endpoints:
 | `GET /readyz` | Readiness (DB ping) | Public |
 | `POST /api/v1/llm/proxy/{text,vision}` | Metered LLM proxy | Clerk JWT + X-Conxa-Client header |
 | `GET /api/v1/llm/proxy/usage` | Token quota status | Clerk JWT |
+| `GET /api/v1/entitlements/current` | Workspace plan and four visible meters | Clerk JWT |
+| `POST /api/v1/usage/compile/reserve` | Reserve 1 fresh compile credit | Clerk JWT |
+| `POST /api/v1/usage/compile/commit` | Commit a reserved compile credit | Clerk JWT |
+| `POST /api/v1/usage/compile/release` | Release an uncommitted compile reservation | Clerk JWT |
 | `POST /api/v1/plugins/publish` | Skill pack publish | Clerk JWT |
 | `POST /api/v1/plugins/{slug}/installer/upload` | Upload .exe | Clerk JWT |
 | `GET /api/v1/installers/{slug}` | Public installer download | Public |
@@ -918,8 +922,56 @@ Build Studio's LLM calls go through `services/llm_proxy_client.py`:
 - Target: `POST /api/v1/llm/proxy/text` or `/api/v1/llm/proxy/vision`
 - Header: `Authorization: Bearer <Clerk access_token>`
 - Header: `X-Conxa-Client: build-studio`
-- Monthly quota enforced at cloud: `llm_proxy_monthly_token_quota` (default 5M tokens/org).
-- `CloudUnreachable` and `QuotaExceeded` exceptions propagate up to the compiler, which surfaces them as `compile_error` events to the renderer.
+- Body includes `usage_class`: `compile` or `human_edit`. Missing values default to `compile` for rollout compatibility.
+- Compile LLM calls record compile input/output tokens; Human Edit LLM calls draw from the workspace's monthly Human Edit pool.
+- `CloudUnreachable`, `QuotaExceeded`, and stable entitlement errors propagate up to the compiler, which surfaces them as `compile_error` events to the renderer.
+
+### 13.4 Entitlements And Visible Meters
+
+The cloud exposes four customer-visible meters:
+- `seats`
+- `installer_slots`
+- `compile_credits`
+- `human_edit_tokens`
+
+Plan defaults:
+- `free`: 1 seat, 1 installer slot, 50 compile credits/month, 1M Human Edit tokens/month.
+- `starter`: 3 seats, 3 installer slots, 300 compile credits/month, 10M Human Edit tokens/month.
+- `pro`: 10 seats, 10 installer slots, 1000 compile credits/month, 50M Human Edit tokens/month.
+- `enterprise`: explicit workspace overrides.
+- `development`: unlimited.
+
+Legacy `basic` billing records normalize to `starter`. Monthly usage period is the UTC calendar month (`YYYY-MM`) and resets at the first day of the next UTC month.
+
+Fresh compile flow:
+1. Build Studio determines the workflow has no `skill_id`.
+2. Build Studio calls `POST /api/v1/usage/compile/reserve`.
+3. If reservation fails, local compile is blocked before pipeline work starts.
+4. Build Studio commits the reservation before the first LLM-bearing compiler stage.
+5. If failure occurs before commit, Build Studio calls release. If failure occurs after commit, the credit remains consumed.
+
+Recompile and LLM-assisted Human Edit:
+- Existing workflow `skill_id` means no compile-credit reservation.
+- Proxied LLM calls use `usage_class="human_edit"`.
+- Deterministic editor actions stay available when the Human Edit pool is exhausted.
+
+Installer slots:
+- Skill-pack publish does not consume a slot.
+- Installer upload consumes a slot only when the slug has no existing installer release for the workspace.
+- Same slug, newer version is allowed at the limit. Exact duplicate version is rejected separately.
+
+Seat usage:
+- Clerk organization membership is the intended source of truth when an organization is present and `CLERK_SECRET_KEY` is configured for the cloud backend.
+- Local/dev falls back to SaaS membership state.
+- Hard seat enforcement requires a Conxa-owned invite API or Clerk webhook cleanup.
+
+Stable entitlement error codes:
+- `compile_credit_limit_exceeded`
+- `human_edit_pool_exceeded`
+- `installer_limit_exceeded`
+- `seat_limit_exceeded`
+- `entitlements_unavailable`
+- `invalid_usage_class`
 
 ---
 
@@ -944,6 +996,8 @@ Mode 2: Filesystem (no SKILL_DATABASE_URL)
 
 Key namespaces in use:
 - `plugins` — Plugin model JSON
+- `entitlement_usage` — monthly usage row keyed by `workspace_id:YYYY-MM`
+- `compile_reservations` — compile-credit reservations keyed by reservation id
 - `publish_owners` — slug → workspace_id ownership
 - `tracking_tokens` — company → {token, workspace_id, ...}
 - `tracking/{company}` — run_id → [event batches]
