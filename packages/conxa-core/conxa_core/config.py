@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     clerk_jwks_url: str = ""
     clerk_authorized_parties: str = ""
     clerk_audience: str = ""
+    clerk_secret_key: str = Field(default="", validation_alias="CLERK_SECRET_KEY")
     api_proxy_shared_secret: str = ""
 
     # Metered LLM proxy used by Build Studio. Quota is per org per calendar month
@@ -109,6 +110,10 @@ class Settings(BaseSettings):
     # requests carrying the X-Conxa-Client header below.
     llm_proxy_monthly_token_quota: int = 5_000_000
     llm_proxy_client_header: str = "build-studio"
+    entitlements_enforce_compile: bool = False
+    entitlements_enforce_human_edit: bool = False
+    entitlements_enforce_installers: bool = False
+    entitlements_reservation_ttl_secs: int = 30 * 60
 
     # Production backing services. The local MVP still has file-backed fallbacks.
     database_url: str = ""

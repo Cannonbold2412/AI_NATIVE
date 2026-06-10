@@ -19,9 +19,14 @@ STUDIO_HEADER = {"X-Conxa-Client": settings.llm_proxy_client_header}
 
 
 @pytest.fixture(autouse=True)
-def _reset_quota():
+def _reset_quota(monkeypatch, tmp_path):
     original = settings.llm_proxy_monthly_token_quota
     original_proxy_secret = settings.api_proxy_shared_secret
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+    monkeypatch.setattr(settings, "entitlements_enforce_compile", False)
+    monkeypatch.setattr(settings, "entitlements_enforce_human_edit", False)
+    monkeypatch.setattr(settings, "entitlements_enforce_installers", False)
     yield
     settings.llm_proxy_monthly_token_quota = original
     settings.api_proxy_shared_secret = original_proxy_secret
@@ -147,7 +152,7 @@ def test_publish_upsert_updates_existing_plugin_slug(monkeypatch, tmp_path):
     assert plugins[0].workspace_id == "wrk_local"
 
 
-def test_skill_pack_delta_is_public_when_cloud_auth_required(monkeypatch, tmp_path):
+def test_skill_pack_delta_requires_sync_token_when_cloud_auth_required(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "auth_required", True)
     monkeypatch.setattr(settings, "data_dir", tmp_path)
 
@@ -160,8 +165,17 @@ def test_skill_pack_delta_is_public_when_cloud_auth_required(monkeypatch, tmp_pa
 
     r = client.get("/api/v1/skill-packs/public-sync/delta?since=0")
 
-    assert r.status_code == 200, r.text
-    assert r.json()["current_version"] == "9.9.9"
+    assert r.status_code == 401
+    assert r.json()["detail"] == "sync_token_not_configured"
+
+    db_set("sync_tokens", "public-sync", {"token": "sync-secret", "workspace_id": "wrk_local"})
+    ok = client.get(
+        "/api/v1/skill-packs/public-sync/delta?since=0",
+        headers={"Authorization": "Bearer sync-secret"},
+    )
+
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["current_version"] == "9.9.9"
 
 
 def test_tracking_ingest_requires_published_token_and_lists_runs():

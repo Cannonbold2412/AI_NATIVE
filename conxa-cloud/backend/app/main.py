@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from conxa_core.config import settings
 from conxa_core.db import healthcheck, init_db, using_database
 
+from app.api.entitlement_routes import router as entitlement_router
 from app.api.job_routes import router as job_router
 from app.api.llm_proxy_routes import router as llm_proxy_router
 from app.api.plugin_routes import router as plugin_router
@@ -77,6 +78,7 @@ app.add_middleware(
 app.add_middleware(ProductionRequestMiddleware)
 
 app.include_router(job_router, prefix="/api/v1")
+app.include_router(entitlement_router, prefix="/api/v1")
 app.include_router(product_router, prefix="/api/v1")
 app.include_router(v1_alias_router, prefix="/api/v1")
 app.include_router(plugin_router, prefix="/api/v1")

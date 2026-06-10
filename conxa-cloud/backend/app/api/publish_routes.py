@@ -30,6 +30,7 @@ from conxa_core.config import settings
 from conxa_core.db import db_get, db_set
 from conxa_core.models.plugin import PluginBuild, PluginInstaller, PluginWorkflow
 from conxa_core.storage.plugin_store import create_plugin, list_plugins, save_plugin
+from app.services.entitlements import EntitlementError, ensure_installer_slot_available
 from app.services.saas import add_audit_event, ensure_principal, principal_from_request
 
 router = APIRouter(prefix="/plugins", tags=["publish"])
@@ -336,6 +337,12 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
     ensure_principal(principal)
     slug = _validate_slug(slug)
     _assert_owner(slug, principal.workspace_id)
+    try:
+        ensure_installer_slot_available(principal, slug)
+    except EntitlementError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.code) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="entitlements_unavailable") from exc
 
     max_bytes = settings.build_artifact_upload_max_bytes
     cl = request.headers.get("content-length")

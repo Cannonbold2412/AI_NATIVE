@@ -326,6 +326,18 @@ def billing_for(principal: Principal) -> dict[str, Any]:
     return billing
 
 
+def membership_count_for(workspace_id: str) -> int:
+    """Best-effort local/dev seat count backed by SaaS membership state."""
+    with _lock:
+        state = _read_state()
+        count = sum(
+            1
+            for row in state.get("memberships", [])
+            if isinstance(row, dict) and row.get("workspace_id") == workspace_id
+        )
+    return max(1, count)
+
+
 def upsert_billing(workspace_id: str, patch: dict[str, Any]) -> dict[str, Any]:
     with _lock:
         state = _read_state()
