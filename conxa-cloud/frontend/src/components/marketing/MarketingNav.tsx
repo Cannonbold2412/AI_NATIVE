@@ -6,10 +6,11 @@ import Link from 'next/link'
 import { GlowButton } from './primitives/GlowButton'
 
 const links = [
-  { label: 'How it works', href: '#pipeline' },
-  { label: 'Recovery', href: '#recovery' },
-  { label: 'Observability', href: '#observability' },
-  { label: 'Enterprise', href: '#enterprise' },
+  { label: 'How it works', href: '/#pipeline' },
+  { label: 'Recovery', href: '/#recovery' },
+  { label: 'Observability', href: '/#observability' },
+  { label: 'Enterprise', href: '/#enterprise' },
+  { label: 'Docs', href: '/docs' },
 ]
 
 export function MarketingNav() {
@@ -48,13 +49,13 @@ export function MarketingNav() {
         {/* Desktop links */}
         <nav className="hidden items-center gap-8 md:flex">
           {links.map((l) => (
-            <a
+            <Link
               key={l.label}
               href={l.href}
               className="text-sm text-[#9ba3af] transition-colors hover:text-white"
             >
               {l.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
@@ -92,14 +93,14 @@ export function MarketingNav() {
           >
             <div className="flex flex-col gap-1 px-6 py-4">
               {links.map((l) => (
-                <a
+                <Link
                   key={l.label}
                   href={l.href}
                   className="py-2 text-sm text-[#9ba3af] hover:text-white"
                   onClick={() => setMobileOpen(false)}
                 >
                   {l.label}
-                </a>
+                </Link>
               ))}
               <div className="mt-4 flex flex-col gap-2">
                 <Link href="/sign-in" className="py-2 text-sm text-[#9ba3af] hover:text-white">
