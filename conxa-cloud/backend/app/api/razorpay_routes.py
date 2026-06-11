@@ -73,6 +73,16 @@ def _tier_for_plan_id(plan_id: str) -> str | None:
     return None
 
 
+def _exception_detail(exc: Exception) -> str:
+    message = str(exc).strip()
+    if message and message.lower() != "none":
+        return message
+    args = [str(arg).strip() for arg in getattr(exc, "args", ()) if arg is not None and str(arg).strip()]
+    if args:
+        return "; ".join(args)
+    return exc.__class__.__name__
+
+
 def _client() -> razorpay.Client:
     if not settings.razorpay_key_id or not settings.razorpay_key_secret:
         raise HTTPException(status_code=500, detail="Razorpay credentials not configured")
@@ -127,8 +137,10 @@ def _ensure_plan(tier: str) -> str:
         store[plan_key] = plan_id
         _write_plan_store(store)
         return plan_id
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"failed_to_create_plan: {exc!s}") from exc
+        raise HTTPException(status_code=500, detail=f"failed_to_create_plan: {_exception_detail(exc)}") from exc
 
 
 @router.get("/plans")
@@ -189,7 +201,7 @@ async def create_subscription(body: dict[str, str], principal: Principal = Depen
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"subscription_error: {exc!s}") from exc
+        raise HTTPException(status_code=500, detail=f"subscription_error: {_exception_detail(exc)}") from exc
 
 
 @router.post("/verify")
@@ -224,7 +236,7 @@ async def verify_subscription(body: dict[str, str], principal: Principal = Depen
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"verify_error: {exc!s}") from exc
+        raise HTTPException(status_code=500, detail=f"verify_error: {_exception_detail(exc)}") from exc
 
 
 @router.post("/webhooks/razorpay")

@@ -9,15 +9,19 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from razorpay.errors import BadRequestError
 
 
 class _FakePlanApi:
-    def __init__(self, plan_id: str = "plan_starter_test") -> None:
+    def __init__(self, plan_id: str = "plan_starter_test", create_error: Exception | None = None) -> None:
         self.plan_id = plan_id
+        self.create_error = create_error
         self.created_payloads: list[dict] = []
 
     def create(self, payload: dict) -> dict[str, str]:
         self.created_payloads.append(payload)
+        if self.create_error:
+            raise self.create_error
         return {"id": self.plan_id}
 
 
@@ -35,8 +39,8 @@ class _FakeSubscriptionApi:
 
 
 class _FakeRazorpayClient:
-    def __init__(self, plan_id: str = "plan_starter_test") -> None:
-        self.plan = _FakePlanApi(plan_id)
+    def __init__(self, plan_id: str = "plan_starter_test", plan_create_error: Exception | None = None) -> None:
+        self.plan = _FakePlanApi(plan_id, plan_create_error)
         self.subscription = _FakeSubscriptionApi(plan_id)
 
 
@@ -101,6 +105,40 @@ class RazorpayRoutesTests(unittest.TestCase):
         self.assertEqual(body["tier"], "starter")
         self.assertEqual(fake_client.plan.created_payloads[0]["item"]["amount"], 2999900)
         self.assertEqual(fake_client.plan.created_payloads[0]["item"]["currency"], "INR")
+
+    def test_create_subscription_surfaces_missing_razorpay_credentials(self) -> None:
+        client = self._client()
+
+        with (
+            patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"),
+            patch("conxa_core.config.settings.razorpay_key_id", ""),
+            patch("conxa_core.config.settings.razorpay_key_secret", ""),
+        ):
+            res = client.post(
+                "/api/v1/subscriptions/create",
+                json={"tier": "starter"},
+                headers=self._admin_headers(),
+            )
+
+        self.assertEqual(res.status_code, 500)
+        self.assertEqual(res.json()["detail"], "Razorpay credentials not configured")
+
+    def test_create_subscription_formats_empty_razorpay_plan_error(self) -> None:
+        client = self._client()
+        fake_client = _FakeRazorpayClient(plan_create_error=BadRequestError())
+
+        with (
+            patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"),
+            patch("app.api.razorpay_routes._client", return_value=fake_client),
+        ):
+            res = client.post(
+                "/api/v1/subscriptions/create",
+                json={"tier": "starter"},
+                headers=self._admin_headers(),
+            )
+
+        self.assertEqual(res.status_code, 500)
+        self.assertEqual(res.json()["detail"], "failed_to_create_plan: BadRequestError")
 
     def test_create_subscription_does_not_reuse_legacy_price_plan_key(self) -> None:
         from app.api import razorpay_routes
