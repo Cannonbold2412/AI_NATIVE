@@ -328,7 +328,7 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 **Outputs:** Checkout readiness, plan tier, and workspace usage meters.
 **User goal:** Upgrade or manage subscription.
 
-**Meter behavior:** Shows all four customer meters first: seats, installer slots, compile credits, and Human Edit pool. Account timing and checkout state live in the Billing Operations panel rather than top summary cards.
+**Meter behavior:** Shows all four customer meters first: seats, installer slots, compile credits, and Human Edit pool. Account timing and checkout state live in the Billing Operations panel rather than top summary cards. The panel shows active plan and Usage reset only; Usage reset uses the Razorpay monthly payment/renewal timestamp, and the separate Billing period end row is not shown.
 
 **UX issues:**
 - No invoice history.

@@ -423,7 +423,7 @@ export function BillingPage() {
             <div>
               <h2 className="text-sm font-semibold text-white">Workspace Usage</h2>
               <p className="text-xs text-zinc-500">
-                Customer-visible meters for the current UTC billing period.
+                Customer-visible meters for the current billing cycle.
               </p>
             </div>
             {/* removed workspace badge per request */}
@@ -471,7 +471,6 @@ export function BillingPage() {
 
         <PaymentOperationsPanel
           currentPlan={currentPlan}
-          resetAt={entitlements?.reset_at}
           currentPeriodEnd={subscription?.current_period_end}
         />
       </main>
@@ -761,11 +760,9 @@ function EnterpriseContactDialog({
 
 function PaymentOperationsPanel({
   currentPlan,
-  resetAt,
   currentPeriodEnd,
 }: {
   currentPlan: string
-  resetAt?: string | null
   currentPeriodEnd?: number | null
 }) {
   return (
@@ -786,8 +783,7 @@ function PaymentOperationsPanel({
           <p className="text-xs font-medium uppercase tracking-normal text-zinc-500">Account Timing</p>
           <div className="mt-2 grid gap-2">
             <InfoRow label="Active plan" value={displayPlanName(currentPlan)} />
-            <InfoRow label="Usage reset" value={formatDate(resetAt)} />
-            <InfoRow label="Billing period end" value={formatUnixDate(currentPeriodEnd)} />
+            <InfoRow label="Usage reset" value={formatUnixDate(currentPeriodEnd)} />
           </div>
         </div>
 

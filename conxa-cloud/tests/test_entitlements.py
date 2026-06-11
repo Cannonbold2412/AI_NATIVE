@@ -36,6 +36,35 @@ def test_basic_plan_maps_to_starter(monkeypatch, tmp_path):
     assert body["meters"]["human_edit_tokens"]["limit"] == 10_000_000
 
 
+def test_paid_usage_window_follows_razorpay_payment_date(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "database_url", "")
+    upsert_billing(
+        "wrk_local",
+        {
+            "plan": "starter",
+            "current_period_end": 1893456000,
+        },
+    )
+    db_set(
+        "entitlement_usage",
+        usage_key("wrk_local", "billing:1893456000"),
+        {
+            "workspace_id": "wrk_local",
+            "period": "billing:1893456000",
+            "compile_credits_used": 7,
+        },
+    )
+
+    r = client.get("/api/v1/entitlements/current")
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["period"] == "billing:1893456000"
+    assert body["reset_at"] == "2030-01-01T00:00:00Z"
+    assert body["meters"]["compile_credits"]["used"] == 7
+
+
 def test_compile_reserve_commit_release_idempotency(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "data_dir", tmp_path)
     monkeypatch.setattr(settings, "database_url", "")

@@ -26,16 +26,17 @@ class _FakePlanApi:
 
 
 class _FakeSubscriptionApi:
-    def __init__(self, plan_id: str = "plan_starter_test") -> None:
+    def __init__(self, plan_id: str = "plan_starter_test", charge_at: int = 1893456000) -> None:
         self.plan_id = plan_id
+        self.charge_at = charge_at
         self.created_payloads: list[dict] = []
 
     def create(self, payload: dict) -> dict[str, str]:
         self.created_payloads.append(payload)
         return {"id": "sub_starter_test"}
 
-    def fetch(self, subscription_id: str) -> dict[str, str]:
-        return {"id": subscription_id, "plan_id": self.plan_id}
+    def fetch(self, subscription_id: str) -> dict[str, str | int]:
+        return {"id": subscription_id, "plan_id": self.plan_id, "charge_at": self.charge_at}
 
 
 class _FakeRazorpayClient:
@@ -232,9 +233,12 @@ class RazorpayRoutesTests(unittest.TestCase):
                 },
                 headers=self._admin_headers(),
             )
+            subscription = client.get("/api/v1/billing/subscription", headers=self._admin_headers())
 
         self.assertEqual(res.status_code, 200, res.text)
         self.assertEqual(res.json(), {"success": True})
+        self.assertEqual(subscription.status_code, 200, subscription.text)
+        self.assertEqual(subscription.json()["subscription"]["current_period_end"], 1893456000)
 
     def test_verify_subscription_accepts_configured_plan_id(self) -> None:
         client = self._client()

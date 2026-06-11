@@ -149,6 +149,24 @@ def reset_at_for_period(period: str) -> str:
     return _iso(reset)
 
 
+def _positive_epoch(value: Any) -> int | None:
+    try:
+        timestamp = int(value or 0)
+    except (TypeError, ValueError):
+        timestamp = 0
+    return timestamp if timestamp > 0 else None
+
+
+def usage_window_for_billing(billing: dict[str, Any]) -> tuple[str, str]:
+    current_period_end = _positive_epoch(billing.get("current_period_end"))
+    if current_period_end is not None:
+        reset_at = datetime.fromtimestamp(current_period_end, UTC)
+        return f"billing:{current_period_end}", _iso(reset_at)
+
+    period = current_period()
+    return period, reset_at_for_period(period)
+
+
 def normalize_plan(plan: str | None) -> str:
     value = str(plan or "free").strip().lower()
     if value == "basic":
@@ -361,7 +379,7 @@ def current_entitlements(principal: Principal) -> dict[str, Any]:
     billing = billing_for(principal)
     plan = normalize_plan(str(billing.get("plan") or "free"))
     limits = _limits_from_billing(billing)
-    period = current_period()
+    period, reset_at = usage_window_for_billing(billing)
     workspace_id = principal.workspace_id
     with _locked_store(f"entitlements:{workspace_id}:{period}") as store:
         _expire_reservations(store, workspace_id, period)
@@ -374,7 +392,7 @@ def current_entitlements(principal: Principal) -> dict[str, Any]:
         "workspace_id": workspace_id,
         "plan": plan,
         "period": period,
-        "reset_at": reset_at_for_period(period),
+        "reset_at": reset_at,
         "meters": {
             "seats": _meter(
                 _clerk_org_member_count(principal) or membership_count_for(workspace_id),
@@ -403,7 +421,7 @@ def reserve_compile_credit(
         raise EntitlementError("invalid_reservation_id", 400)
     billing = billing_for(principal)
     limits = _limits_from_billing(billing)
-    period = current_period()
+    period, _reset_at = usage_window_for_billing(billing)
     workspace_id = principal.workspace_id
     with _locked_store(f"compile-reserve:{workspace_id}:{period}") as store:
         _expire_reservations(store, workspace_id, period)
@@ -455,10 +473,10 @@ def _remaining_compile(
 
 
 def commit_compile_credit(principal: Principal, reservation_id: str) -> dict[str, Any]:
-    period = current_period()
-    workspace_id = principal.workspace_id
     billing = billing_for(principal)
     limits = _limits_from_billing(billing)
+    period, _reset_at = usage_window_for_billing(billing)
+    workspace_id = principal.workspace_id
     with _locked_store(f"compile-commit:{workspace_id}:{period}") as store:
         _expire_reservations(store, workspace_id, period)
         usage = _get_usage(store, workspace_id, period)
@@ -485,7 +503,8 @@ def commit_compile_credit(principal: Principal, reservation_id: str) -> dict[str
 
 
 def release_compile_credit(principal: Principal, reservation_id: str) -> dict[str, Any]:
-    period = current_period()
+    billing = billing_for(principal)
+    period, _reset_at = usage_window_for_billing(billing)
     workspace_id = principal.workspace_id
     with _locked_store(f"compile-release:{workspace_id}:{period}") as store:
         row = store.get(RESERVATION_NS, reservation_id)
@@ -511,7 +530,7 @@ def record_llm_usage(
         raise EntitlementError("invalid_usage_class", 400)
     billing = billing_for(principal)
     limits = _limits_from_billing(billing)
-    period = current_period()
+    period, _reset_at = usage_window_for_billing(billing)
     workspace_id = principal.workspace_id
     with _locked_store(f"llm-usage:{workspace_id}:{period}") as store:
         usage = _get_usage(store, workspace_id, period)
@@ -547,7 +566,7 @@ def ensure_human_edit_available(principal: Principal, *, estimated_tokens: int =
     limit = limits["human_edit_tokens"]
     if limit is None:
         return
-    period = current_period()
+    period, _reset_at = usage_window_for_billing(billing)
     workspace_id = principal.workspace_id
     with _locked_store(f"human-edit-check:{workspace_id}:{period}") as store:
         usage = _get_usage(store, workspace_id, period)

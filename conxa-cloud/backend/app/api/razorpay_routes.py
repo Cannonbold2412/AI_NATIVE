@@ -84,6 +84,17 @@ def _tier_for_plan_id(plan_id: str) -> str | None:
     return None
 
 
+def _next_charge_timestamp(subscription: dict[str, Any]) -> int | None:
+    for key in ("charge_at", "current_end"):
+        try:
+            value = int(subscription.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0
+        if value > 0:
+            return value
+    return None
+
+
 def _exception_detail(exc: Exception) -> str:
     message = str(exc).strip()
     if message and message.lower() != "none":
@@ -287,6 +298,7 @@ async def verify_subscription(body: dict[str, str], principal: Principal = Depen
             "plan": tier,
             "status": "active",
             "subscription_id": subscription_id,
+            "current_period_end": _next_charge_timestamp(subscription),
         })
         return {"success": True}
     except HTTPException:
@@ -324,14 +336,29 @@ async def handle_razorpay_webhook(request: Request) -> dict[str, bool]:
             if tier:
                 workspace_id = payload.get("notes", {}).get("workspace_id", "")
                 if workspace_id:
-                    upsert_billing(workspace_id, {"plan": tier, "status": "active"})
+                    upsert_billing(
+                        workspace_id,
+                        {
+                            "plan": tier,
+                            "status": "active",
+                            "subscription_id": subscription_id,
+                            "current_period_end": _next_charge_timestamp(subscription),
+                        },
+                    )
         except Exception:
             pass
     elif event_type == "subscription.cancelled":
         try:
             workspace_id = payload.get("notes", {}).get("workspace_id", "")
             if workspace_id:
-                upsert_billing(workspace_id, {"plan": "free", "status": "inactive"})
+                upsert_billing(
+                    workspace_id,
+                    {
+                        "plan": "free",
+                        "status": "inactive",
+                        "current_period_end": None,
+                    },
+                )
         except Exception:
             pass
     return {"received": True}

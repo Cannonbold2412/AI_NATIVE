@@ -473,8 +473,8 @@ Response:
 {
   "workspace_id": "org_123",
   "plan": "starter",
-  "period": "2026-06",
-  "reset_at": "2026-07-01T00:00:00Z",
+  "period": "billing:1782691200",
+  "reset_at": "2026-06-29T00:00:00Z",
   "meters": {
     "seats": {"used": 2, "limit": 3, "remaining": 1, "unlimited": false},
     "installer_slots": {"used": 1, "limit": 3, "remaining": 2, "unlimited": false},
@@ -483,6 +483,8 @@ Response:
   }
 }
 ```
+
+For paid Razorpay workspaces, `period` is `billing:<current_period_end_unix>` and `reset_at` is the next monthly payment timestamp. Workspaces without a subscription timestamp use the UTC calendar-month fallback (`YYYY-MM`).
 
 **POST /api/v1/usage/compile/reserve**
 
@@ -566,9 +568,11 @@ Response:
 {"success": true}
 ```
 
+On success, the billing record stores the active tier, Razorpay subscription id, and `current_period_end` from Razorpay `charge_at` with `current_end` as a fallback. The dashboard uses that timestamp as the usage reset date.
+
 **POST /api/v1/subscriptions/webhooks/razorpay**
 
-Razorpay webhook endpoint. When `RAZORPAY_WEBHOOK_SECRET` is configured, requests must include a valid `x-razorpay-signature`.
+Razorpay webhook endpoint. When `RAZORPAY_WEBHOOK_SECRET` is configured, requests must include a valid `x-razorpay-signature`. Activation and charge webhooks refresh `current_period_end`; cancellation clears it.
 
 ### 5.5 LLM Proxy Usage Class
 

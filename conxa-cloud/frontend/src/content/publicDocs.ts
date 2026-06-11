@@ -1292,7 +1292,7 @@ export const publicDocs = [
           {
             type: 'bullets',
             items: [
-              'Monthly meters reset on the workspace billing cycle or UTC period shown in the dashboard.',
+              'Monthly meters reset on the workspace billing cycle shown in the dashboard.',
               'Upgrades may unlock higher limits after payment verification or enterprise provisioning.',
               'Downgrades may take effect at the next renewal, immediately, or by support action depending on the checkout provider and current implementation.',
               'Enterprise changes are governed by the signed order form or procurement process.',

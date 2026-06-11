@@ -256,7 +256,7 @@ In local dev (`SKILL_AUTH_REQUIRED=false`), all requests are treated as a synthe
 
 ### 3.5 Billing
 
-Razorpay is the wired payment gateway (`app/api/razorpay_routes.py`). Production checkout uses pre-provisioned Razorpay monthly plan IDs for Starter and Pro (`RAZORPAY_STARTER_PLAN_ID`, `RAZORPAY_PRO_PLAN_ID`); runtime checkout must not create Razorpay plans dynamically. Local development can still fall back to dynamic plan creation when those IDs are absent. The config has orphaned `stripe_*` fields — these are **not wired** in any route handler (see §17).
+Razorpay is the wired payment gateway (`app/api/razorpay_routes.py`). Production checkout uses pre-provisioned Razorpay monthly plan IDs for Starter and Pro (`RAZORPAY_STARTER_PLAN_ID`, `RAZORPAY_PRO_PLAN_ID`); runtime checkout must not create Razorpay plans dynamically. Local development can still fall back to dynamic plan creation when those IDs are absent. Subscription verification and Razorpay activation/charge webhooks persist `current_period_end` from Razorpay's next-charge timestamp (`charge_at`, falling back to `current_end`) so paid usage windows reset on the monthly payment date. The config has orphaned `stripe_*` fields — these are **not wired** in any route handler (see §17).
 
 ---
 
@@ -941,7 +941,7 @@ Plan defaults:
 - `enterprise`: explicit workspace overrides.
 - `development`: unlimited.
 
-Legacy `basic` billing records normalize to `starter`. Monthly usage period is the UTC calendar month (`YYYY-MM`) and resets at the first day of the next UTC month.
+Legacy `basic` billing records normalize to `starter`. Paid Razorpay workspaces use `billing:<current_period_end_unix>` as the usage period and reset at the next monthly payment timestamp stored on the billing record. Workspaces without a subscription timestamp fall back to the UTC calendar month (`YYYY-MM`) and reset at the first day of the next UTC month.
 
 Fresh compile flow:
 1. Build Studio determines the workflow has no `skill_id`.
