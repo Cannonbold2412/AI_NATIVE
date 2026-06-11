@@ -25,6 +25,7 @@ export type Plan = {
 export type CreateSubscriptionResponse = {
   subscription_id: string
   plan_id: string
+  key_id?: string
   amount: number
   currency: string
   tier: string

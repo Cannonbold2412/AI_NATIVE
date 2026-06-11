@@ -59,6 +59,9 @@ class RazorpayRoutesTests(unittest.TestCase):
         pro_plan_patcher = patch("conxa_core.config.settings.razorpay_pro_plan_id", "")
         self.addCleanup(pro_plan_patcher.stop)
         pro_plan_patcher.start()
+        key_id_patcher = patch("conxa_core.config.settings.razorpay_key_id", "rzp_test_public")
+        self.addCleanup(key_id_patcher.stop)
+        key_id_patcher.start()
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -106,6 +109,7 @@ class RazorpayRoutesTests(unittest.TestCase):
         body = res.json()
         self.assertEqual(body["subscription_id"], "sub_starter_test")
         self.assertEqual(body["plan_id"], "plan_starter_test")
+        self.assertEqual(body["key_id"], "rzp_test_public")
         self.assertEqual(body["amount"], 2999900)
         self.assertEqual(body["currency"], "INR")
         self.assertEqual(body["tier"], "starter")
@@ -136,6 +140,7 @@ class RazorpayRoutesTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200, res.text)
         body = res.json()
         self.assertEqual(body["plan_id"], "plan_starter_configured")
+        self.assertEqual(body["key_id"], "rzp_test_public")
         self.assertEqual(body["tier"], "starter")
         self.assertEqual(fake_client.plan.created_payloads, [])
         subscription_payload = fake_client.subscription.created_payloads[0]

@@ -1,6 +1,6 @@
 # Technical Reference Document (TRD)
 
-**Status:** Current as of 2026-06-01  
+**Status:** Current as of 2026-06-11  
 **Scope:** Conxa platform — Build Studio, Conxa Cloud, Runtime
 
 ---
@@ -215,8 +215,8 @@ All under `/api/v1/` except health endpoints:
 | `POST /api/v1/telemetry/runtime-start` | Runtime phone-home — stores `runtime_registrations` KV entry per `(company, platform)` | Public (non-critical) |
 | `GET /api/v1/telemetry/runtimes` | Runtime registration list for dashboard (active/stale, version distribution) | Clerk JWT |
 | `GET /api/v1/audit-events` | Audit log for the authenticated workspace (publish, installer upload, plugin create/delete) | Clerk JWT |
-| `POST /api/v1/subscriptions` | Create Razorpay subscription | Clerk JWT |
-| `POST /api/v1/billing/webhook` | Razorpay webhook | Webhook secret HMAC |
+| `POST /api/v1/subscriptions/create` | Create Razorpay subscription (`subscription_id`, `plan_id`, public `key_id`) | Clerk JWT |
+| `POST /api/v1/subscriptions/webhooks/razorpay` | Razorpay webhook | Webhook secret HMAC |
 | `GET /api/v1/dashboard` | Dashboard data | Clerk JWT |
 | `GET /api/v1/plugins` | Plugin list | Clerk JWT |
 | `GET /api/v1/runs` | Run list (local) | Clerk JWT |

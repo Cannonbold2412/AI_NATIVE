@@ -43,8 +43,13 @@ import {
 
 declare global {
   interface Window {
-    Razorpay?: new (options: RazorpayOptions) => { open: () => void }
+    Razorpay?: new (options: RazorpayOptions) => RazorpayCheckout
   }
+}
+
+type RazorpayCheckout = {
+  open: () => void
+  on?: (event: 'payment.failed', handler: (response: RazorpayPaymentFailedResponse) => void) => void
 }
 
 type RazorpayOptions = {
@@ -62,6 +67,16 @@ type RazorpayOptions = {
   }
   theme?: {
     color: string
+  }
+}
+
+type RazorpayPaymentFailedResponse = {
+  error?: {
+    code?: string
+    description?: string
+    reason?: string
+    source?: string
+    step?: string
   }
 }
 
@@ -203,11 +218,19 @@ function checkoutBadgeClass(status: CheckoutStatus) {
   return 'border-white/8 bg-white/[0.03] text-zinc-400'
 }
 
+function razorpayFailureMessage(response: RazorpayPaymentFailedResponse) {
+  const error = response.error
+  return (
+    error?.description?.trim() ||
+    error?.reason?.trim() ||
+    error?.code?.trim() ||
+    'Payment could not be completed'
+  )
+}
+
 export function BillingPage() {
   const queryClient = useQueryClient()
-  const [checkoutStatus, setCheckoutStatus] = useState<CheckoutStatus>(
-    RAZORPAY_KEY_ID ? 'loading' : 'missing_key',
-  )
+  const [checkoutStatus, setCheckoutStatus] = useState<CheckoutStatus>('loading')
   const [processingTier, setProcessingTier] = useState<string | null>(null)
   const [currentPlanOverride, setCurrentPlanOverride] = useState<string | null>(null)
 
@@ -225,11 +248,6 @@ export function BillingPage() {
   })
 
   useEffect(() => {
-    if (!RAZORPAY_KEY_ID) {
-      setCheckoutStatus('missing_key')
-      return
-    }
-
     if (window.Razorpay) {
       setCheckoutStatus('ready')
       return
@@ -299,11 +317,6 @@ export function BillingPage() {
       return
     }
 
-    if (!RAZORPAY_KEY_ID) {
-      toast.error('Razorpay checkout key is not configured.')
-      return
-    }
-
     if (!canCheckout) {
       toast.error('Razorpay checkout is not ready yet.')
       return
@@ -320,8 +333,16 @@ export function BillingPage() {
         return
       }
 
+      const checkoutKey = order.key_id?.trim() || RAZORPAY_KEY_ID
+      if (!checkoutKey) {
+        setCheckoutStatus('missing_key')
+        setProcessingTier(null)
+        toast.error('Razorpay checkout key is not configured.')
+        return
+      }
+
       const checkout = new Razorpay({
-        key: RAZORPAY_KEY_ID,
+        key: checkoutKey,
         subscription_id: order.subscription_id,
         name: 'Conxa',
         description: `Conxa ${displayPlanName(normalizedTier)} plan`,
@@ -353,6 +374,10 @@ export function BillingPage() {
         theme: {
           color: '#2563eb',
         },
+      })
+      checkout.on?.('payment.failed', (response) => {
+        setProcessingTier(null)
+        toast.error(razorpayFailureMessage(response))
       })
 
       checkout.open()

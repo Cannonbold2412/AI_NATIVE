@@ -242,6 +242,7 @@ async def create_subscription(body: dict[str, str], principal: Principal = Depen
         return {
             "subscription_id": subscription["id"],
             "plan_id": plan_id,
+            "key_id": settings.razorpay_key_id,
             "amount": info["amount"],
             "currency": info["currency"],
             "tier": tier,

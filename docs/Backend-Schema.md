@@ -1,6 +1,6 @@
 # Backend Schema Document
 
-**Status:** Current as of 2026-06-10
+**Status:** Current as of 2026-06-11
 **Scope:** All data models, storage architecture, and API contracts
 
 ---
@@ -527,7 +527,50 @@ Stable entitlement error details:
 - `entitlements_unavailable`
 - `invalid_usage_class`
 
-### 5.4 LLM Proxy Usage Class
+### 5.4 Billing
+
+**POST /api/v1/subscriptions/create**
+
+Request:
+```json
+{"tier": "starter"}
+```
+
+Response:
+```json
+{
+  "subscription_id": "sub_123",
+  "plan_id": "plan_123",
+  "key_id": "rzp_live_xxx",
+  "amount": 2999900,
+  "currency": "INR",
+  "tier": "starter"
+}
+```
+
+`key_id` is the public Razorpay Checkout key for the same account/mode that created the subscription. Secrets stay backend-only.
+
+**POST /api/v1/subscriptions/verify**
+
+Request:
+```json
+{
+  "razorpay_payment_id": "pay_123",
+  "razorpay_subscription_id": "sub_123",
+  "razorpay_signature": "..."
+}
+```
+
+Response:
+```json
+{"success": true}
+```
+
+**POST /api/v1/subscriptions/webhooks/razorpay**
+
+Razorpay webhook endpoint. When `RAZORPAY_WEBHOOK_SECRET` is configured, requests must include a valid `x-razorpay-signature`.
+
+### 5.5 LLM Proxy Usage Class
 
 `POST /api/v1/llm/proxy/text` and `/vision` accept:
 
@@ -551,7 +594,7 @@ Response when up-to-date:
 }
 ```
 
-### 5.5 Telemetry Ingest
+### 5.6 Telemetry Ingest
 
 **POST /api/tracking/{company}/events**
 **Header: X-Tracking-Token: {token}**
@@ -563,7 +606,7 @@ Response (202):
 {"ok": true}
 ```
 
-### 5.6 Tracking Runs Query
+### 5.7 Tracking Runs Query
 
 **GET /api/v1/tracking/{company}/runs?limit=50&offset=0**
 **Header: Authorization: Bearer {clerk_jwt}**
@@ -594,7 +637,7 @@ Response:
 }
 ```
 
-### 5.7 Runtime Manifest
+### 5.8 Runtime Manifest
 
 **GET /api/v1/updates/runtime-manifest**
 
@@ -610,7 +653,7 @@ Response:
 }
 ```
 
-### 5.8 Skill-Pack Delta Sync
+### 5.9 Skill-Pack Delta Sync
 
 **GET /api/v1/skill-packs/{company}/delta?since={version}**
 
@@ -635,7 +678,7 @@ The sync_token is also returned in the publish response so the Build Studio can 
 
 **KV namespace:** `sync_tokens` — keyed by slug, stores `{token, company, version, workspace_id, owner_user_id, updated_at}`.
 
-### 5.9 Backend JSON-RPC Protocol (Build Studio)
+### 5.10 Backend JSON-RPC Protocol (Build Studio)
 
 **Protocol:** Newline-delimited JSON over stdin/stdout.
 
