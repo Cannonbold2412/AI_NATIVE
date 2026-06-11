@@ -268,13 +268,13 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 
 ### 3.1.1 Public Docs (`app/(marketing)/docs/...`)
 
-**Paths:** `/docs`, `/docs/[slug]`
+**Paths:** `/docs`, `/docs/[slug]`, `/docs/claude-automation`
 **Purpose:** Public documentation and customer-facing policy pages for product behavior, security, privacy, terms, cookies, billing, acceptable use, data processing, and support.
 **Inputs:** Static typed content from `src/content/publicDocs.ts`.
-**Outputs:** Docs index, sidebar navigation, mobile docs navigation, page table of contents, related docs, and drafting-reference links for policy pages.
+**Outputs:** Docs index, sidebar navigation, mobile docs navigation, page table of contents, related docs, drafting-reference links for policy pages, and crawler-facing `/robots.txt`, `/sitemap.xml`, and `/llms.txt` endpoints.
 **User goal:** Understand how Conxa works, what data moves where, what policies govern use, and how to contact support before signing in.
 
-**Status:** Public marketing route group; does not require Clerk auth.
+**Status:** Public marketing route group; does not require Clerk auth. Includes a Claude automation docs page for LLM/search discoverability around Claude Desktop, MCP, local execution, and browser workflow automation.
 
 ---
 

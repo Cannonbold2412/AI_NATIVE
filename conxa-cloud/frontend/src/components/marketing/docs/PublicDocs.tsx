@@ -1,14 +1,71 @@
 import Link from 'next/link'
 import {
+  PUBLIC_DOCS_LAST_MODIFIED,
+  publicDocs,
   publicDocCategories,
   getPublicDoc,
   getPublicDocsByCategory,
   type PublicDocBlock,
   type PublicDocPage,
 } from '@/content/publicDocs'
+import { SITE_NAME, absoluteUrl, sitePublisher } from '@/lib/siteMetadata'
 
 function docHref(slug: string) {
   return `/docs/${slug}`
+}
+
+function JsonLd({ data }: { data: Record<string, unknown> }) {
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{
+        __html: JSON.stringify(data).replace(/</g, '\\u003c'),
+      }}
+    />
+  )
+}
+
+function docsIndexStructuredData() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: 'CONXA docs',
+    url: absoluteUrl('/docs'),
+    description:
+      'Public CONXA documentation for Claude Desktop automation, MCP, local execution, security, privacy, billing, and support.',
+    publisher: sitePublisher,
+    hasPart: publicDocs.map((doc) => ({
+      '@type': 'TechArticle',
+      headline: doc.title,
+      description: doc.description,
+      url: absoluteUrl(docHref(doc.slug)),
+      isPartOf: {
+        '@type': 'WebSite',
+        name: SITE_NAME,
+        url: absoluteUrl('/'),
+      },
+    })),
+  }
+}
+
+function docStructuredData(doc: PublicDocPage) {
+  const url = absoluteUrl(docHref(doc.slug))
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: doc.title,
+    description: doc.description,
+    url,
+    mainEntityOfPage: url,
+    dateModified: PUBLIC_DOCS_LAST_MODIFIED,
+    publisher: sitePublisher,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: SITE_NAME,
+      url: absoluteUrl('/'),
+    },
+  }
 }
 
 function SectionLinkList({ doc }: { doc: PublicDocPage }) {
@@ -288,131 +345,140 @@ function ReferenceLinks({ doc }: { doc: PublicDocPage }) {
 
 export function DocsIndex() {
   return (
-    <div className="min-h-screen bg-[#06080b] px-6 pb-20 pt-28">
-      <div className="mx-auto flex max-w-7xl gap-8">
-        <DocsSidebar />
-        <div className="min-w-0 flex-1">
-          <MobileDocsNav />
-          <header className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
-              CONXA docs
-            </p>
-            <h1 className="mt-4 text-4xl font-semibold tracking-normal text-white sm:text-5xl">
-              Public product, trust, legal, billing, and support docs.
-            </h1>
-            <p className="mt-5 text-base leading-7 text-zinc-400">
-              Customer-facing documentation for how Conxa works, what data moves where, and the
-              policies that govern use of the platform.
-            </p>
-          </header>
+    <>
+      <JsonLd data={docsIndexStructuredData()} />
+      <div className="min-h-screen bg-[#06080b] px-6 pb-20 pt-28">
+        <div className="mx-auto flex max-w-7xl gap-8">
+          <DocsSidebar />
+          <div className="min-w-0 flex-1">
+            <MobileDocsNav />
+            <header className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                CONXA docs
+              </p>
+              <h1 className="mt-4 text-4xl font-semibold tracking-normal text-white sm:text-5xl">
+                Public product, trust, legal, billing, and support docs.
+              </h1>
+              <p className="mt-5 text-base leading-7 text-zinc-400">
+                Customer-facing documentation for Claude Desktop automation, MCP, local browser
+                workflow execution, data movement, and the policies that govern use of the
+                platform.
+              </p>
+            </header>
 
-          <div className="mt-10 grid gap-5">
-            {publicDocCategories.map((category) => (
-              <section key={category.id} className="border-t border-white/8 pt-6">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold text-white">{category.title}</h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-                      {category.description}
-                    </p>
+            <div className="mt-10 grid gap-5">
+              {publicDocCategories.map((category) => (
+                <section key={category.id} className="border-t border-white/8 pt-6">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold text-white">{category.title}</h2>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
+                        {category.description}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {getPublicDocsByCategory(category).map((doc) => (
-                    <Link
-                      key={doc.slug}
-                      href={docHref(doc.slug)}
-                      className="rounded-md border border-white/8 bg-white/[0.025] p-4 transition-colors hover:border-cyan-400/30 hover:bg-white/[0.04]"
-                    >
-                      <p className="text-xs font-semibold uppercase tracking-normal text-cyan-300">
-                        {doc.eyebrow}
-                      </p>
-                      <h3 className="mt-2 text-base font-semibold text-white">{doc.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-zinc-400">{doc.description}</p>
-                      <p className="mt-4 text-xs text-zinc-600">
-                        Updated {doc.lastUpdated} - {doc.readingTime}
-                      </p>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            ))}
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {getPublicDocsByCategory(category).map((doc) => (
+                      <Link
+                        key={doc.slug}
+                        href={docHref(doc.slug)}
+                        className="rounded-md border border-white/8 bg-white/[0.025] p-4 transition-colors hover:border-cyan-400/30 hover:bg-white/[0.04]"
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-normal text-cyan-300">
+                          {doc.eyebrow}
+                        </p>
+                        <h3 className="mt-2 text-base font-semibold text-white">{doc.title}</h3>
+                        <p className="mt-2 text-sm leading-6 text-zinc-400">{doc.description}</p>
+                        <p className="mt-4 text-xs text-zinc-600">
+                          Updated {doc.lastUpdated} - {doc.readingTime}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
 export function DocsPage({ doc }: { doc: PublicDocPage }) {
   return (
-    <div className="min-h-screen bg-[#06080b] px-6 pb-20 pt-28">
-      <div className="mx-auto flex max-w-7xl gap-8">
-        <DocsSidebar currentSlug={doc.slug} />
-        <article className="min-w-0 flex-1">
-          <MobileDocsNav currentDoc={doc} />
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_15rem]">
-            <div className="min-w-0">
-              <header className="max-w-3xl">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
-                  {doc.eyebrow}
-                </p>
-                <h1 className="mt-4 text-4xl font-semibold tracking-normal text-white sm:text-5xl">
-                  {doc.title}
-                </h1>
-                <p className="mt-5 text-base leading-7 text-zinc-400">{doc.description}</p>
-                <div className="mt-5 flex flex-wrap gap-2 text-xs text-zinc-600">
-                  <span className="rounded-full border border-white/8 px-3 py-1">
-                    Updated {doc.lastUpdated}
-                  </span>
-                  <span className="rounded-full border border-white/8 px-3 py-1">
-                    {doc.readingTime}
-                  </span>
-                </div>
-              </header>
+    <>
+      <JsonLd data={docStructuredData(doc)} />
+      <div className="min-h-screen bg-[#06080b] px-6 pb-20 pt-28">
+        <div className="mx-auto flex max-w-7xl gap-8">
+          <DocsSidebar currentSlug={doc.slug} />
+          <article className="min-w-0 flex-1">
+            <MobileDocsNav currentDoc={doc} />
+            <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_15rem]">
+              <div className="min-w-0">
+                <header className="max-w-3xl">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                    {doc.eyebrow}
+                  </p>
+                  <h1 className="mt-4 text-4xl font-semibold tracking-normal text-white sm:text-5xl">
+                    {doc.title}
+                  </h1>
+                  <p className="mt-5 text-base leading-7 text-zinc-400">{doc.description}</p>
+                  <div className="mt-5 flex flex-wrap gap-2 text-xs text-zinc-600">
+                    <span className="rounded-full border border-white/8 px-3 py-1">
+                      Updated {doc.lastUpdated}
+                    </span>
+                    <span className="rounded-full border border-white/8 px-3 py-1">
+                      {doc.readingTime}
+                    </span>
+                  </div>
+                </header>
 
-              <section className="mt-8 rounded-md border border-white/8 bg-white/[0.025] p-5">
-                <h2 className="text-sm font-semibold uppercase tracking-normal text-zinc-500">
-                  Summary
-                </h2>
-                <ul className="mt-4 space-y-2 text-sm leading-6 text-zinc-300">
-                  {doc.summary.map((item) => (
-                    <li key={item} className="flex gap-3">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300" />
-                      <span>{item}</span>
-                    </li>
+                <section className="mt-8 rounded-md border border-white/8 bg-white/[0.025] p-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-normal text-zinc-500">
+                    Summary
+                  </h2>
+                  <ul className="mt-4 space-y-2 text-sm leading-6 text-zinc-300">
+                    {doc.summary.map((item) => (
+                      <li key={item} className="flex gap-3">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+
+                <div className="mt-10 space-y-12">
+                  {doc.sections.map((section) => (
+                    <section key={section.id} id={section.id} className="scroll-mt-28">
+                      <h2 className="text-2xl font-semibold tracking-normal text-white">
+                        {section.title}
+                      </h2>
+                      {section.intro ? (
+                        <p className="mt-3 text-[15px] leading-7 text-zinc-400">
+                          {section.intro}
+                        </p>
+                      ) : null}
+                      <div className="mt-5 space-y-5">
+                        {section.blocks.map((block, index) => (
+                          <BlockRenderer key={`${section.id}-${index}`} block={block} />
+                        ))}
+                      </div>
+                    </section>
                   ))}
-                </ul>
-              </section>
-
-              <div className="mt-10 space-y-12">
-                {doc.sections.map((section) => (
-                  <section key={section.id} id={section.id} className="scroll-mt-28">
-                    <h2 className="text-2xl font-semibold tracking-normal text-white">
-                      {section.title}
-                    </h2>
-                    {section.intro ? (
-                      <p className="mt-3 text-[15px] leading-7 text-zinc-400">{section.intro}</p>
-                    ) : null}
-                    <div className="mt-5 space-y-5">
-                      {section.blocks.map((block, index) => (
-                        <BlockRenderer key={`${section.id}-${index}`} block={block} />
-                      ))}
-                    </div>
-                  </section>
-                ))}
-                <ReferenceLinks doc={doc} />
-                <RelatedDocs doc={doc} />
+                  <ReferenceLinks doc={doc} />
+                  <RelatedDocs doc={doc} />
+                </div>
+              </div>
+              <div className="hidden xl:block">
+                <div className="sticky top-24">
+                  <SectionLinkList doc={doc} />
+                </div>
               </div>
             </div>
-            <div className="hidden xl:block">
-              <div className="sticky top-24">
-                <SectionLinkList doc={doc} />
-              </div>
-            </div>
-          </div>
-        </article>
+          </article>
+        </div>
       </div>
-    </div>
+    </>
   )
 }

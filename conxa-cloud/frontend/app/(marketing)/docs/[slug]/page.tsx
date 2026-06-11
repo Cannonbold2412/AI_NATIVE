@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { DocsPage } from '@/components/marketing/docs/PublicDocs'
 import { getPublicDoc, publicDocSlugs } from '@/content/publicDocs'
+import { createPublicPageMetadata } from '@/lib/siteMetadata'
 
 type PageProps = {
   params: Promise<{
@@ -20,15 +21,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const doc = getPublicDoc(slug)
 
   if (!doc) {
-    return {
+    return createPublicPageMetadata({
       title: 'Docs | CONXA',
-    }
+      description:
+        'Public CONXA documentation for Claude Desktop automation, MCP, local execution, security, privacy, billing, and support.',
+      path: '/docs',
+    })
   }
 
-  return {
+  return createPublicPageMetadata({
     title: `${doc.title} | CONXA Docs`,
     description: doc.description,
-  }
+    path: `/docs/${doc.slug}`,
+    type: 'article',
+  })
 }
 
 export default async function PublicDocPage({ params }: PageProps) {

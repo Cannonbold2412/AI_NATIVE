@@ -65,6 +65,7 @@ export const SUPPORT_PHONE_DISPLAY =
 export const SUPPORT_PHONE_TEL =
   process.env.NEXT_PUBLIC_SALES_PHONE_TEL ?? SUPPORT_PHONE_DISPLAY.replace(/[^\d+]/g, '')
 
+export const PUBLIC_DOCS_LAST_MODIFIED = '2026-06-11'
 const LAST_UPDATED = 'June 11, 2026'
 
 export const publicDocs = [
@@ -189,7 +190,96 @@ export const publicDocs = [
         ],
       },
     ],
-    relatedSlugs: ['build-studio', 'cloud', 'runtime', 'security'],
+    relatedSlugs: ['claude-automation', 'build-studio', 'cloud', 'runtime'],
+  },
+  {
+    slug: 'claude-automation',
+    category: 'product',
+    title: 'Claude Automation With CONXA',
+    eyebrow: 'Product docs',
+    description:
+      'How Conxa packages browser workflow automation as local MCP skills that Claude Desktop can invoke safely.',
+    lastUpdated: LAST_UPDATED,
+    readingTime: '6 min read',
+    summary: [
+      'Claude automation with Conxa starts from a reviewed human workflow, not from an AI model improvising browser clicks at runtime.',
+      'Claude Desktop automation runs through the installed Conxa runtime, which registers as a local MCP server and executes prepared skills on the end user machine.',
+      'MCP automation still depends on authorized access, reviewed workflows, local browser session state, and package boundaries that exclude target-site credentials.',
+    ],
+    sections: [
+      {
+        id: 'how-it-works',
+        title: 'How Claude automation works',
+        blocks: [
+          {
+            type: 'paragraphs',
+            items: [
+              'Claude automation with Conxa starts when a builder records a browser workflow once in Build Studio. Conxa compiles that recording into a data-only skill package with step intent, selectors, validation expectations, and recovery metadata.',
+              'The installed runtime registers as an MCP server for Claude Desktop or another MCP-capable client. When Claude invokes a skill, the runtime executes the prepared browser workflow automation locally on the user machine.',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'why-mcp',
+        title: 'Why MCP is the boundary',
+        blocks: [
+          {
+            type: 'paragraphs',
+            items: [
+              'MCP automation gives Claude Desktop a defined tool surface instead of asking the model to rediscover every screen. The runtime can expose available skills, input schemas, execution status, cancellation, package refresh, and permitted skill metadata.',
+              'This keeps the AI client focused on selecting the right skill and providing inputs. The local Conxa runtime handles browser execution, deterministic recovery, assertions, and telemetry.',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'local-runtime',
+        title: 'Local AI automation runtime',
+        blocks: [
+          {
+            type: 'paragraphs',
+            items: [
+              'The runtime is the local AI automation runtime for Conxa skills. It syncs packaged workflow definitions, opens the local browser automation context, uses local session state where available, and reports compact operational telemetry.',
+              'Conxa Cloud coordinates packages, installers, billing, updates, compile-time LLM proxying, and telemetry. It does not operate the customer application for the end user.',
+            ],
+          },
+          {
+            type: 'callout',
+            title: 'Execution stays on the user machine',
+            body: 'Claude Desktop can ask for a skill to run, but the browser session and target-application credentials remain local runtime state rather than cloud execution state.',
+          },
+        ],
+      },
+      {
+        id: 'safe-use',
+        title: 'Authorized workflow automation',
+        blocks: [
+          {
+            type: 'bullets',
+            items: [
+              'Build skills only for products, accounts, data, and workflows the user is authorized to operate.',
+              'Review compiled workflows before distribution so end users understand what the skill will do.',
+              'Do not package browser session files, passwords, cookies, credential stealers, or intentionally harmful automation.',
+              'Use Conxa for repeatable operational workflows, not as a way to bypass target-application permissions or policy.',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'who-benefits',
+        title: 'Who this is for',
+        blocks: [
+          {
+            type: 'paragraphs',
+            items: [
+              'SaaS vendors can make common product workflows usable from Claude Desktop without building a custom native API integration for every workflow. Internal operations teams can package browser workflow automation for repeatable local execution by authorized users.',
+            ],
+          },
+        ],
+      },
+    ],
+    relatedSlugs: ['platform', 'runtime', 'security', 'acceptable-use'],
   },
   {
     slug: 'build-studio',
@@ -388,7 +478,7 @@ export const publicDocs = [
     title: 'Runtime And MCP Execution',
     eyebrow: 'Product docs',
     description:
-      'How the installed runtime exposes skills to Claude Desktop or another MCP client and executes them locally.',
+      'How the installed runtime exposes local browser workflow automation to Claude Desktop or another MCP client and executes skills locally.',
     lastUpdated: LAST_UPDATED,
     readingTime: '8 min read',
     summary: [
@@ -485,7 +575,7 @@ export const publicDocs = [
         ],
       },
     ],
-    relatedSlugs: ['platform', 'security', 'privacy', 'support'],
+    relatedSlugs: ['claude-automation', 'platform', 'security', 'privacy'],
   },
   {
     slug: 'security',
@@ -1576,8 +1666,8 @@ export const publicDocCategories = [
     id: 'product',
     title: 'Product docs',
     description:
-      'How Conxa is built, where work happens, and how packages reach installed runtimes.',
-    slugs: ['platform', 'build-studio', 'cloud', 'runtime'],
+      'How Conxa supports Claude Desktop automation, where work happens, and how packages reach installed runtimes.',
+    slugs: ['platform', 'claude-automation', 'build-studio', 'cloud', 'runtime'],
   },
   {
     id: 'trust',
