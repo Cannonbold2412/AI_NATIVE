@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from conxa_core.db import db_get, db_set
 from app.services.rbac import require_admin
 from app.services.saas import Principal, ensure_principal, principal_from_request, upsert_billing
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 
@@ -137,10 +139,27 @@ def _ensure_plan(tier: str) -> str:
         store[plan_key] = plan_id
         _write_plan_store(store)
         return plan_id
-    except HTTPException:
+    except HTTPException as exc:
+        logger.error(
+            "razorpay_plan_create_config_error tier=%s plan_key=%s amount=%s currency=%s detail=%s",
+            tier,
+            plan_key,
+            info["amount"],
+            info["currency"],
+            exc.detail,
+        )
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"failed_to_create_plan: {_exception_detail(exc)}") from exc
+        detail = _exception_detail(exc)
+        logger.exception(
+            "razorpay_plan_create_failed tier=%s plan_key=%s amount=%s currency=%s error=%s",
+            tier,
+            plan_key,
+            info["amount"],
+            info["currency"],
+            detail,
+        )
+        raise HTTPException(status_code=500, detail=f"failed_to_create_plan: {detail}") from exc
 
 
 @router.get("/plans")
@@ -201,7 +220,14 @@ async def create_subscription(body: dict[str, str], principal: Principal = Depen
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"subscription_error: {_exception_detail(exc)}") from exc
+        detail = _exception_detail(exc)
+        logger.exception(
+            "razorpay_subscription_create_failed workspace_id=%s tier=%s error=%s",
+            principal.workspace_id,
+            tier,
+            detail,
+        )
+        raise HTTPException(status_code=500, detail=f"subscription_error: {detail}") from exc
 
 
 @router.post("/verify")
