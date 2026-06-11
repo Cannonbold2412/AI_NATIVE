@@ -1,25 +1,17 @@
 'use client'
 
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchInstallerVersions, fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
+import Link from 'next/link'
+import { fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
+import { fetchEntitlements } from '@/api/productApi'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { EntitlementMeters } from '@/components/EntitlementMeters'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Download, Globe, Search } from 'lucide-react'
+import { ChevronRight, Globe, PackageCheck } from 'lucide-react'
 
-function formatBytes(size: number) {
-  if (!Number.isFinite(size) || size <= 0) return '0 KB'
-  if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDate(ts: number) {
-  if (!ts) return 'Unknown'
-  return new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+function formatCount(value: number | null | undefined) {
+  if (value == null) return 'Unlimited'
+  return new Intl.NumberFormat().format(value)
 }
 
 function statusBadge(status: Plugin['status']) {
@@ -37,56 +29,45 @@ function statusBadge(status: Plugin['status']) {
   )
 }
 
-function InstallerVersionHistory({ plugin }: { plugin: Plugin }) {
-  const q = useQuery({
-    queryKey: ['installer-versions', plugin.slug],
-    queryFn: () => fetchInstallerVersions(plugin.slug),
-    enabled: !!plugin.installer,
-    staleTime: 30_000,
-  })
-  if (!plugin.installer) return null
+function InstallerSlotSummary() {
+  const q = useQuery({ queryKey: ['entitlements'], queryFn: fetchEntitlements, staleTime: 30_000, retry: 1 })
+  const meter = q.data?.meters?.installer_slots
 
-  const versions = q.data?.versions ?? []
-  return (
-    <div className="mt-3 border-t border-white/8 pt-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-zinc-300">Version history</p>
-        {q.isLoading ? <span className="text-[11px] text-zinc-600">Loading...</span> : null}
-      </div>
-      {versions.length === 0 && !q.isLoading ? (
-        <p className="text-xs text-zinc-600">No versions tracked yet</p>
-      ) : (
-        <div className="space-y-2">
-          {versions.slice(0, 4).map((item) => (
-            <div key={item.version} className="rounded-md border border-white/8 bg-black/20 p-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-xs text-zinc-200">v{item.version}</span>
-                    {item.is_latest ? (
-                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0 text-[10px] text-emerald-300">
-                        latest
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.release_notes}</p>
-                  <p className="mt-1 text-[11px] text-zinc-600">
-                    {formatDate(item.uploaded_at)} / {formatBytes(item.size)}
-                  </p>
-                </div>
-                <a
-                  href={item.download_url}
-                  download={item.filename}
-                  className="rounded-md border border-white/10 p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
-                  title={`Download v${item.version}`}
-                >
-                  <Download className="size-3.5" />
-                </a>
-              </div>
-            </div>
-          ))}
+  if (q.isLoading) {
+    return (
+      <div className="flex h-9 min-w-56 items-center border-l border-white/10 pl-4">
+        <div className="space-y-1.5">
+          <div className="h-2.5 w-20 animate-pulse rounded bg-white/[0.08]" />
+          <div className="h-2.5 w-28 animate-pulse rounded bg-white/[0.06]" />
         </div>
-      )}
+      </div>
+    )
+  }
+
+  if (q.isError || !meter) {
+    return (
+      <div className="flex h-9 min-w-56 items-center justify-between gap-4 border-l border-white/10 pl-4">
+        <div className="leading-none">
+          <p className="text-[11px] font-medium text-zinc-500">Installer slots</p>
+          <p className="mt-1 text-[11px] text-amber-300">Usage unavailable</p>
+        </div>
+      </div>
+    )
+  }
+
+  const usage = meter.unlimited ? formatCount(meter.used) : `${formatCount(meter.used)} / ${formatCount(meter.limit)}`
+  const capacity = meter.unlimited ? 'Unlimited capacity' : `${formatCount(meter.remaining)} available`
+
+  return (
+    <div className="flex h-9 min-w-56 items-center justify-between gap-4 border-l border-white/10 pl-4">
+      <div className="leading-none">
+        <p className="text-[11px] font-medium text-zinc-500">Installer slots</p>
+        <p className="mt-1 text-[11px] text-zinc-600">{capacity}</p>
+      </div>
+      <div className="whitespace-nowrap text-right">
+        <span className="text-sm font-semibold text-white">{usage}</span>
+        <span className="ml-1 text-xs text-zinc-500">used</span>
+      </div>
     </div>
   )
 }
@@ -95,100 +76,105 @@ export function PluginsPage() {
   const q = useQuery({ queryKey: ['plugins'], queryFn: fetchPlugins, staleTime: 10_000 })
   const plugins = normalizePluginList(q.data)
 
-  const [search, setSearch] = useState('')
-
-  const filtered = plugins.filter((p) =>
-    !search ||
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.target_url.toLowerCase().includes(search.toLowerCase()),
-  )
-
   return (
     <div className="h-full overflow-y-auto">
       <PageHeader
         title="Plugins"
-        description="Published skills available to your customers."
+        description={q.isSuccess && plugins.length > 0 ? `${plugins.length} published plugin${plugins.length !== 1 ? 's' : ''}` : 'Published skills for customer installation.'}
+        actions={<InstallerSlotSummary />}
       />
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6">
-        <EntitlementMeters meters={['installer_slots']} />
-
-        {/* Search bar — only shown when plugins exist */}
-        {plugins.length > 0 ? (
-          <div className="relative max-w-xs">
-            <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-zinc-500" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search plugins…"
-              className="pl-8 border-white/10 bg-white/[0.04] text-zinc-100 placeholder:text-zinc-600 h-8 text-sm"
-            />
-          </div>
-        ) : null}
-
+      <div className="flex w-full max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6">
         {q.isLoading ? (
-          <p className="text-sm text-zinc-500">Loading…</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <Card key={item} size="sm" className="gap-0 border-white/8 bg-white/[0.03] py-3 shadow-none">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+                      <div className="h-3 w-44 animate-pulse rounded bg-white/[0.06]" />
+                    </div>
+                    <div className="h-5 w-14 animate-pulse rounded-full bg-white/[0.06]" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2 pt-0">
+                  <div className="h-3 w-36 animate-pulse rounded bg-white/[0.06]" />
+                  <div className="h-7 w-full animate-pulse rounded-md bg-white/[0.06]" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : q.isError ? (
-          <p className="text-sm text-red-400">{(q.error as Error).message}</p>
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {(q.error as Error).message}
+          </div>
         ) : plugins.length === 0 ? (
           <Card className="border-white/8 bg-white/[0.03] shadow-none">
-            <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-              <Globe className="size-8 text-zinc-600" />
+            <CardContent className="flex flex-col items-center gap-2.5 py-9 text-center">
+              <Globe className="size-7 text-zinc-600" />
               <p className="text-sm font-medium text-zinc-300">No published plugins yet</p>
               <p className="max-w-xs text-xs text-zinc-500">
                 Build and publish a plugin from the Build Studio. It will appear here once published.
               </p>
             </CardContent>
           </Card>
-        ) : filtered.length === 0 ? (
-          <p className="text-sm text-zinc-500">No plugins match your search.</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((plugin) => {
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {plugins.map((plugin) => {
               const version = plugin.installer?.version ?? plugin.build?.version
               const hasInstaller = !!plugin.installer
               return (
-                <Card
+                <Link
                   key={plugin.id}
-                  className="border-white/8 bg-white/[0.03] shadow-none"
+                  href={`/plugins/${encodeURIComponent(plugin.id)}`}
+                  className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  aria-label={`Open ${plugin.name} release history`}
                 >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <CardTitle className="truncate text-sm font-medium text-white">
-                          {plugin.name}
-                        </CardTitle>
-                        <p className="mt-0.5 truncate text-xs text-zinc-500">{plugin.target_url}</p>
+                  <Card
+                    size="sm"
+                    className="h-full gap-0 border-white/8 bg-white/[0.035] py-3 shadow-none transition-colors group-hover:border-white/15 group-hover:bg-white/[0.05]"
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="truncate text-sm font-medium text-white">
+                            {plugin.name}
+                          </CardTitle>
+                          <p className="mt-0.5 truncate text-xs text-zinc-500">{plugin.target_url}</p>
+                        </div>
+                        {statusBadge(plugin.status)}
                       </div>
-                      {statusBadge(plugin.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="mb-3 flex items-center gap-3 text-xs text-zinc-500">
-                      <span>
-                        {version ? (
-                          <>Version <span className="font-mono text-zinc-300">v{version}</span></>
-                        ) : (
-                          <span className="text-zinc-600">Not built yet</span>
-                        )}
-                      </span>
-                      <span>{plugin.workflows.length} workflow{plugin.workflows.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    {hasInstaller ? (
-                      <Button asChild size="sm" className="w-full">
-                        <a
-                          href={`/api/v1/installers/${plugin.slug}`}
-                          download={plugin.installer?.filename}
-                        >
-                          <Download className="size-3.5" />
-                          Download installer
-                        </a>
-                      </Button>
-                    ) : (
-                      <p className="text-xs text-zinc-600">Installer not published yet</p>
-                    )}
-                    <InstallerVersionHistory plugin={plugin} />
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="grid grid-cols-3 gap-2 border-y border-white/8 py-2.5 text-xs">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-600">Version</p>
+                          <p className="mt-1 truncate font-mono text-zinc-300">{version ? `v${version}` : 'Not built'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-600">Workflows</p>
+                          <p className="mt-1 text-zinc-300">{plugin.workflows.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-600">Installer</p>
+                          <p className={hasInstaller ? 'mt-1 text-emerald-300' : 'mt-1 text-zinc-600'}>
+                            {hasInstaller ? 'Published' : 'Pending'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 flex items-center justify-between gap-2 text-xs text-zinc-500">
+                        <span className="inline-flex items-center gap-1.5">
+                          <PackageCheck className="size-3.5 text-zinc-600" />
+                          Release history
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-zinc-400 transition-colors group-hover:text-white">
+                          Open
+                          <ChevronRight className="size-3.5" />
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               )
             })}
           </div>

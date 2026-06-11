@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   CreditCard,
   Home,
   Menu,
@@ -33,6 +34,7 @@ const operateNavGroup = {
   items: [
     { to: '/dashboard', label: 'Dashboard', icon: Home },
     { to: '/plugins', label: 'Plugins', icon: Puzzle },
+    { to: '/audit', label: 'Audit', icon: ClipboardCheck },
   ],
 } as const
 

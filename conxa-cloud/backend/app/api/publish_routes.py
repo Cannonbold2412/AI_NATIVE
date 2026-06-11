@@ -360,6 +360,11 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
     release_notes = _validate_release_notes(request.query_params.get("release_notes"))
     filename = request.query_params.get("filename") or f"{slug}-Plugin-Setup.exe"
     filename = Path(filename).name  # strip any path components
+    plugin_record = next(
+        (p for p in list_plugins(workspace_id=principal.workspace_id) if p.slug == slug),
+        None,
+    )
+    workflow_count = len(plugin_record.workflows) if plugin_record is not None else 0
 
     out_dir = _installer_dir(slug)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -383,6 +388,7 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
         "uploaded_at": uploaded_at,
         "workspace_id": principal.workspace_id,
         "is_latest": True,
+        "workflow_count": workflow_count,
     }
     (version_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
@@ -405,10 +411,6 @@ async def post_installer_upload(slug: str, request: Request) -> dict[str, Any]:
 
     # Persist installer metadata onto the plugin record so the dashboard can
     # surface version and a download button without reading the filesystem.
-    plugin_record = next(
-        (p for p in list_plugins(workspace_id=principal.workspace_id) if p.slug == slug),
-        None,
-    )
     if plugin_record is not None:
         plugin_record = plugin_record.model_copy(update={
             "installer": PluginInstaller(
@@ -461,20 +463,21 @@ def get_installer_versions(slug: str, request: Request) -> dict[str, Any]:
             if meta.get("workspace_id") != principal.workspace_id:
                 continue
             version = str(meta.get("version") or meta_path.parent.name)
-            versions.append(
-                {
-                    "slug": slug,
-                    "version": version,
-                    "release_notes": str(meta.get("release_notes") or ""),
-                    "filename": str(meta.get("filename") or f"{slug}-Plugin-Setup.exe"),
-                    "sha256": str(meta.get("sha256") or ""),
-                    "size": int(meta.get("size") or 0),
-                    "uploaded_at": float(meta.get("uploaded_at") or 0),
-                    "workspace_id": str(meta.get("workspace_id") or ""),
-                    "is_latest": bool(meta.get("is_latest")),
-                    "download_url": f"/api/v1/installers/{slug}/versions/{version}",
-                }
-            )
+            row = {
+                "slug": slug,
+                "version": version,
+                "release_notes": str(meta.get("release_notes") or ""),
+                "filename": str(meta.get("filename") or f"{slug}-Plugin-Setup.exe"),
+                "sha256": str(meta.get("sha256") or ""),
+                "size": int(meta.get("size") or 0),
+                "uploaded_at": float(meta.get("uploaded_at") or 0),
+                "workspace_id": str(meta.get("workspace_id") or ""),
+                "is_latest": bool(meta.get("is_latest")),
+                "download_url": f"/api/v1/installers/{slug}/versions/{version}",
+            }
+            if "workflow_count" in meta:
+                row["workflow_count"] = int(meta.get("workflow_count") or 0)
+            versions.append(row)
     versions.sort(key=lambda item: float(item.get("uploaded_at") or 0), reverse=True)
     return {"slug": slug, "versions": versions}
 

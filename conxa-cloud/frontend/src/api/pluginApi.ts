@@ -538,6 +538,7 @@ export type InstallerVersion = {
   uploaded_at: number
   workspace_id: string
   is_latest: boolean
+  workflow_count?: number
   download_url: string
 }
 

@@ -212,12 +212,6 @@ function checkoutLabel(status: CheckoutStatus) {
   return 'Checkout loading'
 }
 
-function checkoutBadgeClass(status: CheckoutStatus) {
-  if (status === 'ready') return 'border-cyan-400/25 bg-white/[0.03] text-cyan-300'
-  if (status === 'failed' || status === 'missing_key') return 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-  return 'border-white/8 bg-white/[0.03] text-zinc-400'
-}
-
 function razorpayFailureMessage(response: RazorpayPaymentFailedResponse) {
   const error = response.error
   return (
@@ -394,10 +388,6 @@ export function BillingPage() {
         description="Plans, usage, and payment controls for this workspace."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={checkoutBadgeClass(checkoutStatus)} variant="outline">
-              <CreditCard className="mr-1.5 h-3.5 w-3.5" />
-              {checkoutLabel(checkoutStatus)}
-            </Badge>
             <Button
               variant="outline"
               size="sm"
@@ -418,7 +408,7 @@ export function BillingPage() {
         }
       />
 
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6">
         {hasError ? (
           <BillingErrorBanner
             onRetry={refreshBilling}
@@ -428,7 +418,7 @@ export function BillingPage() {
           />
         ) : null}
 
-        <section className="space-y-2.5">
+        <section className="space-y-3">
           <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-sm font-semibold text-white">Workspace Usage</h2>
@@ -436,11 +426,9 @@ export function BillingPage() {
                 Customer-visible meters for the current UTC billing period.
               </p>
             </div>
-            <Badge variant="outline" className="w-fit border-white/8 bg-white/[0.03] px-1.5 py-0 text-[10px] text-zinc-400">
-              {entitlements?.workspace_id ? `Workspace ${entitlements.workspace_id}` : 'Workspace loading'}
-            </Badge>
+            {/* removed workspace badge per request */}
           </div>
-          <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {METER_CONFIGS.map((config) => (
               <UsageMeterCard
                 key={config.key}
@@ -452,7 +440,7 @@ export function BillingPage() {
           </div>
         </section>
 
-        <section className="space-y-2.5">
+        <section className="space-y-3">
           <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-sm font-semibold text-white">Subscription Plans</h2>
@@ -460,15 +448,13 @@ export function BillingPage() {
                 Upgrade limits without changing local plugin or workflow creation.
               </p>
             </div>
-            <Badge variant="outline" className="w-fit border-white/8 bg-black/20 px-1.5 py-0 text-[10px] text-zinc-400">
-              Legacy Basic displays as Starter
-            </Badge>
+            {/* removed legacy plan badge per request */}
           </div>
 
           {plansQuery.isLoading ? (
             <PlanSkeletonGrid />
           ) : (
-            <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {plans.map((plan) => (
                 <PlanCard
                   key={plan.tier}
@@ -484,7 +470,6 @@ export function BillingPage() {
         </section>
 
         <PaymentOperationsPanel
-          checkoutStatus={checkoutStatus}
           currentPlan={currentPlan}
           resetAt={entitlements?.reset_at}
           currentPeriodEnd={subscription?.current_period_end}
@@ -516,56 +501,69 @@ function UsageMeterCard({
     tone === 'danger' ? 'Exhausted' : tone === 'warning' ? 'Near limit' : meter?.unlimited ? 'Unlimited' : 'Available'
 
   return (
-    <Card className="border-white/8 bg-white/[0.025] shadow-none">
-      <CardContent className="min-h-[8.2rem] p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
+    <Card className="gap-0 border-white/8 bg-white/[0.025] py-0 shadow-none">
+      <CardContent className="flex min-h-[9.25rem] flex-col p-4">
+        <div className="flex min-h-9 items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-white">{config.label}</p>
-            <p className="mt-0.5 text-[11px] text-zinc-600">{config.description}</p>
+            <p className="mt-1 truncate text-[11px] leading-none text-zinc-500">
+              {config.description}
+            </p>
           </div>
-          <div className="rounded-md border border-white/8 bg-white/[0.03] p-1.5 text-zinc-400">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] text-zinc-400">
             <Icon className="h-3.5 w-3.5" />
           </div>
         </div>
 
         {loading ? (
-          <div className="mt-3 space-y-2">
-            <div className="h-6 w-28 animate-pulse rounded bg-white/8" />
-            <div className="h-1.5 w-full animate-pulse rounded bg-white/8" />
+          <div className="mt-auto space-y-3 pt-5">
+            <div className="h-7 w-24 animate-pulse rounded bg-white/8" />
+            <div className="h-1.5 w-full animate-pulse rounded-full bg-white/8" />
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-16 animate-pulse rounded bg-white/8" />
+              <div className="h-3 w-24 animate-pulse rounded bg-white/8" />
+            </div>
           </div>
         ) : (
           <>
-            <div className="mt-3 flex items-end justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xl font-semibold leading-none text-white">
-                  {formatMeterValue(meter?.used ?? 0, config.key)}
-                </p>
-                <p className="mt-1 text-[11px] text-zinc-600">
-                  of {formatMeterValue(meter?.limit, config.key)} used
-                </p>
+            <div className="mt-5 flex items-end justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-baseline gap-1.5 tabular-nums">
+                  <span className="text-2xl font-semibold leading-none tracking-tight text-white">
+                    {formatMeterValue(meter?.used ?? 0, config.key)}
+                  </span>
+                  <span className="text-sm font-medium leading-none text-zinc-600">/</span>
+                  <span className="truncate text-sm font-medium leading-none text-zinc-300">
+                    {formatMeterValue(meter?.limit, config.key)}
+                  </span>
+                </div>
               </div>
               <Badge
                 variant="outline"
                 className={
                   tone === 'danger'
-                    ? 'border-red-500/40 bg-red-500/10 px-1.5 py-0 text-[10px] text-red-200'
+                    ? 'h-6 rounded-full border-red-500/40 bg-red-500/10 px-2 text-[11px] text-red-200'
                     : tone === 'warning'
-                      ? 'border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-200'
-                      : 'border-cyan-400/30 bg-white/[0.03] px-1.5 py-0 text-[10px] text-cyan-300'
+                      ? 'h-6 rounded-full border-amber-500/40 bg-amber-500/10 px-2 text-[11px] text-amber-200'
+                      : 'h-6 rounded-full border-cyan-400/30 bg-white/[0.03] px-2 text-[11px] text-cyan-300'
                 }
               >
                 {statusLabel}
               </Badge>
             </div>
-            <div className="mt-2.5 h-1.5 rounded-full bg-white/8">
-              <div
-                className={`h-1.5 rounded-full transition-all ${progressClass}`}
-                style={{ width: meter?.unlimited ? '100%' : `${percent}%` }}
-              />
-            </div>
-            <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-600">
-              <span>{meter?.unlimited ? 'No cap' : `${percent}% used`}</span>
-              <span>{formatMeterValue(meter?.remaining, config.key)} remaining</span>
+            <div className="mt-auto pt-4">
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${progressClass}`}
+                  style={{ width: meter?.unlimited ? '100%' : `${percent}%` }}
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 text-[11px] leading-none text-zinc-500">
+                <span className="shrink-0">{meter?.unlimited ? 'No cap' : `${percent}% used`}</span>
+                <span className="truncate text-right">
+                  {formatMeterValue(meter?.remaining, config.key)} remaining
+                </span>
+              </div>
             </div>
           </>
         )}
@@ -611,7 +609,7 @@ function PlanCard({
   return (
     <>
       <Card
-        className={`flex min-h-[22.75rem] flex-col border shadow-none ${
+        className={`flex min-h-[22.75rem] flex-col gap-0 border py-0 shadow-none ${
           isEnterprise
             ? 'border-cyan-400/25 bg-white/[0.025]'
             : isRecommended
@@ -621,7 +619,7 @@ function PlanCard({
                 : 'border-white/8 bg-white/[0.025]'
         }`}
       >
-        <CardHeader className="p-3.5 pb-2">
+        <CardHeader className="p-4 pb-3">
           <div className="flex items-start justify-between gap-2">
             <div>
               <CardTitle className="text-base text-white">{plan.name || displayPlanName(tier)}</CardTitle>
@@ -646,7 +644,7 @@ function PlanCard({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-1 flex-col p-3.5 pt-0">
+        <CardContent className="flex flex-1 flex-col p-4 pt-0">
           <div>
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-semibold text-white">{formatPrice(plan)}</span>
@@ -654,16 +652,16 @@ function PlanCard({
             </div>
           </div>
 
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-4 flex flex-1 flex-col gap-2">
             {(plan.features || []).slice(0, 7).map((feature) => (
-              <div key={feature} className="flex gap-2 text-xs text-zinc-300">
+              <div key={feature} className="flex gap-2 text-xs leading-5 text-zinc-300">
                 <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
                 <span>{feature}</span>
               </div>
             ))}
           </div>
 
-          <div className="mt-auto pt-3">
+          <div className="mt-auto pt-4">
             {isEnterprise && !isCurrent ? (
               <Button
                 className="h-8 w-full cursor-pointer border border-cyan-400/30 bg-white/[0.04] text-cyan-200 hover:bg-white/[0.06]"
@@ -762,19 +760,17 @@ function EnterpriseContactDialog({
 }
 
 function PaymentOperationsPanel({
-  checkoutStatus,
   currentPlan,
   resetAt,
   currentPeriodEnd,
 }: {
-  checkoutStatus: CheckoutStatus
   currentPlan: string
   resetAt?: string | null
   currentPeriodEnd?: number | null
 }) {
   return (
-    <Card className="border-white/8 bg-white/[0.025] shadow-none">
-      <CardHeader className="border-b border-white/8 p-3.5">
+    <Card className="gap-0 border-white/8 bg-white/[0.025] py-0 shadow-none">
+      <CardHeader className="border-b border-white/8 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="text-base text-white">Billing Operations</CardTitle>
@@ -785,22 +781,7 @@ function PaymentOperationsPanel({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-2.5 p-3.5 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)_minmax(0,1.1fr)]">
-        <div className="rounded-md border border-white/8 bg-black/20 p-2.5">
-          <p className="text-xs font-medium uppercase tracking-normal text-zinc-500">Checkout</p>
-          <div className="mt-1.5 flex items-center gap-2">
-            {checkoutStatus === 'ready' ? (
-              <CheckCircle2 className="h-4 w-4 text-cyan-300" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 text-amber-300" />
-            )}
-            <span className="text-sm font-medium text-white">{checkoutLabel(checkoutStatus)}</span>
-          </div>
-          <p className="mt-1.5 text-xs text-zinc-500">
-            Paid plan actions use Razorpay Checkout. Workspace meters remain readable even when checkout is not configured.
-          </p>
-        </div>
-
+      <CardContent className="grid items-start gap-3 p-4 lg:grid-cols-2">
         <div className="rounded-md border border-white/8 bg-black/20 p-2.5">
           <p className="text-xs font-medium uppercase tracking-normal text-zinc-500">Account Timing</p>
           <div className="mt-2 grid gap-2">
@@ -858,10 +839,10 @@ function BillingErrorBanner({ onRetry, loading }: { onRetry: () => void; loading
 
 function PlanSkeletonGrid() {
   return (
-    <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {[0, 1, 2, 3].map((item) => (
-        <Card key={item} className="min-h-[22.75rem] border-white/8 bg-black/20 shadow-none">
-          <CardContent className="p-3.5">
+        <Card key={item} className="min-h-[22.75rem] gap-0 border-white/8 bg-black/20 py-0 shadow-none">
+          <CardContent className="p-4">
             <div className="h-4 w-20 animate-pulse rounded bg-white/8" />
             <div className="mt-4 h-7 w-28 animate-pulse rounded bg-white/8" />
             <div className="mt-5 space-y-2">

@@ -1,6 +1,6 @@
 # UI/UX Brief
 
-**Status:** Current as of 2026-06-01  
+**Status:** Current as of 2026-06-11
 **Scope:** Build Studio (Electron) + Cloud Dashboard (Next.js)
 
 ---
@@ -280,15 +280,12 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 
 ### 3.2 Dashboard (`app/(protected)/dashboard/page.tsx`)
 
-**Purpose:** Company-level overview after login.  
+**Purpose:** Enterprise operations overview after login.
 **Inputs:** Clerk auth context.  
-**Outputs:** Plugin list, run counts, recent activity.  
-**User goal:** See platform health and recent activity.
+**Outputs:** Consolidated health status, execution trend, runtime footprint, risk queue, and recovery intelligence using the tracking dashboard API.
+**User goal:** Understand production automation health, adoption, failures, and recovery behavior without scanning duplicate metric panels.
 
-**UX issues:**
-- No real-time updates — requires page refresh to see new runs.
-- No summary metrics (total executions, success rate, recovery rate) at the top.
-- No alerts for plugins with high failure rates.
+**Status:** Implemented as a frontend-only observability dashboard. It preserves 7d/30d range controls, refresh behavior, and empty telemetry states while consolidating failed workflows/steps into one risk queue and recovery type/workflow drilldowns into one recovery intelligence panel.
 
 ---
 
@@ -296,8 +293,8 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 
 **Purpose:** List all published plugins.  
 **Inputs:** Clerk auth.  
-**Outputs:** Plugin cards with status and run count.  
-**User goal:** Navigate to plugin detail.
+**Outputs:** Enterprise plugin cards with status, current version, workflow count, installer state, and navigation to release history.
+**User goal:** Open a plugin's release/version history and manage installer downloads.
 
 **Meter behavior:** Shows installer slots. Plugin cards with installers count toward this meter; same slug version history is an existing-slot update.
 
@@ -305,10 +302,10 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 
 ### 3.4 Plugin Detail Page (`app/(protected)/plugins/[id]/page.tsx`)
 
-**Purpose:** Execution history and workflow breakdown for one plugin.  
+**Purpose:** Installer version history and workflow breakdown for one plugin.
 **Inputs:** Plugin ID.  
-**Outputs:** Run timeline, per-skill stats.  
-**User goal:** Diagnose execution problems.
+**Outputs:** Previous installer versions, release comments, version-specific download buttons, plugin workflow count, and workflow coverage.
+**User goal:** Audit release history and download the correct installer version.
 
 **UX issues:**
 - No filter by status (ok/fail).
@@ -340,20 +337,33 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 
 ### 3.7 Team Page (`app/(protected)/team/page.tsx`)
 
-**Purpose:** Manage workspace members.  
-**Meter behavior:** Shows the seat meter above Clerk organization controls. Hard enforcement requires Conxa-owned invites or Clerk webhook cleanup; raw `OrganizationProfile` alone is metered/audited, not a complete hard gate.
-**Status:** UI exists but backend RBAC is not fully implemented (scaffolded in `app/services/rbac.py` but not wired to routes).
+**Purpose:** Manage workspace members, roles, and seats.
+**Outputs:** Workspace/team summary, seat usage, current role, last team activity, role guide, billing/audit links, and organization member controls.
+**Meter behavior:** Shows seat usage before member controls. Hard enforcement still requires Conxa-owned invites or Clerk webhook cleanup; raw `OrganizationProfile` alone is metered/audited, not a complete hard gate.
+**Status:** Company-facing team UI is implemented. Member operations remain handled by Clerk organization controls.
 
 ---
 
 ### 3.8 Settings Page (`app/(protected)/settings/page.tsx`)
 
-**Purpose:** Workspace and account settings.  
-**Status:** UI exists; specific settings not documented in code review.
+**Purpose:** Compact workspace settings and administration hub.
+**Outputs:** Workspace identity, current user role, auth/session verification status, signed-in user context, and shortcuts to Team, Billing, and Audit.
+**User goal:** Confirm they are in the right workspace and quickly reach the admin areas that change company state.
+**Status:** Implemented as a read-oriented settings page backed by `/me`; real mutations remain in Team, Billing, and Audit instead of being implied by inactive settings controls.
 
 ---
 
-### 3.9 Sign-In / Sign-Up
+### 3.9 Audit Page (`app/(protected)/audit/page.tsx`)
+
+**Purpose:** Dedicated enterprise audit trail for workspace activity.
+**Inputs:** Clerk auth context and `GET /api/v1/audit-events`.
+**Outputs:** Summary counters, actor/resource coverage, latest event status, searchable and action-filtered audit table, metadata preview, and CSV export of the filtered result set.
+**User goal:** Review who performed operational actions, when they happened, and which workspace resources were affected.
+**Status:** Implemented as a protected route with a sidebar entry directly below Plugins.
+
+---
+
+### 3.10 Sign-In / Sign-Up
 
 **Paths:** `app/sign-in/[[...sign-in]]/page.tsx`, `app/sign-up/[[...sign-up]]/page.tsx`  
 **Purpose:** Clerk-hosted auth UI embedded in Next.js.  
@@ -398,6 +408,7 @@ AppChrome (layout)
 ├── /plugins
 │   └── /plugins/[id]
 │       └── /plugins/[id]/workflows/[workflowId]/compile
+├── /audit
 ├── /billing
 ├── /team
 └── /settings
@@ -526,9 +537,9 @@ Multi-engineer teams cannot currently:
 - Assign review tasks.
 - See who compiled or built what.
 
-### 8.2 Audit Trail (Missing)
+### 8.2 Audit Trail
 
-No UI surface for audit events: who compiled, who published, when, with what version. Required for SOC 2 and enterprise procurement.
+The Cloud Dashboard now has a dedicated `/audit` page with search, action filtering, summary counters, metadata preview, and CSV export over `GET /api/v1/audit-events`. Remaining enterprise hardening work is deeper event taxonomy, actor display names, and backend-level export pagination beyond the current loaded result set.
 
 ### 8.3 Offline Mode
 

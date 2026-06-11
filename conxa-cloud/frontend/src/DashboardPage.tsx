@@ -39,6 +39,31 @@ const EMPTY_METRICS: TrackingDashboardResponse['metrics'] = {
   average_execution_time: 0,
 }
 
+const DEFAULT_RECOVERY_USAGE: TrackingDashboardResponse['recovery_type_usage'] = [
+  { type: 'Selector', count: 0 },
+  { type: 'Text Anchor', count: 0 },
+  { type: 'Text Variant', count: 0 },
+  { type: 'Vision', count: 0 },
+]
+
+type Tone = 'good' | 'warn' | 'bad' | 'neutral'
+
+type DashboardHealth = {
+  label: 'Healthy' | 'Degraded' | 'Attention needed' | 'No telemetry'
+  tone: Tone
+  description: string
+}
+
+type RiskRow = {
+  id: string
+  type: 'Workflow' | 'Step'
+  name: string
+  context: string
+  failedExecutions: number
+  failureCode: string
+  lastSeen: number
+}
+
 function fmtNumber(value: number) {
   return new Intl.NumberFormat().format(value || 0)
 }
@@ -67,7 +92,104 @@ function rangeLabel(range: TrackingDashboardRange) {
   return range === '30d' ? 'Last 30 days' : 'Last 7 days'
 }
 
-function KpiCard({
+function clampPercent(value: number) {
+  return `${Math.max(0, Math.min(100, Math.round(value)))}%`
+}
+
+function deriveDashboardHealth(metrics: TrackingDashboardResponse['metrics']): DashboardHealth {
+  if (metrics.total_executions === 0) {
+    return {
+      label: 'No telemetry',
+      tone: 'neutral',
+      description: 'Production runtime data will appear here after the first customer execution.',
+    }
+  }
+
+  if (metrics.success_rate >= 95 && metrics.failed_executions === 0) {
+    return {
+      label: 'Healthy',
+      tone: 'good',
+      description: 'Executions are completing cleanly with no active failure pressure.',
+    }
+  }
+
+  if (metrics.success_rate >= 85) {
+    return {
+      label: 'Degraded',
+      tone: 'warn',
+      description: 'Reliability is usable, but failures or recoveries need operator review.',
+    }
+  }
+
+  return {
+    label: 'Attention needed',
+    tone: 'bad',
+    description: 'Execution health is below target. Prioritize the risk queue before new rollout work.',
+  }
+}
+
+function buildRiskRows(data?: TrackingDashboardResponse): RiskRow[] {
+  if (!data) return []
+
+  const workflowRows = data.most_failed_workflows.map((row) => ({
+    id: `workflow:${row.workflow}`,
+    type: 'Workflow' as const,
+    name: row.workflow,
+    context: 'Workflow failure',
+    failedExecutions: row.failed_executions,
+    failureCode: row.last_failure_code || 'unknown failure',
+    lastSeen: row.last_seen,
+  }))
+
+  const stepRows = data.most_failed_steps.map((row) => ({
+    id: `step:${row.workflow}:${row.step_index ?? 'unknown'}:${row.step_label}`,
+    type: 'Step' as const,
+    name: row.step_label,
+    context: `${row.workflow}${row.step_index === null ? '' : ` / step ${row.step_index + 1}`}`,
+    failedExecutions: row.failed_executions,
+    failureCode: row.last_failure_code || 'unknown failure',
+    lastSeen: row.last_seen,
+  }))
+
+  return [...workflowRows, ...stepRows]
+    .sort((a, b) => b.failedExecutions - a.failedExecutions || b.lastSeen - a.lastSeen)
+    .slice(0, 8)
+}
+
+function toneClasses(tone: Tone) {
+  if (tone === 'good') {
+    return {
+      text: 'text-emerald-300',
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/25',
+      icon: 'bg-emerald-500/10 text-emerald-300',
+    }
+  }
+  if (tone === 'warn') {
+    return {
+      text: 'text-amber-300',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/25',
+      icon: 'bg-amber-500/10 text-amber-300',
+    }
+  }
+  if (tone === 'bad') {
+    return {
+      text: 'text-red-300',
+      bg: 'bg-red-500/10',
+      border: 'border-red-500/25',
+      icon: 'bg-red-500/10 text-red-300',
+    }
+  }
+  return {
+    text: 'text-zinc-100',
+    bg: 'bg-white/[0.035]',
+    border: 'border-white/10',
+    icon: 'bg-white/[0.05] text-zinc-400',
+  }
+}
+
+function MetricCell({
   label,
   value,
   sub,
@@ -78,70 +200,115 @@ function KpiCard({
   value: string
   sub: string
   icon: ComponentType<{ className?: string }>
-  tone?: 'good' | 'warn' | 'bad' | 'neutral'
+  tone?: Tone
 }) {
-  const toneClass =
-    tone === 'good' ? 'text-emerald-300' :
-      tone === 'warn' ? 'text-amber-300' :
-        tone === 'bad' ? 'text-red-300' :
-          'text-zinc-100'
-  const iconClass =
-    tone === 'good' ? 'bg-emerald-500/10 text-emerald-300' :
-      tone === 'warn' ? 'bg-amber-500/10 text-amber-300' :
-        tone === 'bad' ? 'bg-red-500/10 text-red-300' :
-          'bg-white/[0.04] text-zinc-400'
+  const classes = toneClasses(tone)
 
   return (
-    <Card className="border-white/8 bg-white/[0.025] shadow-none">
-      <CardContent className="flex min-h-[7rem] items-start justify-between gap-3 p-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-zinc-500">{label}</p>
-          <p className={`mt-2 text-2xl font-semibold leading-none tabular-nums ${toneClass}`}>{value}</p>
-          <p className="mt-2 text-[11px] leading-snug text-zinc-600">{sub}</p>
+    <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.025] px-3 py-3">
+      <div className="flex items-center gap-2">
+        <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${classes.icon}`}>
+          <Icon className="size-3.5" />
+        </span>
+        <p className="truncate text-[11px] font-medium text-zinc-500">{label}</p>
+      </div>
+      <p className={`mt-2 truncate text-xl font-semibold tabular-nums leading-none ${classes.text}`}>{value}</p>
+      <p className="mt-1 truncate text-[11px] text-zinc-600">{sub}</p>
+    </div>
+  )
+}
+
+function CommandSummary({
+  metrics,
+  range,
+}: {
+  metrics: TrackingDashboardResponse['metrics']
+  range: TrackingDashboardRange
+}) {
+  const health = deriveDashboardHealth(metrics)
+  const classes = toneClasses(health.tone)
+  const rangeText = rangeLabel(range).toLowerCase()
+
+  return (
+    <Card className="border-white/8 bg-white/[0.03] shadow-none">
+      <CardContent className="grid gap-4 p-4 xl:grid-cols-[minmax(18rem,0.32fr)_minmax(0,1fr)]">
+        <div className={`rounded-lg border px-4 py-4 ${classes.border} ${classes.bg}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-zinc-500">Operational status</p>
+              <p className={`mt-2 text-2xl font-semibold leading-tight ${classes.text}`}>{health.label}</p>
+            </div>
+            <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${classes.icon}`}>
+              {health.tone === 'good' ? <CheckCircle2 className="size-5" /> : <AlertTriangle className="size-5" />}
+            </span>
+          </div>
+          <p className="mt-3 text-sm leading-5 text-zinc-400">{health.description}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge variant="outline" className="border-white/10 bg-black/10 text-[10px] text-zinc-400">
+              {rangeLabel(range)}
+            </Badge>
+            <Badge variant="outline" className="border-white/10 bg-black/10 text-[10px] text-zinc-400">
+              {fmtNumber(metrics.failed_executions)} failures
+            </Badge>
+          </div>
         </div>
-        <div className={`rounded-lg p-2 ${iconClass}`}>
-          <Icon className="size-4" />
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <MetricCell label="Total executions" value={fmtNumber(metrics.total_executions)} sub={`${fmtNumber(metrics.executions_last_24h)} in last 24h`} icon={Activity} />
+          <MetricCell label="Active users" value={fmtNumber(metrics.active_users)} sub={`active in ${rangeText}`} icon={Users} />
+          <MetricCell label="Active companies" value={fmtNumber(metrics.active_companies)} sub="companies with usage" icon={Building2} />
+          <MetricCell label="Success rate" value={fmtPercent(metrics.success_rate)} sub="completed executions" icon={ShieldCheck} tone={health.tone === 'bad' ? 'bad' : health.tone === 'warn' ? 'warn' : 'good'} />
+          <MetricCell label="Recovery rate" value={fmtPercent(metrics.recovery_rate)} sub="executions saved" icon={RotateCcw} tone={metrics.recovery_rate > 0 ? 'good' : 'neutral'} />
+          <MetricCell label="Avg duration" value={fmtDuration(metrics.average_execution_time)} sub="all completed runs" icon={Clock3} />
         </div>
       </CardContent>
     </Card>
   )
 }
 
-function TrendChart({ rows }: { rows: TrackingDashboardResponse['execution_trend'] }) {
+function TrendChart({
+  rows,
+  range,
+}: {
+  rows: TrackingDashboardResponse['execution_trend']
+  range: TrackingDashboardRange
+}) {
   const max = Math.max(1, ...rows.map((row) => row.executions))
+  const hasExecutions = rows.some((row) => row.executions > 0)
   const width = 720
-  const height = 170
+  const height = 190
   const barSlot = rows.length ? width / rows.length : width
-  const chartHeight = 116
+  const chartHeight = 126
 
   return (
-    <Card className="border-white/8 bg-white/[0.025] shadow-none">
+    <Card className="h-full border-white/8 bg-white/[0.025] shadow-none">
       <CardHeader className="border-b border-white/6 pb-3">
-        <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-400">
           <TrendingUp className="size-3.5" />
-          Execution Trend
-          <span className="ml-auto text-[11px] font-normal text-zinc-600">success, failure, and recovery volume</span>
+          Execution trend
+          <span className="ml-auto text-[11px] font-normal text-zinc-600">{rangeLabel(range)}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4">
-        <div className="h-[170px] w-full overflow-hidden">
+        <div className="relative h-[190px] w-full overflow-hidden">
           <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" preserveAspectRatio="none" role="img" aria-label="Execution trend graph">
-            <line x1="0" x2={width} y1="132" y2="132" className="stroke-white/10" />
+            <line x1="0" x2={width} y1="142" y2="142" className="stroke-white/10" />
             {rows.map((row, index) => {
               const x = index * barSlot + barSlot * 0.18
               const barWidth = Math.max(8, barSlot * 0.64)
-              const totalHeight = Math.max(2, (row.executions / max) * chartHeight)
+              const totalHeight = Math.max(row.executions > 0 ? 3 : 0, (row.executions / max) * chartHeight)
               const failedHeight = row.executions ? (row.failed / row.executions) * totalHeight : 0
               const recoveredHeight = row.executions ? (row.recovered / row.executions) * totalHeight : 0
               const successHeight = Math.max(0, totalHeight - failedHeight - recoveredHeight)
-              const y = 132 - totalHeight
+              const y = 142 - totalHeight
+
               return (
                 <g key={row.date}>
                   <rect x={x} y={y} width={barWidth} height={successHeight} rx="3" className="fill-emerald-500/75" />
                   <rect x={x} y={y + successHeight} width={barWidth} height={recoveredHeight} rx="3" className="fill-blue-500/75" />
                   <rect x={x} y={y + successHeight + recoveredHeight} width={barWidth} height={failedHeight} rx="3" className="fill-red-500/75" />
                   {(index === 0 || index === rows.length - 1 || rows.length <= 7) && (
-                    <text x={x + barWidth / 2} y="154" textAnchor="middle" className="fill-zinc-600 text-[10px]">
+                    <text x={x + barWidth / 2} y="166" textAnchor="middle" className="fill-zinc-600 text-[10px]">
                       {new Date(`${row.date}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                     </text>
                   )}
@@ -149,6 +316,13 @@ function TrendChart({ rows }: { rows: TrackingDashboardResponse['execution_trend
               )
             })}
           </svg>
+          {!hasExecutions && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-xs text-zinc-500">
+                No executions in this range
+              </div>
+            </div>
+          )}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-zinc-600">
           <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-emerald-500" />Successful</span>
@@ -160,29 +334,30 @@ function TrendChart({ rows }: { rows: TrackingDashboardResponse['execution_trend
   )
 }
 
-function RecoveryUsage({ rows }: { rows: TrackingDashboardResponse['recovery_type_usage'] }) {
-  const max = Math.max(1, ...rows.map((row) => row.count))
+function RuntimeFootprint({ metrics }: { metrics: TrackingDashboardResponse['metrics'] }) {
+  const items = [
+    { label: 'Installed runtimes', value: fmtNumber(metrics.total_installs), icon: Download },
+    { label: 'Active users', value: fmtNumber(metrics.active_users), icon: Users },
+    { label: 'Active companies', value: fmtNumber(metrics.active_companies), icon: Building2 },
+    { label: 'Last 24h runs', value: fmtNumber(metrics.executions_last_24h), icon: Activity },
+  ]
+
   return (
-    <Card className="border-white/8 bg-white/[0.025] shadow-none">
+    <Card className="h-full border-white/8 bg-white/[0.025] shadow-none">
       <CardHeader className="border-b border-white/6 pb-3">
         <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-          <RotateCcw className="size-3.5" />
-          Recovery Type Usage
+          <Download className="size-3.5" />
+          Runtime footprint
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4 p-4">
-        {rows.map((row) => (
-          <div key={row.type} className="space-y-1.5">
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="text-zinc-300">{row.type}</span>
-              <span className="tabular-nums text-zinc-500">{fmtNumber(row.count)}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/8">
-              <div
-                className="h-full rounded-full bg-blue-500/80"
-                style={{ width: `${Math.max(0, Math.round((row.count / max) * 100))}%` }}
-              />
-            </div>
+      <CardContent className="grid gap-2 p-4 sm:grid-cols-2 xl:grid-cols-1">
+        {items.map(({ label, value, icon: Icon }) => (
+          <div key={label} className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-white/[0.025] px-3 py-3">
+            <span className="flex min-w-0 items-center gap-2 text-xs text-zinc-500">
+              <Icon className="size-3.5 shrink-0 text-zinc-600" />
+              <span className="truncate">{label}</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-zinc-200">{value}</span>
           </div>
         ))}
       </CardContent>
@@ -190,69 +365,83 @@ function RecoveryUsage({ rows }: { rows: TrackingDashboardResponse['recovery_typ
   )
 }
 
-function FailureLists({
-  workflows,
-  steps,
-}: {
-  workflows: TrackingDashboardResponse['most_failed_workflows']
-  steps: TrackingDashboardResponse['most_failed_steps']
-}) {
+function RiskQueue({ rows }: { rows: RiskRow[] }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="border-white/8 bg-white/[0.025] shadow-none">
-        <CardHeader className="border-b border-white/6 pb-3">
-          <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-            <AlertTriangle className="size-3.5" />
-            Most Failed Workflows
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {workflows.length === 0 ? (
-            <p className="px-4 py-8 text-center text-xs text-zinc-600">No workflow failures in this range.</p>
-          ) : workflows.map((row) => (
-            <div key={row.workflow} className="flex items-center gap-3 border-t border-white/6 px-4 py-3 first:border-t-0">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-zinc-200">{row.workflow}</p>
-                <p className="mt-0.5 text-[11px] text-zinc-600">{row.last_failure_code || 'unknown failure'} · {fmtRelative(row.last_seen)}</p>
+    <Card className="h-full border-white/8 bg-white/[0.025] shadow-none">
+      <CardHeader className="border-b border-white/6 pb-3">
+        <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+          <AlertTriangle className="size-3.5" />
+          Risk queue
+          {rows.length > 0 && (
+            <Badge variant="outline" className="ml-auto border-red-500/25 bg-red-500/10 text-[10px] text-red-300">
+              {rows.length} active
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {rows.length === 0 ? (
+          <div className="flex min-h-72 flex-col items-center justify-center px-4 py-10 text-center">
+            <CheckCircle2 className="mb-3 size-7 text-emerald-500/70" />
+            <p className="text-sm font-medium text-zinc-300">No active risks</p>
+            <p className="mt-1 max-w-xs text-xs leading-5 text-zinc-600">No failed workflows or failed steps were reported in this range.</p>
+          </div>
+        ) : rows.map((row) => {
+          const isWorkflow = row.type === 'Workflow'
+          return (
+            <div key={row.id} className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={isWorkflow ? 'border-red-500/25 bg-red-500/10 text-[10px] text-red-300' : 'border-amber-500/25 bg-amber-500/10 text-[10px] text-amber-300'}
+                  >
+                    {isWorkflow ? 'Workflow' : 'Step'}
+                  </Badge>
+                  <p className="truncate text-xs font-medium text-zinc-200">{row.name}</p>
+                </div>
+                <p className="mt-1 truncate text-[11px] text-zinc-600">{row.context} / {row.failureCode} / {fmtRelative(row.lastSeen)}</p>
               </div>
-              <span className="text-sm font-semibold tabular-nums text-red-300">{fmtNumber(row.failed_executions)}</span>
+              <div className="flex items-center gap-2 sm:justify-end">
+                {isWorkflow ? <AlertTriangle className="size-3.5 text-red-400" /> : <Zap className="size-3.5 text-amber-300" />}
+                <span className="text-sm font-semibold tabular-nums text-red-200">{fmtNumber(row.failedExecutions)}</span>
+              </div>
             </div>
-          ))}
-        </CardContent>
-      </Card>
+          )
+        })}
+      </CardContent>
+    </Card>
+  )
+}
 
-      <Card className="border-white/8 bg-white/[0.025] shadow-none">
-        <CardHeader className="border-b border-white/6 pb-3">
-          <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-            <Zap className="size-3.5" />
-            Most Failed Steps
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {steps.length === 0 ? (
-            <p className="px-4 py-8 text-center text-xs text-zinc-600">No step failures in this range.</p>
-          ) : steps.map((row) => (
-            <div key={`${row.workflow}:${row.step_index ?? 'unknown'}`} className="flex items-center gap-3 border-t border-white/6 px-4 py-3 first:border-t-0">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-zinc-200">{row.step_label}</p>
-                <p className="mt-0.5 truncate text-[11px] text-zinc-600">{row.workflow} · {row.last_failure_code || 'unknown failure'}</p>
-              </div>
-              <span className="text-sm font-semibold tabular-nums text-red-300">{fmtNumber(row.failed_executions)}</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+function RecoveryTypeBars({ rows }: { rows: TrackingDashboardResponse['recovery_type_usage'] }) {
+  const max = Math.max(1, ...rows.map((row) => row.count))
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {rows.map((row) => (
+        <div key={row.type} className="rounded-lg border border-white/8 bg-white/[0.025] px-3 py-3">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="truncate text-zinc-400">{row.type}</span>
+            <span className="shrink-0 tabular-nums text-zinc-500">{fmtNumber(row.count)}</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/8">
+            <div
+              className="h-full rounded-full bg-blue-500/80"
+              style={{ width: clampPercent((row.count / max) * 100) }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
 
-function RecoveryByStep({ workflows }: { workflows: TrackingDashboardResponse['recovery_usage_by_workflow'] }) {
-  return <RecoveryWorkflowDrilldown workflows={workflows} />
-}
-
-function RecoveryWorkflowDrilldown({
+function RecoveryIntelligence({
+  typeRows,
   workflows,
 }: {
+  typeRows: TrackingDashboardResponse['recovery_type_usage']
   workflows: TrackingDashboardResponse['recovery_usage_by_workflow']
 }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -263,20 +452,25 @@ function RecoveryWorkflowDrilldown({
   const activeKey = selectedWorkflow ? `${selectedWorkflow.company}:${selectedWorkflow.workflow}` : null
 
   return (
-    <Card className="border-white/8 bg-white/[0.025] shadow-none">
+    <Card className="h-full border-white/8 bg-white/[0.025] shadow-none">
       <CardHeader className="border-b border-white/6 pb-3">
         <CardTitle className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
           <RotateCcw className="size-3.5" />
-          Recovery By Workflow And Step
-          <span className="ml-auto text-[11px] font-normal text-zinc-600">click a workflow for step tier counts</span>
+          Recovery intelligence
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="space-y-4 p-4">
+        <RecoveryTypeBars rows={typeRows} />
+
         {workflows.length === 0 || !selectedWorkflow ? (
-          <p className="px-4 py-10 text-center text-xs text-zinc-600">No recovery usage recorded in this range.</p>
+          <div className="flex min-h-56 flex-col items-center justify-center rounded-lg border border-white/8 bg-white/[0.02] px-4 py-8 text-center">
+            <CheckCircle2 className="mb-3 size-7 text-zinc-700" />
+            <p className="text-sm font-medium text-zinc-400">No recovery usage recorded</p>
+            <p className="mt-1 max-w-sm text-xs leading-5 text-zinc-600">Tier and selector recovery data will appear after runtime self-healing events are reported.</p>
+          </div>
         ) : (
-          <div className="grid min-h-[22rem] lg:grid-cols-[minmax(18rem,0.36fr)_minmax(0,1fr)]">
-            <div className="border-b border-white/6 lg:border-b-0 lg:border-r">
+          <div className="grid overflow-hidden rounded-lg border border-white/8 lg:grid-cols-[minmax(14rem,0.36fr)_minmax(0,1fr)]">
+            <div className="max-h-[26rem] overflow-y-auto border-b border-white/8 lg:border-b-0 lg:border-r">
               {workflows.map((row) => {
                 const key = `${row.company}:${row.workflow}`
                 const selected = key === activeKey
@@ -285,13 +479,13 @@ function RecoveryWorkflowDrilldown({
                     key={key}
                     type="button"
                     onClick={() => setSelectedKey(key)}
-                    className={`flex w-full items-center gap-3 border-t border-white/6 px-4 py-3 text-left transition-colors first:border-t-0 ${
-                      selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.035]'
+                    className={`flex w-full cursor-pointer items-center gap-3 border-t border-white/6 px-3 py-3 text-left transition-colors first:border-t-0 ${
+                      selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.035]'
                     }`}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium text-zinc-200">{row.workflow}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-zinc-600">{row.company} · {fmtRelative(row.last_seen)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-zinc-600">{row.company} / {fmtRelative(row.last_seen)}</p>
                     </div>
                     <span className="text-sm font-semibold tabular-nums text-blue-200">{fmtNumber(row.count)}</span>
                     <ChevronRight className={`size-3.5 shrink-0 ${selected ? 'text-zinc-200' : 'text-zinc-700'}`} />
@@ -305,7 +499,7 @@ function RecoveryWorkflowDrilldown({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-zinc-100">{selectedWorkflow.workflow}</p>
                   <p className="mt-0.5 text-[11px] text-zinc-600">
-                    {fmtNumber(selectedWorkflow.count)} recovery executions across {fmtNumber(selectedWorkflow.steps.length)} recovered steps
+                    {fmtNumber(selectedWorkflow.count)} recoveries across {fmtNumber(selectedWorkflow.steps.length)} recovered steps
                   </p>
                 </div>
                 <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-300">
@@ -318,12 +512,12 @@ function RecoveryWorkflowDrilldown({
               ) : selectedWorkflow.steps.map((step) => (
                 <div
                   key={`${step.step_index ?? 'unknown'}:${step.step_label}`}
-                  className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,0.45fr)_minmax(0,1fr)] md:items-center"
+                  className="grid gap-3 border-t border-white/6 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,0.42fr)_minmax(0,1fr)] md:items-center"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-xs font-medium text-zinc-200">{step.step_label}</p>
                     <p className="mt-0.5 text-[11px] text-zinc-600">
-                      {step.step_index === null ? 'step unknown' : `step ${step.step_index + 1}`} · {fmtNumber(step.total_count)} recoveries · {fmtRelative(step.last_seen)}
+                      {step.step_index === null ? 'step unknown' : `step ${step.step_index + 1}`} / {fmtNumber(step.total_count)} recoveries / {fmtRelative(step.last_seen)}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -336,7 +530,7 @@ function RecoveryWorkflowDrilldown({
                         className="gap-1.5 border-white/10 bg-white/[0.035] px-2 py-1 text-[10px] text-zinc-300"
                       >
                         <span>{tier.tier}</span>
-                        <span className="text-zinc-600">·</span>
+                        <span className="text-zinc-600">/</span>
                         <span className="text-zinc-500">{tier.recovery_type}</span>
                         <span className="ml-1 font-semibold tabular-nums text-blue-200">{fmtNumber(tier.count)}</span>
                       </Badge>
@@ -352,6 +546,27 @@ function RecoveryWorkflowDrilldown({
   )
 }
 
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Card className="border-white/8 bg-white/[0.03] shadow-none">
+        <CardContent className="grid gap-4 p-4 xl:grid-cols-[minmax(18rem,0.32fr)_minmax(0,1fr)]">
+          <div className="h-40 animate-pulse rounded-lg bg-white/[0.05]" />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2, 3, 4, 5].map((item) => (
+              <div key={item} className="h-24 animate-pulse rounded-lg bg-white/[0.045]" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="h-72 animate-pulse rounded-lg border border-white/8 bg-white/[0.035]" />
+        <div className="h-72 animate-pulse rounded-lg border border-white/8 bg-white/[0.035]" />
+      </div>
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const [range, setRange] = useState<TrackingDashboardRange>('7d')
   const dashboardQ = useQuery({
@@ -363,14 +578,16 @@ export function DashboardPage() {
 
   const data = dashboardQ.data
   const metrics = data?.metrics ?? EMPTY_METRICS
-  const successTone = metrics.total_executions === 0 ? 'neutral' : metrics.success_rate >= 90 ? 'good' : metrics.success_rate >= 75 ? 'warn' : 'bad'
-  const recoveryTone = metrics.recovery_rate > 0 ? 'good' : 'neutral'
+  const riskRows = useMemo(() => buildRiskRows(data), [data])
+  const recoveryTypeRows = data?.recovery_type_usage ?? DEFAULT_RECOVERY_USAGE
+  const recoveryWorkflows = data?.recovery_usage_by_workflow ?? []
+  const isInitialLoading = dashboardQ.isLoading && !data
 
   return (
     <div className="h-full overflow-y-auto">
       <PageHeader
         title="Dashboard"
-        description="Adoption, usage, reliability, and recovery health for installed automations."
+        description="Operations overview for installed automations, execution health, and recovery behavior."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex rounded-lg border border-white/8 bg-white/[0.025] p-0.5">
@@ -379,7 +596,7 @@ export function DashboardPage() {
                   key={item}
                   type="button"
                   onClick={() => setRange(item)}
-                  className={`h-8 rounded-md px-3 text-xs font-medium transition-colors ${
+                  className={`h-8 cursor-pointer rounded-md px-3 text-xs font-medium transition-colors ${
                     range === item ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'
                   }`}
                 >
@@ -402,57 +619,36 @@ export function DashboardPage() {
         }
       />
 
-      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
+      <div className="mx-auto w-full max-w-7xl space-y-4 px-4 py-5 sm:px-6">
         {dashboardQ.isError && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             Dashboard metrics could not be loaded.
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-zinc-600">{rangeLabel(range)}</p>
           {dashboardQ.dataUpdatedAt > 0 && (
             <p className="text-xs text-zinc-600">Updated {fmtRelative(dashboardQ.dataUpdatedAt)}</p>
           )}
         </div>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiCard label="Total Installs" value={fmtNumber(metrics.total_installs)} sub="registered runtimes" icon={Download} />
-          <KpiCard label="Active Users" value={fmtNumber(metrics.active_users)} sub={`active in ${rangeLabel(range).toLowerCase()}`} icon={Users} />
-          <KpiCard label="Active Companies" value={fmtNumber(metrics.active_companies)} sub="companies with usage" icon={Building2} />
-          <KpiCard label="Total Executions" value={fmtNumber(metrics.total_executions)} sub={`${fmtNumber(metrics.executions_last_24h)} in the last 24h`} icon={Activity} />
-        </section>
+        {isInitialLoading ? (
+          <DashboardSkeleton />
+        ) : (
+          <>
+            <CommandSummary metrics={metrics} range={range} />
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiCard label="Success Rate" value={fmtPercent(metrics.success_rate)} sub="completed executions" icon={ShieldCheck} tone={successTone} />
-          <KpiCard label="Failed Executions" value={fmtNumber(metrics.failed_executions)} sub={`failures in ${rangeLabel(range).toLowerCase()}`} icon={AlertTriangle} tone={metrics.failed_executions > 0 ? 'bad' : 'good'} />
-          <KpiCard label="Recovery Rate" value={fmtPercent(metrics.recovery_rate)} sub="executions saved by recovery" icon={RotateCcw} tone={recoveryTone} />
-          <KpiCard label="Avg Execution Time" value={fmtDuration(metrics.average_execution_time)} sub="successful and failed runs" icon={Clock3} />
-        </section>
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+              <TrendChart rows={data?.execution_trend ?? []} range={range} />
+              <RuntimeFootprint metrics={metrics} />
+            </section>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <TrendChart rows={data?.execution_trend ?? []} />
-          <RecoveryUsage rows={data?.recovery_type_usage ?? [
-            { type: 'Selector', count: 0 },
-            { type: 'Text Anchor', count: 0 },
-            { type: 'Text Variant', count: 0 },
-            { type: 'Vision', count: 0 },
-          ]} />
-        </div>
-
-        <FailureLists
-          workflows={data?.most_failed_workflows ?? []}
-          steps={data?.most_failed_steps ?? []}
-        />
-
-        <RecoveryByStep workflows={data?.recovery_usage_by_workflow ?? []} />
-
-        {!dashboardQ.isFetching && metrics.total_installs === 0 && metrics.total_executions === 0 && (
-          <div className="rounded-lg border border-white/8 bg-white/[0.02] px-5 py-6 text-center">
-            <CheckCircle2 className="mx-auto mb-3 size-7 text-zinc-700" />
-            <p className="text-sm font-medium text-zinc-400">No production telemetry yet</p>
-            <p className="mt-1 text-xs text-zinc-600">Install and run a published plugin to populate adoption and reliability metrics.</p>
-          </div>
+            <section className="grid gap-4 xl:grid-cols-[minmax(20rem,0.38fr)_minmax(0,1fr)]">
+              <RiskQueue rows={riskRows} />
+              <RecoveryIntelligence typeRows={recoveryTypeRows} workflows={recoveryWorkflows} />
+            </section>
+          </>
         )}
       </div>
     </div>
