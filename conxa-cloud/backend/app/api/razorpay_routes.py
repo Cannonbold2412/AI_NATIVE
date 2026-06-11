@@ -20,6 +20,8 @@ from app.services.saas import Principal, ensure_principal, principal_from_reques
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
+RAZORPAY_MONTHLY_TOTAL_COUNT = 1200
+
 
 def current_principal(request: Request) -> Principal:
     principal = principal_from_request(request)
@@ -67,6 +69,13 @@ def _tier_from_plan_store_key(key: str) -> str:
 
 
 def _tier_for_plan_id(plan_id: str) -> str | None:
+    configured = {
+        "starter": settings.razorpay_starter_plan_id.strip(),
+        "pro": settings.razorpay_pro_plan_id.strip(),
+    }
+    for tier, configured_plan_id in configured.items():
+        if plan_id and plan_id == configured_plan_id:
+            return tier
     for key, stored_plan_id in _read_plan_store().items():
         if plan_id == stored_plan_id:
             tier = _tier_from_plan_store_key(key)
@@ -89,6 +98,14 @@ def _client() -> razorpay.Client:
     if not settings.razorpay_key_id or not settings.razorpay_key_secret:
         raise HTTPException(status_code=500, detail="Razorpay credentials not configured")
     return razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
+
+
+def _configured_plan_id(tier: str) -> str:
+    if tier == "starter":
+        return settings.razorpay_starter_plan_id.strip()
+    if tier == "pro":
+        return settings.razorpay_pro_plan_id.strip()
+    return ""
 
 
 def _plan_store_path() -> Path:
@@ -119,6 +136,14 @@ def _ensure_plan(tier: str) -> str:
     tier = _normalize_tier(tier)
     if tier not in TIER_INFO or tier == "free":
         raise HTTPException(status_code=400, detail=f"invalid tier: {tier}")
+    configured_plan_id = _configured_plan_id(tier)
+    if configured_plan_id:
+        return configured_plan_id
+    if settings.auth_required:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Razorpay {tier} plan ID not configured",
+        )
     store = _read_plan_store()
     plan_key = _plan_store_key(tier)
     if plan_key in store:
@@ -207,8 +232,12 @@ async def create_subscription(body: dict[str, str], principal: Principal = Depen
         info = TIER_INFO[tier]
         subscription = _client().subscription.create({  # type: ignore[attr-defined,union-attr]
             "plan_id": plan_id,
-            "total_count": 0,  # 0 = infinite
+            "total_count": RAZORPAY_MONTHLY_TOTAL_COUNT,
             "quantity": 1,
+            "notes": {
+                "workspace_id": principal.workspace_id,
+                "tier": tier,
+            },
         })
         return {
             "subscription_id": subscription["id"],

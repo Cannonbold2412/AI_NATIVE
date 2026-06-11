@@ -256,7 +256,7 @@ In local dev (`SKILL_AUTH_REQUIRED=false`), all requests are treated as a synthe
 
 ### 3.5 Billing
 
-Razorpay is the wired payment gateway (`app/api/razorpay_routes.py`). The config has orphaned `stripe_*` fields — these are **not wired** in any route handler (see §17).
+Razorpay is the wired payment gateway (`app/api/razorpay_routes.py`). Production checkout uses pre-provisioned Razorpay monthly plan IDs for Starter and Pro (`RAZORPAY_STARTER_PLAN_ID`, `RAZORPAY_PRO_PLAN_ID`); runtime checkout must not create Razorpay plans dynamically. Local development can still fall back to dynamic plan creation when those IDs are absent. The config has orphaned `stripe_*` fields — these are **not wired** in any route handler (see §17).
 
 ---
 
@@ -1063,7 +1063,8 @@ System deps:       Aptfile (Playwright/Chromium system packages — not used in 
 Environment:       SKILL_AUTH_REQUIRED=true requires:
   SKILL_DATABASE_URL, SKILL_CLERK_ISSUER, SKILL_CLERK_JWKS_URL,
   SKILL_CORS_ORIGINS, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
-  RAZORPAY_WEBHOOK_SECRET, + at least one *_API_KEYS
+  RAZORPAY_WEBHOOK_SECRET, RAZORPAY_STARTER_PLAN_ID,
+  RAZORPAY_PRO_PLAN_ID, + at least one *_API_KEYS
 ```
 
 ### 16.2 Cloud Frontend (Vercel)

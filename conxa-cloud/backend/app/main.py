@@ -52,6 +52,8 @@ def _validate_production_config() -> None:
         missing.append("SKILL_CORS_ORIGINS")
     if not (settings.razorpay_key_id and settings.razorpay_key_secret and settings.razorpay_webhook_secret):
         missing.append("RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET")
+    if not (settings.razorpay_starter_plan_id and settings.razorpay_pro_plan_id):
+        missing.append("RAZORPAY_STARTER_PLAN_ID / RAZORPAY_PRO_PLAN_ID")
     if missing:
         raise RuntimeError(
             "Refusing to start: SKILL_AUTH_REQUIRED=true but these are unset: "

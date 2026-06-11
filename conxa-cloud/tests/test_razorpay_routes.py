@@ -53,6 +53,12 @@ class RazorpayRoutesTests(unittest.TestCase):
         auth_patcher = patch("conxa_core.config.settings.auth_required", False)
         self.addCleanup(auth_patcher.stop)
         auth_patcher.start()
+        starter_plan_patcher = patch("conxa_core.config.settings.razorpay_starter_plan_id", "")
+        self.addCleanup(starter_plan_patcher.stop)
+        starter_plan_patcher.start()
+        pro_plan_patcher = patch("conxa_core.config.settings.razorpay_pro_plan_id", "")
+        self.addCleanup(pro_plan_patcher.stop)
+        pro_plan_patcher.start()
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -105,6 +111,39 @@ class RazorpayRoutesTests(unittest.TestCase):
         self.assertEqual(body["tier"], "starter")
         self.assertEqual(fake_client.plan.created_payloads[0]["item"]["amount"], 2999900)
         self.assertEqual(fake_client.plan.created_payloads[0]["item"]["currency"], "INR")
+        subscription_payload = fake_client.subscription.created_payloads[0]
+        self.assertEqual(subscription_payload["plan_id"], "plan_starter_test")
+        self.assertEqual(subscription_payload["total_count"], 1200)
+        self.assertEqual(subscription_payload["quantity"], 1)
+        self.assertEqual(subscription_payload["notes"]["workspace_id"], "org_admin")
+        self.assertEqual(subscription_payload["notes"]["tier"], "starter")
+
+    def test_configured_plan_id_bypasses_dynamic_plan_creation(self) -> None:
+        client = self._client()
+        fake_client = _FakeRazorpayClient()
+
+        with (
+            patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"),
+            patch("conxa_core.config.settings.razorpay_starter_plan_id", "plan_starter_configured"),
+            patch("app.api.razorpay_routes._client", return_value=fake_client),
+        ):
+            res = client.post(
+                "/api/v1/subscriptions/create",
+                json={"tier": "starter"},
+                headers=self._admin_headers(),
+            )
+
+        self.assertEqual(res.status_code, 200, res.text)
+        body = res.json()
+        self.assertEqual(body["plan_id"], "plan_starter_configured")
+        self.assertEqual(body["tier"], "starter")
+        self.assertEqual(fake_client.plan.created_payloads, [])
+        subscription_payload = fake_client.subscription.created_payloads[0]
+        self.assertEqual(subscription_payload["plan_id"], "plan_starter_configured")
+        self.assertEqual(subscription_payload["total_count"], 1200)
+        self.assertEqual(subscription_payload["quantity"], 1)
+        self.assertEqual(subscription_payload["notes"]["workspace_id"], "org_admin")
+        self.assertEqual(subscription_payload["notes"]["tier"], "starter")
 
     def test_create_subscription_surfaces_missing_razorpay_credentials(self) -> None:
         client = self._client()
@@ -184,6 +223,30 @@ class RazorpayRoutesTests(unittest.TestCase):
                 json={
                     "razorpay_payment_id": "pay_legacy",
                     "razorpay_subscription_id": "sub_legacy",
+                    "razorpay_signature": signature,
+                },
+                headers=self._admin_headers(),
+            )
+
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json(), {"success": True})
+
+    def test_verify_subscription_accepts_configured_plan_id(self) -> None:
+        client = self._client()
+        message = "pay_configured|sub_configured"
+        signature = hmac.new(b"razorpay-secret", message.encode(), hashlib.sha256).hexdigest()
+
+        with (
+            patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"),
+            patch("conxa_core.config.settings.razorpay_key_secret", "razorpay-secret"),
+            patch("conxa_core.config.settings.razorpay_starter_plan_id", "plan_starter_configured"),
+            patch("app.api.razorpay_routes._client", return_value=_FakeRazorpayClient("plan_starter_configured")),
+        ):
+            res = client.post(
+                "/api/v1/subscriptions/verify",
+                json={
+                    "razorpay_payment_id": "pay_configured",
+                    "razorpay_subscription_id": "sub_configured",
                     "razorpay_signature": signature,
                 },
                 headers=self._admin_headers(),

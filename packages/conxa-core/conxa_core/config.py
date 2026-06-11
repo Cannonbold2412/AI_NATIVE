@@ -278,6 +278,8 @@ class Settings(BaseSettings):
     razorpay_key_id: str = Field(default="", validation_alias="RAZORPAY_KEY_ID")
     razorpay_key_secret: str = Field(default="", validation_alias="RAZORPAY_KEY_SECRET")
     razorpay_webhook_secret: str = Field(default="", validation_alias="RAZORPAY_WEBHOOK_SECRET")
+    razorpay_starter_plan_id: str = Field(default="", validation_alias="RAZORPAY_STARTER_PLAN_ID")
+    razorpay_pro_plan_id: str = Field(default="", validation_alias="RAZORPAY_PRO_PLAN_ID")
 
     @field_validator("package_bundle_root", mode="before")
     @classmethod
