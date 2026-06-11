@@ -139,6 +139,13 @@ def _slug_from_org_id(org_id: str) -> str:
     return text or "workspace"
 
 
+def _normalize_org_role(role: str | None) -> str:
+    value = str(role or "").strip().lower()
+    if value.startswith("org:"):
+        value = value.removeprefix("org:").strip()
+    return value or "basic_member"
+
+
 def personal_workspace_id(user_id: str) -> str:
     return f"personal_{user_id}"
 
@@ -189,7 +196,7 @@ def principal_from_request(request: Request) -> Principal:
                 workspace_id=org_id,
                 workspace_slug=workspace_slug,
                 workspace_name=proxy_identity.get("org_name") or "Workspace",
-                role=proxy_identity.get("org_role") or "basic_member",
+                role=_normalize_org_role(proxy_identity.get("org_role")),
                 auth_provider="clerk",
                 identity_source="trusted_proxy",
                 proxy_identity_trusted=True,
@@ -210,7 +217,7 @@ def principal_from_request(request: Request) -> Principal:
     proxy_identity, proxy_identity_status = _trusted_proxy_identity(request, subject)
     org_id = str(proxy_identity.get("org_id") or auth.get("org_id") or personal_workspace_id(subject))
     workspace_slug = _slug_from_org_id(org_id)
-    org_role = str(proxy_identity.get("org_role") or auth.get("org_role") or claims.get("org_role") or "basic_member")
+    org_role = _normalize_org_role(proxy_identity.get("org_role") or auth.get("org_role") or claims.get("org_role"))
     identity_source = "trusted_proxy" if proxy_identity else "clerk_jwt"
     return Principal(
         user_id=subject,

@@ -62,6 +62,31 @@ class ProductRoutesTests(unittest.TestCase):
         self.assertTrue(body["proxy_identity_trusted"])
         self.assertEqual(body["proxy_identity_status"], "trusted")
 
+    def test_trusted_proxy_clerk_org_roles_are_normalized(self) -> None:
+        client = self._client()
+        cases = [
+            ("org:admin", "admin"),
+            ("org:owner", "owner"),
+            ("org:member", "member"),
+        ]
+
+        with patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"):
+            for raw_role, expected_role in cases:
+                with self.subTest(raw_role=raw_role):
+                    me = client.get(
+                        "/api/v1/me",
+                        headers={
+                            "x-conxa-proxy-secret": "proxy-secret",
+                            "x-conxa-user-id": f"user_{expected_role}",
+                            "x-conxa-org-id": f"org_{expected_role}",
+                            "x-conxa-org-role": raw_role,
+                        },
+                    )
+
+                    self.assertEqual(me.status_code, 200)
+                    self.assertEqual(me.json()["workspace"]["role"], expected_role)
+                    self.assertTrue(me.json()["proxy_identity_trusted"])
+
     def test_invalid_proxy_secret_cannot_spoof_org(self) -> None:
         client = self._client()
         with patch("conxa_core.config.settings.api_proxy_shared_secret", "proxy-secret"):
