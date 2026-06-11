@@ -328,13 +328,12 @@ Source: `conxa-cloud/frontend/` (and `research/frontend/` for prototype referenc
 
 **Purpose:** Subscription management via Razorpay.  
 **Inputs:** Plan selection.  
-**Outputs:** Subscription status, plan tier.  
+**Outputs:** Checkout readiness, plan tier, and workspace usage meters.
 **User goal:** Upgrade or manage subscription.
 
-**Meter behavior:** Shows all four customer meters: seats, installer slots, compile credits, and Human Edit pool.
+**Meter behavior:** Shows all four customer meters first: seats, installer slots, compile credits, and Human Edit pool. Account timing and checkout state live in the Billing Operations panel rather than top summary cards.
 
 **UX issues:**
-- Razorpay integration specifics not visible in the frontend code reviewed.
 - No invoice history.
 
 ---

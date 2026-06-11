@@ -35,14 +35,14 @@ TIER_INFO = {
     },
     "starter": {
         "name": "Starter",
-        "amount": 49900,  # 499 INR in paise
+        "amount": 2999900,
         "currency": "INR",
         "period": "monthly",
         "features": ["3 seats", "3 installer slots", "300 compile credits/month", "10M Human Edit tokens/month"],
     },
     "pro": {
         "name": "Pro",
-        "amount": 99900,  # 999 INR in paise
+        "amount": 7999900,
         "currency": "INR",
         "period": "monthly",
         "features": ["10 seats", "10 installer slots", "1000 compile credits/month", "50M Human Edit tokens/month"],
@@ -53,6 +53,24 @@ TIER_INFO = {
 def _normalize_tier(tier: str) -> str:
     value = str(tier or "").strip().lower()
     return "starter" if value == "basic" else value
+
+
+def _plan_store_key(tier: str) -> str:
+    info = TIER_INFO[tier]
+    return f"{tier}:{info['currency']}:{info['amount']}"
+
+
+def _tier_from_plan_store_key(key: str) -> str:
+    return _normalize_tier(str(key).split(":", 1)[0])
+
+
+def _tier_for_plan_id(plan_id: str) -> str | None:
+    for key, stored_plan_id in _read_plan_store().items():
+        if plan_id == stored_plan_id:
+            tier = _tier_from_plan_store_key(key)
+            if tier in TIER_INFO and tier != "free":
+                return tier
+    return None
 
 
 def _client() -> razorpay.Client:
@@ -90,11 +108,9 @@ def _ensure_plan(tier: str) -> str:
     if tier not in TIER_INFO or tier == "free":
         raise HTTPException(status_code=400, detail=f"invalid tier: {tier}")
     store = _read_plan_store()
-    if tier == "starter" and "starter" not in store and "basic" in store:
-        store["starter"] = store["basic"]
-        _write_plan_store(store)
-    if tier in store:
-        return store[tier]
+    plan_key = _plan_store_key(tier)
+    if plan_key in store:
+        return store[plan_key]
     info = TIER_INFO[tier]
     try:
         plan = _client().plan.create({  # type: ignore[attr-defined,union-attr]
@@ -108,7 +124,7 @@ def _ensure_plan(tier: str) -> str:
             },
         })
         plan_id = plan["id"]
-        store[tier] = plan_id
+        store[plan_key] = plan_id
         _write_plan_store(store)
         return plan_id
     except Exception as exc:
@@ -131,7 +147,7 @@ def list_plans() -> dict[str, Any]:
             {
                 "tier": "starter",
                 "name": TIER_INFO["starter"]["name"],
-                "amount": 499,
+                "amount": TIER_INFO["starter"]["amount"] // 100,
                 "currency": "INR",
                 "period": "monthly",
                 "features": TIER_INFO["starter"]["features"],
@@ -139,7 +155,7 @@ def list_plans() -> dict[str, Any]:
             {
                 "tier": "pro",
                 "name": TIER_INFO["pro"]["name"],
-                "amount": 999,
+                "amount": TIER_INFO["pro"]["amount"] // 100,
                 "currency": "INR",
                 "period": "monthly",
                 "features": TIER_INFO["pro"]["features"],
@@ -196,11 +212,7 @@ async def verify_subscription(body: dict[str, str], principal: Principal = Depen
         raise HTTPException(status_code=400, detail="signature_mismatch")
     try:
         subscription = _client().subscription.fetch(subscription_id)  # type: ignore[attr-defined,union-attr]
-        tier = None
-        for t, plan_id in _read_plan_store().items():
-            if subscription.get("plan_id") == plan_id:
-                tier = _normalize_tier(t)
-                break
+        tier = _tier_for_plan_id(str(subscription.get("plan_id") or ""))
         if not tier:
             raise HTTPException(status_code=400, detail="unknown_plan")
         upsert_billing(principal.workspace_id, {
@@ -240,11 +252,7 @@ async def handle_razorpay_webhook(request: Request) -> dict[str, bool]:
     if event_type in ["subscription.activated", "subscription.charged"]:
         try:
             subscription = _client().subscription.fetch(subscription_id)  # type: ignore[attr-defined,union-attr]
-            tier = None
-            for t, plan_id in _read_plan_store().items():
-                if subscription.get("plan_id") == plan_id:
-                    tier = _normalize_tier(t)
-                    break
+            tier = _tier_for_plan_id(str(subscription.get("plan_id") or ""))
             if tier:
                 workspace_id = payload.get("notes", {}).get("workspace_id", "")
                 if workspace_id:

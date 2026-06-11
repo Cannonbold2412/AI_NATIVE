@@ -5,17 +5,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
-  CalendarClock,
   CheckCircle2,
   Code2,
   CreditCard,
-  Gauge,
   Loader2,
   Mail,
   PackageCheck,
   PhoneCall,
   RefreshCw,
-  ShieldCheck,
   Users,
   Wand2,
 } from 'lucide-react'
@@ -69,15 +66,6 @@ type RazorpayOptions = {
 }
 
 type CheckoutStatus = 'missing_key' | 'loading' | 'ready' | 'failed'
-
-type SummaryCardProps = {
-  title: string
-  value: string
-  detail: string
-  icon: ComponentType<{ className?: string }>
-  tone?: 'default' | 'success' | 'warning'
-  loading?: boolean
-}
 
 type UsageMeterConfig = {
   key: EntitlementMeterKey
@@ -291,8 +279,6 @@ export function BillingPage() {
   const currentPlan = normalizePlan(
     currentPlanOverride ?? subscription?.plan ?? entitlements?.plan ?? 'free',
   )
-  const currentPlanRecord = plans.find((plan) => normalizePlan(plan.tier) === currentPlan)
-  const isLoading = plansQuery.isLoading || subscriptionQuery.isLoading || entitlementsQuery.isLoading
   const hasError = plansQuery.isError || subscriptionQuery.isError || entitlementsQuery.isError
   const canCheckout = checkoutStatus === 'ready'
 
@@ -417,43 +403,6 @@ export function BillingPage() {
           />
         ) : null}
 
-        <section className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            title="Current Plan"
-            value={displayPlanName(currentPlan)}
-            detail={
-              currentPlanRecord
-                ? `${formatPrice(currentPlanRecord)} / ${formatPeriod(currentPlanRecord)}`
-                : 'Plan details loading'
-            }
-            icon={ShieldCheck}
-            tone="success"
-            loading={isLoading && !subscription}
-          />
-          <SummaryCard
-            title="Subscription"
-            value={subscription?.status ? subscription.status : 'Not active'}
-            detail={subscription?.subscription_id ? subscription.subscription_id : 'No paid subscription linked'}
-            icon={CreditCard}
-            loading={subscriptionQuery.isLoading}
-          />
-          <SummaryCard
-            title="Usage Period"
-            value={entitlements?.period ?? 'Loading'}
-            detail={`Resets ${formatDate(entitlements?.reset_at)}`}
-            icon={CalendarClock}
-            loading={entitlementsQuery.isLoading}
-          />
-          <SummaryCard
-            title="Billing End"
-            value={formatUnixDate(subscription?.current_period_end)}
-            detail={subscription?.stripe_configured ? 'Provider configured' : checkoutLabel(checkoutStatus)}
-            icon={Gauge}
-            tone={checkoutStatus === 'ready' ? 'success' : 'warning'}
-            loading={subscriptionQuery.isLoading}
-          />
-        </section>
-
         <section className="space-y-2.5">
           <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -517,47 +466,6 @@ export function BillingPage() {
         />
       </main>
     </div>
-  )
-}
-
-function SummaryCard({
-  title,
-  value,
-  detail,
-  icon: Icon,
-  tone = 'default',
-  loading,
-}: SummaryCardProps) {
-  const toneClass =
-    tone === 'success'
-      ? 'border-white/8 bg-white/[0.04] text-cyan-300'
-      : tone === 'warning'
-        ? 'border-white/8 bg-white/[0.04] text-amber-300'
-        : 'border-white/8 bg-white/[0.03] text-zinc-400'
-
-  return (
-    <Card className="border-white/8 bg-white/[0.025] shadow-none">
-      <CardContent className="min-h-[4.8rem] p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-normal text-zinc-500">{title}</p>
-            {loading ? (
-              <div className="mt-1.5 h-5 w-24 animate-pulse rounded bg-white/8" />
-            ) : (
-              <p className="mt-1 truncate text-lg font-semibold leading-tight text-white">{value}</p>
-            )}
-          </div>
-          <div className={`rounded-md border p-1.5 ${toneClass}`}>
-            <Icon className="h-3.5 w-3.5" />
-          </div>
-        </div>
-        {loading ? (
-          <div className="mt-1.5 h-3.5 w-32 animate-pulse rounded bg-white/8" />
-        ) : (
-          <p className="mt-1.5 truncate text-xs text-zinc-500">{detail}</p>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 
