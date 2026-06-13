@@ -138,23 +138,29 @@ async function refreshSession(company, loginUrl, context, sessionsDir) {
     return { ok: false, session_expired: true, login_url: loginUrl, message: "Re-login required (headless mode — no browser available)." };
   }
 
-  let authPage = null;
-  try {
-    authPage = await context.newPage();
-    await authPage.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await authPage.waitForURL(
-      (url) => !AUTH_FAILURE_URL_RE.test(url.pathname),
-      { timeout: 180_000 }
-    );
-    const state = await context.storageState();
-    saveRawSession(company, state, sessionsDir);
-    _authRefreshAttempts.delete(company);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, session_expired: true, login_url: loginUrl, message: `Re-login timed out or failed: ${e.message}` };
-  } finally {
-    if (authPage) await authPage.close().catch(() => {});
+  const MAX_CLOSE_RETRIES = 2;
+  for (let retry = 0; retry <= MAX_CLOSE_RETRIES; retry++) {
+    let authPage = null;
+    try {
+      authPage = await context.newPage();
+      await authPage.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await authPage.waitForURL(
+        (url) => !AUTH_FAILURE_URL_RE.test(url.pathname),
+        { timeout: 180_000 }
+      );
+      const state = await context.storageState();
+      saveRawSession(company, state, sessionsDir);
+      _authRefreshAttempts.delete(company);
+      return { ok: true };
+    } catch (e) {
+      const browserClosed = /Target page|context or browser|browser has been closed|page has been closed/i.test(e.message);
+      if (browserClosed && retry < MAX_CLOSE_RETRIES) continue;
+      return { ok: false, session_expired: true, login_url: loginUrl, message: `Re-login timed out or failed: ${e.message}` };
+    } finally {
+      if (authPage) await authPage.close().catch(() => {});
+    }
   }
+  return { ok: false, session_expired: true, login_url: loginUrl, message: "Re-login cancelled: login window was closed. Please run the skill again." };
 }
 
 // Regex re-export so run.js can share the same pattern without duplicating it.

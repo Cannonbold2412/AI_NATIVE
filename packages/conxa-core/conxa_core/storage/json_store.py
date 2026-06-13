@@ -21,7 +21,10 @@ def write_skill(skill_id: str, document: dict[str, Any]) -> Path:
     db_set("skills", skill_id, document)
     path = skills_dir() / f"{skill_id}.json"
     try:
-        path.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
+        json_str = json.dumps(document, indent=2, ensure_ascii=False)
+        # Strip lone surrogates (Windows recording artifacts) to keep the file valid UTF-8
+        json_str = json_str.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace")
+        path.write_text(json_str, encoding="utf-8")
     except OSError:
         pass
     if is_update:

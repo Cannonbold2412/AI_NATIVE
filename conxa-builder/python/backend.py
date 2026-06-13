@@ -1038,10 +1038,14 @@ class Backend:
                 f"Built skill pack not found: skill-packs/{company}. Run Build Plugin again.",
             )
 
+        studio_base = Path(os.environ.get("SKILL_DATA_DIR") or os.path.expanduser("~/.conxa-build-studio"))
+        test_data_dir = studio_base / "test-data"
+        test_data_dir.mkdir(parents=True, exist_ok=True)
+
         try:
             sink({"kind": "workflow_test", "message": "Staging skill pack for the runtime…"})
-            sync_skill_pack(company, source_dir, runtime_dir, data_dir=data_dir)
-            _stage_runtime_auth(plugin, company, data_dir)
+            sync_skill_pack(company, source_dir, runtime_dir, data_dir=test_data_dir)
+            _stage_runtime_auth(plugin, company, test_data_dir)
 
             # Frozen builds run the packed runtime exe, which has no node_modules
             # for an npx-based Playwright install. Point it at the Studio-managed
@@ -1071,7 +1075,7 @@ class Backend:
                     "watch": not bool(payload.get("headless")),
                 },
                 env={
-                    "CONXA_DATA_DIR": str(data_dir),
+                    "CONXA_DATA_DIR": str(test_data_dir),
                     "PLAYWRIGHT_BROWSERS_PATH": str(browsers_dir),
                 },
             )
