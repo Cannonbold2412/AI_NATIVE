@@ -29,6 +29,144 @@ _KEYRING_SERVICE = "conxa-studio"
 _TOKEN_KEY = "session"
 _REFRESH_LEEWAY_S = 60
 
+_CALLBACK_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Conxa — {title}</title>
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  html, body {{
+    height: 100%;
+    background: #0a0c0f;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #e4e4e7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }}
+  .card {{
+    width: min(420px, calc(100vw - 3rem));
+    background: #0d0f12;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+  }}
+  .wordmark {{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #a1a1aa;
+    margin-bottom: 0.25rem;
+  }}
+  .wordmark-dot {{
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3b82f6;
+  }}
+  .icon-wrap {{
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: {icon_bg};
+  }}
+  h1 {{
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #f4f4f5;
+    text-align: center;
+  }}
+  .subtitle {{
+    font-size: 0.83rem;
+    color: #71717a;
+    text-align: center;
+    line-height: 1.5;
+  }}
+  .countdown {{
+    font-size: 0.75rem;
+    color: #3f3f46;
+    margin-top: 0.25rem;
+  }}
+  .divider {{
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+  }}
+</style>
+{auto_close_script}
+</head>
+<body>
+<div class="card">
+  <div class="wordmark">
+    <span class="wordmark-dot"></span>
+    Conxa
+  </div>
+  <div class="icon-wrap">
+    {icon_svg}
+  </div>
+  <h1>{title}</h1>
+  <p class="subtitle">{subtitle}</p>
+  <div class="divider"></div>
+  <p class="countdown" id="cd">{countdown_text}</p>
+</div>
+</body>
+</html>"""
+
+_SUCCESS_ICON = """<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M6 14.5L11.5 20L22 8" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>"""
+
+_ERROR_ICON = """<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M8 8L20 20M20 8L8 20" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"/>
+</svg>"""
+
+_AUTO_CLOSE_SCRIPT = """\
+<script>
+  var s = 4;
+  function tick() {
+    s--;
+    var el = document.getElementById('cd');
+    if (el) el.textContent = 'Closing in ' + s + 's…';
+    if (s <= 0) { window.close(); }
+    else { setTimeout(tick, 1000); }
+  }
+  setTimeout(tick, 1000);
+</script>"""
+
+
+def _build_callback_html(success: bool, message: str) -> bytes:
+    if success:
+        return _CALLBACK_HTML.format(
+            title="Signed in successfully",
+            icon_bg="rgba(74,222,128,0.1)",
+            icon_svg=_SUCCESS_ICON,
+            subtitle="You can close this window and return to Build Studio.",
+            countdown_text="Closing in 4s…",
+            auto_close_script=_AUTO_CLOSE_SCRIPT,
+        ).encode()
+    return _CALLBACK_HTML.format(
+        title="Authentication failed",
+        icon_bg="rgba(248,113,113,0.1)",
+        icon_svg=_ERROR_ICON,
+        subtitle=message,
+        countdown_text="You can close this window.",
+        auto_close_script="",
+    ).encode()
+
 
 def _pkce_pair() -> tuple[str, str]:
     verifier = base64.urlsafe_b64encode(secrets.token_bytes(48)).rstrip(b"=").decode()
@@ -111,17 +249,15 @@ class AuthService:
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
                 if code and got_state == state:
-                    self.wfile.write(b"<h2>Signed in! You can close this window.</h2>")
+                    self.wfile.write(_build_callback_html(True, "Signed in to Conxa"))
                     result["code"] = code
                 elif error:
                     msg = f"{error}: {error_desc}" if error_desc else error
                     result["error"] = msg
-                    self.wfile.write(
-                        f"<h2>Conxa: sign-in error</h2><p>{msg}</p>".encode()
-                    )
+                    self.wfile.write(_build_callback_html(False, msg))
                 else:
                     result["error"] = "state_mismatch"
-                    self.wfile.write(b"<h2>Conxa: login failed (state mismatch).</h2>")
+                    self.wfile.write(_build_callback_html(False, "Login failed: state mismatch."))
                 done.set()
 
         # Use a fixed port range so the redirect_uri can be pre-registered in Clerk.

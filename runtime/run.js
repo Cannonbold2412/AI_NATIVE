@@ -20,6 +20,7 @@ const RECOVERY_LOCATOR_TIMEOUT_MS = envNumber("CONXA_RECOVERY_LOCATOR_TIMEOUT_MS
 const PAGE_LOAD_TIMEOUT_MS = envNumber("CONXA_PAGE_LOAD_TIMEOUT_MS", 8000);
 
 const RETRY_BUDGET_MAX = 3;
+const DOWNLOAD_WAIT_TIMEOUT_MS = envNumber("CONXA_DOWNLOAD_WAIT_MS", 120000);
 const RECOVERY_LOG = path.join(CONXA_DIR, "logs", "recovery.log");
 const RECOVERY_LOG_MAX = 10 * 1024 * 1024;
 
@@ -41,7 +42,7 @@ const INTERACTIVE_STEP_TYPES = new Set([
 
 const NOOP_STEP_TYPES = [
   "tab_open", "tab_switch", "popup", "frame_enter", "frame_exit",
-  "upload_intent", "download_observed", "dialog_appeared", "dialog_accept",
+  "upload_intent", "dialog_appeared", "dialog_accept",
   "dialog_dismiss", "file_chooser_opened", "clipboard_copy", "clipboard_paste",
 ];
 
@@ -549,9 +550,19 @@ for (const type of NOOP_STEP_TYPES) {
   HANDLERS[type] = async () => {};
 }
 
-async function executeStep(page, step, inputs) {
+HANDLERS["download_observed"] = async (_page, _step, _inputs, ctx) => {
+  const queue = ctx && ctx.downloadQueue;
+  if (!queue || !queue.length) return;
+  const pending = queue.shift();
+  await Promise.race([
+    pending,
+    new Promise(resolve => setTimeout(resolve, DOWNLOAD_WAIT_TIMEOUT_MS)),
+  ]);
+};
+
+async function executeStep(page, step, inputs, ctx = {}) {
   const handler = HANDLERS[step.type];
-  if (handler) await handler(page, step, inputs);
+  if (handler) await handler(page, step, inputs, ctx);
 }
 
 // Recovery cascade
@@ -691,7 +702,7 @@ function stepFailure(step, stepIndex, cause, preShot) {
   return err;
 }
 
-async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelCheck, tracker, observerMs } = {}) {
+async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelCheck, tracker, observerMs, downloadQueue } = {}) {
   const t = tracker || { emit: () => {} };
   const paceOpts = { observerMs: observerMs ?? 600 };
   let recoveredSteps = 0;
@@ -712,7 +723,7 @@ async function runPlan(page, steps, inputs, startFrom, slug, { onStep, cancelChe
 
     let primaryErr = null;
     try {
-      await executeStep(page, step, inputs);
+      await executeStep(page, step, inputs, { downloadQueue });
       t.emit("tier_ok", { si: i, tier: "tier1_compiled" });
       hasExecutedStep = true;
       prevStepType = step.type;

@@ -172,6 +172,23 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-3 space-y-2.5">
+              <p className="text-xs font-semibold text-amber-200">How authentication recording works</p>
+              <ol className="space-y-1 list-decimal list-inside">
+                <li className="text-xs text-amber-100/70 leading-5">Click "Record Auth" — a browser opens at your target URL.</li>
+                <li className="text-xs text-amber-100/70 leading-5">Complete the full login flow, including 2FA or SSO.</li>
+                <li className="text-xs text-amber-100/70 leading-5">Navigate to the page where workflows should begin.</li>
+                <li className="text-xs text-amber-100/70 leading-5">Close the browser to save the session.</li>
+              </ol>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/70 mb-1">Best practices</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li className="text-xs text-amber-100/60 leading-5">Complete the full flow before closing — partial sessions won't work.</li>
+                  <li className="text-xs text-amber-100/60 leading-5">Land on your app's actual starting page, not the login page.</li>
+                  <li className="text-xs text-amber-100/60 leading-5">Re-record whenever credentials or cookies change.</li>
+                </ul>
+              </div>
+            </div>
             <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-3">
               <p className="text-[11px] font-medium text-zinc-500">Target URL</p>
               <p className="mt-1 truncate font-mono text-xs text-zinc-300">{plugin.target_url}</p>
@@ -351,6 +368,7 @@ function NewWorkflowDialog({
   onCreated: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<1 | 2>(1)
   const [name, setName] = useState('')
   const [urlVariables, setUrlVariables] = useState<Record<string, string>>({})
   const [captureHover, setCaptureHover] = useState(false)
@@ -435,6 +453,7 @@ function NewWorkflowDialog({
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen && activeSession && !workflowBrowserClosed && !finalizeMut.isPending) return
+        if (!nextOpen) setStep(1)
         setOpen(nextOpen)
       }}
     >
@@ -454,7 +473,30 @@ function NewWorkflowDialog({
         <DialogHeader>
           <DialogTitle className="text-white">Record Workflow</DialogTitle>
         </DialogHeader>
-        {!isRecording ? (
+        {!isRecording && step === 1 ? (
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-3 space-y-2.5">
+              <p className="text-xs font-semibold text-zinc-200">How to record a workflow</p>
+              <ol className="space-y-1 list-decimal list-inside">
+                <li className="text-xs text-zinc-400 leading-5">Name your workflow on the next screen, then click "Start Recording".</li>
+                <li className="text-xs text-zinc-400 leading-5">Perform the workflow naturally in the browser — every action is captured.</li>
+                <li className="text-xs text-zinc-400 leading-5">Close the browser when done to finalize the recording.</li>
+              </ol>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 mb-1">Best practices</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li className="text-xs text-zinc-500 leading-5">Keep each workflow focused on a single task.</li>
+                  <li className="text-xs text-zinc-500 leading-5">Use <code className="font-mono text-zinc-300">{'{{variable}}'}</code> placeholders for dynamic values (dates, IDs).</li>
+                  <li className="text-xs text-zinc-500 leading-5">Never record passwords — use template variables instead.</li>
+                  <li className="text-xs text-zinc-500 leading-5">One clean pass only — no backtracking.</li>
+                </ul>
+              </div>
+            </div>
+            <Button className="w-full" onClick={() => setStep(2)}>
+              Next →
+            </Button>
+          </div>
+        ) : !isRecording ? (
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label className="text-zinc-300">Workflow name</Label>

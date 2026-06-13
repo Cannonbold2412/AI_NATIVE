@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from conxa_compile.compiler.action_policy import no_recovery_block, recovery_enabled_for_action
+from conxa_compile.editor.action_registry import MARKER_ACTIONS
 from conxa_compile.compiler.decision_layer import rank_merged_anchors
 from conxa_compile.compiler.destructive_semantics import destructive_compiler_step
 from conxa_compile.compiler.input_binding_v2 import derive_input_binding_v2
@@ -360,6 +361,8 @@ def _build_structural_fingerprint(steps: list[SkillStep]) -> dict[str, Any]:
 
 
 def _build_target(ev: dict[str, Any], policy: dict[str, Any], session_id: str = "") -> dict[str, Any]:
+    if str((ev.get("action") or {}).get("action") or "").lower() in MARKER_ACTIONS:
+        return {}
     raw_selectors = ev.get("selectors") or {}
     selectors = filter_selectors_dict(raw_selectors)
     target = ev.get("target") or {}
@@ -658,6 +661,25 @@ def _build_step(
                 "step_index": step_index,
                 "action": action_payload,
                 "intent": step.intent,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            },
+        )
+        return step
+    if action_payload in MARKER_ACTIONS:
+        step = SkillStep(
+            action=action_payload,
+            intent=str(action_payload),
+            frame=_build_frame_context(ev),
+            recovery=RecoveryBlock(**no_recovery_block(str(action_payload))),
+        )
+        _compile_log(
+            "compile_step",
+            f"Compiled step {step_index + 1}.",
+            {
+                "phase": "step_done",
+                "step_index": step_index,
+                "action": action_payload,
+                "intent": str(action_payload),
                 "duration_ms": round((time.perf_counter() - started) * 1000, 2),
             },
         )

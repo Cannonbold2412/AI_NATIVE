@@ -110,11 +110,13 @@ function WorkflowLogSection({
   runDone,
   runError,
   logRef,
+  onRetry,
 }: {
   logs: string[]
   runDone: boolean
   runError: string
   logRef: RefObject<HTMLDivElement>
+  onRetry?: () => void
 }) {
   return (
     <div className="border-t border-white/8 px-3 pb-3 pt-2 space-y-3">
@@ -143,9 +145,17 @@ function WorkflowLogSection({
         </div>
       )}
       {runError && (
-        <div className="flex items-start gap-2 text-xs text-red-300">
-          <XCircle className="mt-0.5 size-3.5 shrink-0" />
-          <span>{runError}</span>
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-xs text-red-300">
+            <XCircle className="mt-0.5 size-3.5 shrink-0" />
+            <span className="whitespace-pre-line">{runError}</span>
+          </div>
+          {onRetry && (
+            <Button size="sm" variant="outline" onClick={onRetry} className="border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10">
+              <PlayCircle className="size-3.5" />
+              Try again
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -504,7 +514,7 @@ export function WorkflowTestRow({
 
       {/* Log + result panel — shown whenever there's output */}
       {(logs.length > 0 || runDone || runError) && (
-        <WorkflowLogSection logs={logs} runDone={runDone} runError={runError} logRef={logRef} />
+        <WorkflowLogSection logs={logs} runDone={runDone} runError={runError} logRef={logRef} onRetry={runError ? () => void runTest() : undefined} />
       )}
     </div>
   )

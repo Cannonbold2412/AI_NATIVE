@@ -747,14 +747,19 @@ async function _handleTool(name, args) {
       const _downloadsDir = path.join(os.homedir(), ".conxa", "downloads", _runId);
       const _downloads = [];
       const _downloadSaves = [];
+      const _downloadQueue = [];
       page.on("download", (download) => {
+        let resolveEntry;
+        const entryPromise = new Promise(resolve => { resolveEntry = resolve; });
+        _downloadQueue.push(entryPromise);
         const savePromise = (async () => {
           fs.mkdirSync(_downloadsDir, { recursive: true });
           const fname = download.suggestedFilename() || `download_${Date.now()}`;
           const dest  = path.join(_downloadsDir, fname);
           await download.saveAs(dest);
           _downloads.push(dest);
-        })().catch(() => {});
+          resolveEntry({ filename: fname, path: dest });
+        })().catch(() => { resolveEntry(null); });
         _downloadSaves.push(savePromise);
       });
 
@@ -766,10 +771,11 @@ async function _handleTool(name, args) {
         while (true) { // eslint-disable-line no-constant-condition
           try {
             const result = await runPlan(page, steps, inputs, startAt, entry.slug, {
-              onStep:      (i) => { if (activeExecution) activeExecution.step = i; },
-              cancelCheck: () => activeExecution?.cancelRequested,
-              tracker:     _runTracker,
-              observerMs:  _observerMs,
+              onStep:        (i) => { if (activeExecution) activeExecution.step = i; },
+              cancelCheck:   () => activeExecution?.cancelRequested,
+              tracker:       _runTracker,
+              observerMs:    _observerMs,
+              downloadQueue: _downloadQueue,
             });
             _totalRecovered += (result && result.recoveredSteps) ? result.recoveredSteps : 0;
             break;

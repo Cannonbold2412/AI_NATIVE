@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createPlugin, deletePlugin, fetchPlugins, normalizePluginList, type Plugin } from '@/api/pluginApi'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { ArrowRight, Globe, KeyRound, Plus, Search, Trash2 } from 'lucide-react'
+import { Globe, KeyRound, Plus, Search, Trash2 } from 'lucide-react'
 
 function statusBadge(status: Plugin['status']) {
   const map: Record<Plugin['status'], { label: string; className: string }> = {
@@ -171,6 +171,7 @@ const STATUS_FILTERS = ['all', 'ready', 'needs_auth', 'building', 'error'] as co
 type StatusFilter = typeof STATUS_FILTERS[number]
 
 export function PluginsPage() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['plugins'], queryFn: fetchPlugins, staleTime: 10_000 })
   const refetch = () => qc.invalidateQueries({ queryKey: ['plugins'] })
@@ -254,7 +255,16 @@ export function PluginsPage() {
             {filtered.map((plugin) => (
               <Card
                 key={plugin.id}
-                className="group border-white/8 bg-white/[0.03] shadow-none transition-colors hover:border-white/12 hover:bg-white/[0.05]"
+                role="link"
+                tabIndex={0}
+                onClick={() => navigate(`/plugins/${plugin.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    navigate(`/plugins/${plugin.id}`)
+                  }
+                }}
+                className="group cursor-pointer border-white/8 bg-white/[0.03] shadow-none transition-colors hover:border-white/12 hover:bg-white/[0.05]"
               >
                 <CardHeader className="flex-row items-start justify-between gap-2 pb-2">
                   <div className="min-w-0">
@@ -263,24 +273,19 @@ export function PluginsPage() {
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {statusBadge(plugin.status)}
-                    <DeletePluginButton plugin={plugin} onDeleted={() => handleDeleted(plugin.id)} />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <DeletePluginButton plugin={plugin} onDeleted={() => handleDeleted(plugin.id)} />
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 text-xs text-zinc-500">
-                      <span className="flex items-center gap-1">
-                        <KeyRound className="size-3" />
-                        {plugin.auth ? 'Auth ✓' : 'No auth'}
-                      </span>
-                      <span>{plugin.workflows.length} workflow{plugin.workflows.length !== 1 ? 's' : ''}</span>
-                      {plugin.build ? <span>v{plugin.build.version}</span> : null}
-                    </div>
-                    <Button asChild size="icon-sm" variant="ghost" className="text-zinc-400 hover:text-white">
-                      <Link to={`/plugins/${plugin.id}`}>
-                        <ArrowRight className="size-4" />
-                      </Link>
-                    </Button>
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span className="flex items-center gap-1">
+                      <KeyRound className="size-3" />
+                      {plugin.auth ? 'Auth ✓' : 'No auth'}
+                    </span>
+                    <span>{plugin.workflows.length} workflow{plugin.workflows.length !== 1 ? 's' : ''}</span>
+                    {plugin.build ? <span>v{plugin.build.version}</span> : null}
                   </div>
                 </CardContent>
               </Card>
