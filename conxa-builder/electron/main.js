@@ -51,6 +51,18 @@ let mainWindow = null;
 let backend = null;
 let backendRestarts = 0;
 let bridge = null;
+let autoUpdater = null;
+
+// Minimal semver greater-than without an extra dependency.
+function semverGt(a, b) {
+  const pa = a.replace(/^v/, "").split(".").map(Number);
+  const pb = b.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
 
 // ─── Backend lifecycle ────────────────────────────────────────────────────────
 
@@ -188,6 +200,33 @@ ipcMain.handle("window:close", (event) => {
 
 ipcMain.handle("window:is-maximized", (event) => Boolean(windowFromEvent(event)?.isMaximized()));
 
+ipcMain.handle("app:version", () => app.getVersion());
+
+// Checks whether a newer version is available on GitHub Releases.
+// Fail-open: any error returns { available: false } so startup is never bricked.
+// Dev / missing dependency: returns not-available unless CONXA_FORCE_UPDATE_SCREEN=1.
+ipcMain.handle("update:check", async () => {
+  const currentVersion = app.getVersion();
+  if (!autoUpdater) {
+    if (process.env.CONXA_FORCE_UPDATE_SCREEN === "1") {
+      return { available: true, currentVersion, latestVersion: "99.0.0" };
+    }
+    return { available: false, currentVersion };
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    if (!result) return { available: false, currentVersion };
+    const latestVersion = result.updateInfo.version;
+    return { available: semverGt(latestVersion, currentVersion), currentVersion, latestVersion };
+  } catch {
+    return { available: false, currentVersion };
+  }
+});
+
+ipcMain.handle("update:start", () => autoUpdater?.downloadUpdate());
+
+ipcMain.handle("update:install", () => autoUpdater?.quitAndInstall());
+
 // ─── Window ─────────────────────────────────────────────────────────────────
 
 function createWindow() {
@@ -233,39 +272,40 @@ function createWindow() {
 }
 
 // ─── Auto-update (electron-updater) ─────────────────────────────────────────────
+// The renderer drives the UX via window.conxa.update.*. The main process wires
+// electron-updater events into "update:status" push messages so the renderer can
+// show a live progress bar. The blocking gate and install flow live in the renderer.
 
 function initAutoUpdate() {
   if (IS_DEV) return;
-  let autoUpdater;
   try {
     ({ autoUpdater } = require("electron-updater"));
   } catch {
     return; // dependency not bundled in this build
   }
   autoUpdater.channel = process.env.CONXA_UPDATE_CHANNEL || "stable";
-  // Install silently on next natural quit if the user dismisses the dialog.
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on("update-downloaded", () => {
-    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-    dialog
-      .showMessageBox(parent, {
-        type: "info",
-        buttons: ["Restart now", "Later"],
-        message: "A new version of Build Studio is ready. Restart to apply.",
-      })
-      .then((res) => {
-        if (res.response === 0) autoUpdater.quitAndInstall();
-      });
+  function sendStatus(payload) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update:status", payload);
+    }
+  }
+
+  autoUpdater.on("download-progress", (progress) => {
+    sendStatus({
+      phase: "download-progress",
+      percent: progress.percent,
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total,
+    });
   });
 
-  // Delay the first check until the renderer has finished painting so the dialog
-  // is never attached to an invisible loading window (which caused it to be missed
-  // silently when the cached installer was already present from a prior session).
-  mainWindow.webContents.once("did-finish-load", () => {
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
-  });
-  setInterval(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 4 * 60 * 60 * 1000);
+  autoUpdater.on("update-downloaded", () => sendStatus({ phase: "downloaded" }));
+
+  autoUpdater.on("error", (err) => sendStatus({ phase: "error", message: err.message }));
 }
 
 // ─── App lifecycle ──────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 # Conxa Build Studio — electron-builder configuration
-# Produces a per-machine NSIS installer for Windows.
+# Produces a per-user NSIS installer for Windows (no UAC prompt; installs under %LOCALAPPDATA%).
 # The backend PyInstaller bundle is injected as an extraResource so it lands in
 # resources/backend/ — matching process.resourcesPath used in main.js.
 
@@ -45,10 +45,9 @@ win:
         - x64
 
 nsis:
-  # Per-machine install (requires elevation) so it works on shared workstations.
-  perMachine: true
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  # Per-user install: no UAC prompt, no wizard, silent update via quitAndInstall().
+  perMachine: false
+  oneClick: true
   shortcutName: Conxa Build Studio
 
   # Register the conxa-studio:// OAuth callback URI scheme.

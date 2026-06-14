@@ -42,4 +42,16 @@ contextBridge.exposeInMainWorld("conxa", {
     ipcRenderer.on("deep-link", listener);
     return () => ipcRenderer.removeListener("deep-link", listener);
   },
+
+  update: {
+    check: () => ipcRenderer.invoke("update:check"),
+    start: () => ipcRenderer.invoke("update:start"),
+    install: () => ipcRenderer.invoke("update:install"),
+    getVersion: () => ipcRenderer.invoke("app:version"),
+    onStatus: (handler) => {
+      const listener = (_e, msg) => handler(msg);
+      ipcRenderer.on("update:status", listener);
+      return () => ipcRenderer.removeListener("update:status", listener);
+    },
+  },
 });
