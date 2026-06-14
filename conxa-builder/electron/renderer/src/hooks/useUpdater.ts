@@ -43,8 +43,10 @@ export function useUpdater() {
       const result = await window.conxa.update.check()
       if (!mounted.current) return
       setCurrentVersion(result.currentVersion)
-      if (result.available && result.latestVersion) {
+      if (result.available && result.latestVersion && !result.error) {
         setStatus({ phase: 'available', currentVersion: result.currentVersion, latestVersion: result.latestVersion })
+      } else if (result.error) {
+        setStatus({ phase: 'error', message: result.error })
       } else {
         setStatus({ phase: 'not-available' })
       }

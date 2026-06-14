@@ -28,6 +28,7 @@ export interface UpdateCheckResult {
   available: boolean;
   currentVersion: string;
   latestVersion?: string;
+  error?: string;
 }
 
 declare global {

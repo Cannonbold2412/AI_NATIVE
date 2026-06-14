@@ -51,8 +51,6 @@ let mainWindow = null;
 let backend = null;
 let backendRestarts = 0;
 let bridge = null;
-let autoUpdater = null;
-
 // Minimal semver greater-than without an extra dependency.
 function semverGt(a, b) {
   const pa = a.replace(/^v/, "").split(".").map(Number);
@@ -63,6 +61,15 @@ function semverGt(a, b) {
   }
   return false;
 }
+
+// Strip "studio-v" or "v" prefix from manifest version strings → bare semver.
+function stripVersion(v) {
+  return v.replace(/^studio-v/i, "").replace(/^v/, "");
+}
+
+// Stashed between update:check and update:start.
+let pendingUpdate = null; // { winUrl, win256 }
+let downloadedInstallerPath = null;
 
 // ─── Backend lifecycle ────────────────────────────────────────────────────────
 
@@ -202,30 +209,138 @@ ipcMain.handle("window:is-maximized", (event) => Boolean(windowFromEvent(event)?
 
 ipcMain.handle("app:version", () => app.getVersion());
 
-// Checks whether a newer version is available on GitHub Releases.
-// Fail-open: any error returns { available: false } so startup is never bricked.
-// Dev / missing dependency: returns not-available unless CONXA_FORCE_UPDATE_SCREEN=1.
+// Checks for a newer version by fetching the Cloud studio-manifest.
+// Fail-open: any error returns { available: false, error } so startup is never bricked.
+// In dev, skip entirely unless CONXA_FORCE_UPDATE_SCREEN=1 (avoids blocking the dev loop).
 ipcMain.handle("update:check", async () => {
   const currentVersion = app.getVersion();
-  if (!autoUpdater) {
-    if (process.env.CONXA_FORCE_UPDATE_SCREEN === "1") {
-      return { available: true, currentVersion, latestVersion: "99.0.0" };
-    }
+  if (process.env.CONXA_FORCE_UPDATE_SCREEN === "1") {
+    return { available: true, currentVersion, latestVersion: "99.0.0" };
+  }
+  if (IS_DEV) {
     return { available: false, currentVersion };
   }
+  const CLOUD_API = process.env.CONXA_CLOUD_API || "https://apis.conxa.in";
   try {
-    const result = await autoUpdater.checkForUpdates();
-    if (!result) return { available: false, currentVersion };
-    const latestVersion = result.updateInfo.version;
-    return { available: semverGt(latestVersion, currentVersion), currentVersion, latestVersion };
-  } catch {
-    return { available: false, currentVersion };
+    const res = await fetch(`${CLOUD_API}/api/v1/updates/studio-manifest`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      const error = `Manifest fetch failed: HTTP ${res.status}`;
+      return { available: false, currentVersion, error };
+    }
+    const manifest = await res.json();
+    const latestVersion = stripVersion(manifest.version || "");
+    if (!latestVersion) {
+      return { available: false, currentVersion, error: "Manifest returned no version" };
+    }
+    const available = semverGt(latestVersion, currentVersion);
+    if (available) {
+      pendingUpdate = { winUrl: manifest.win_url || "", winSha256: manifest.win_sha256 || "" };
+    }
+    return { available, currentVersion, latestVersion };
+  } catch (err) {
+    return { available: false, currentVersion, error: err.message };
   }
 });
 
-ipcMain.handle("update:start", () => autoUpdater?.downloadUpdate());
+// Downloads the installer from pendingUpdate.winUrl with live progress events,
+// then stores the path for update:install.
+ipcMain.handle("update:start", async () => {
+  if (!pendingUpdate?.winUrl) {
+    sendUpdateStatus({ phase: "error", message: "No update URL available — run check first" });
+    return;
+  }
+  const https = require("https");
+  const fss = require("fs");
+  const crypto = require("crypto");
+  const destPath = path.join(app.getPath("temp"), "conxa-studio-update.exe");
 
-ipcMain.handle("update:install", () => autoUpdater?.quitAndInstall());
+  function sendUpdateStatus(payload) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update:status", payload);
+    }
+  }
+
+  // Follow redirects (GitHub release asset URLs 302 → signed CDN URL).
+  function download(url, dest, resolve, reject, hops = 0) {
+    if (hops > 5) { reject(new Error("Too many redirects")); return; }
+    https.get(url, (response) => {
+      if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
+        const location = response.headers.location;
+        response.resume();
+        if (!location) { reject(new Error("Redirect with no Location header")); return; }
+        download(location, dest, resolve, reject, hops + 1);
+        return;
+      }
+      if (response.statusCode !== 200) {
+        reject(new Error(`Download failed: HTTP ${response.statusCode}`));
+        return;
+      }
+      const total = parseInt(response.headers["content-length"] || "0", 10);
+      let transferred = 0;
+      let lastEmit = 0;
+      const hash = crypto.createHash("sha256");
+      const file = fss.createWriteStream(dest);
+
+      response.on("data", (chunk) => {
+        transferred += chunk.length;
+        hash.update(chunk);
+        const now = Date.now();
+        if (now - lastEmit > 250) {
+          lastEmit = now;
+          const elapsed = (now - startTime) / 1000 || 1;
+          sendUpdateStatus({
+            phase: "download-progress",
+            percent: total ? (transferred / total) * 100 : 0,
+            bytesPerSecond: Math.round(transferred / elapsed),
+            transferred,
+            total,
+          });
+        }
+      });
+      response.pipe(file);
+      const startTime = Date.now();
+      file.on("finish", () => resolve({ digest: hash.digest("hex") }));
+      file.on("error", reject);
+      response.on("error", reject);
+    }).on("error", reject);
+  }
+
+  try {
+    const { digest } = await new Promise((resolve, reject) =>
+      download(pendingUpdate.winUrl, destPath, resolve, reject)
+    );
+
+    if (pendingUpdate.winSha256) {
+      if (digest.toLowerCase() !== pendingUpdate.winSha256.toLowerCase()) {
+        fss.unlink(destPath, () => {});
+        sendUpdateStatus({ phase: "error", message: "Checksum mismatch — download may be corrupt" });
+        return;
+      }
+    }
+
+    downloadedInstallerPath = destPath;
+    sendUpdateStatus({ phase: "downloaded" });
+  } catch (err) {
+    sendUpdateStatus({ phase: "error", message: err.message });
+  }
+});
+
+// Launches the downloaded NSIS installer silently then quits.
+// Args match electron-updater's NsisUpdater.doInstall exactly:
+//   --updated  → tells NSIS script this is an update (not a fresh install)
+//   /S         → silent mode (no wizard UI)
+//   --force-run → relaunch the app after installation
+ipcMain.handle("update:install", () => {
+  if (!downloadedInstallerPath) return;
+  const { spawn: nodeSpawn } = require("child_process");
+  nodeSpawn(downloadedInstallerPath, ["--updated", "/S", "--force-run"], {
+    detached: true,
+    stdio: "ignore",
+  }).unref();
+  app.quit();
+});
 
 // ─── Window ─────────────────────────────────────────────────────────────────
 
@@ -271,43 +386,6 @@ function createWindow() {
   mainWindow.on("unmaximize", sendMaximizeState);
 }
 
-// ─── Auto-update (electron-updater) ─────────────────────────────────────────────
-// The renderer drives the UX via window.conxa.update.*. The main process wires
-// electron-updater events into "update:status" push messages so the renderer can
-// show a live progress bar. The blocking gate and install flow live in the renderer.
-
-function initAutoUpdate() {
-  if (IS_DEV) return;
-  try {
-    ({ autoUpdater } = require("electron-updater"));
-  } catch {
-    return; // dependency not bundled in this build
-  }
-  autoUpdater.channel = process.env.CONXA_UPDATE_CHANNEL || "stable";
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  function sendStatus(payload) {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("update:status", payload);
-    }
-  }
-
-  autoUpdater.on("download-progress", (progress) => {
-    sendStatus({
-      phase: "download-progress",
-      percent: progress.percent,
-      bytesPerSecond: progress.bytesPerSecond,
-      transferred: progress.transferred,
-      total: progress.total,
-    });
-  });
-
-  autoUpdater.on("update-downloaded", () => sendStatus({ phase: "downloaded" }));
-
-  autoUpdater.on("error", (err) => sendStatus({ phase: "error", message: err.message }));
-}
-
 // ─── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
@@ -322,7 +400,6 @@ app.whenReady().then(() => {
   }
   startBackend();
   createWindow();
-  initAutoUpdate();
 
   // Windows cold-launch: deep link URL is passed as a CLI arg when the app starts fresh.
   const coldUrl = process.argv.find((a) => a.startsWith("conxa-studio://"));

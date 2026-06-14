@@ -68,7 +68,7 @@ export function App() {
     if (depsState !== 'ready') return
     window.conxa.update.check()
       .then((result) => {
-        if (result.available) {
+        if (result.available && !result.error) {
           setUpdateCheckResult(result)
           setUpdateState('required')
         } else {
