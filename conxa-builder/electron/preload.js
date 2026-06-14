@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("conxa", {
 
   pickFile: (filters) => ipcRenderer.invoke("dialog:pick-file", filters),
 
+  saveInstaller: (srcPath) => ipcRenderer.invoke("dialog:save-installer", srcPath),
+
   windowControls: {
     minimize: () => ipcRenderer.invoke("window:minimize"),
     toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),

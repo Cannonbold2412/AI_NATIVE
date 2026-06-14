@@ -57,9 +57,9 @@ export function CompilePage() {
                 <p className="mt-1 text-xs text-zinc-500">Create a plugin workflow first, then it will appear here.</p>
               </div>
               <Button size="sm" variant="outline" asChild>
-                <Link to="/plugins">
+                <Link to="/dashboard">
                   <ExternalLink className="size-3.5" />
-                  Open Plugins
+                  Open Dashboard
                 </Link>
               </Button>
             </div>

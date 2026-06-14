@@ -12,6 +12,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require("electron")
 const { autoUpdater } = require("electron-updater");
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 const readline = require("readline");
 const { Bridge } = require("./bridge");
 
@@ -199,6 +200,16 @@ ipcMain.handle("python:cmd", async (_e, { type, payload }) => {
 });
 
 ipcMain.handle("open-external", (_e, url) => shell.openExternal(url));
+
+ipcMain.handle("dialog:save-installer", async (_e, srcPath) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    defaultPath: path.basename(srcPath),
+    filters: [{ name: "Installer", extensions: ["exe"] }],
+  });
+  if (canceled || !filePath) return { ok: false };
+  fs.copyFileSync(srcPath, filePath);
+  return { ok: true, filePath };
+});
 
 ipcMain.handle("dialog:pick-file", async (_e, filters) => {
   const { canceled, filePaths } = await dialog.showOpenDialog({

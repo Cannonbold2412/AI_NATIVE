@@ -284,7 +284,7 @@ export function BuildInstallerPage() {
 
   function handleOpenInstaller() {
     if (!installerOutputPath || !installerReady) return
-    void window.conxa.openExternal(`file://${installerOutputPath}`)
+    void window.conxa.saveInstaller(installerOutputPath)
   }
 
   const slotPill = slotMeter ? (
@@ -604,7 +604,7 @@ export function BuildInstallerPage() {
                   disabled={!installerReady || buildingSelected}
                 >
                   <Download className="size-4" />
-                  Open Installer
+                  Download Installer
                 </Button>
               </div>
 

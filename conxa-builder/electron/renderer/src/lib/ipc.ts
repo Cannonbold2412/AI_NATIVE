@@ -39,6 +39,7 @@ declare global {
       onEvent: (handler: (event: BackendEvent) => void) => () => void;
       openExternal: (url: string) => Promise<void>;
       pickFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
+      saveInstaller: (srcPath: string) => Promise<{ ok: boolean; filePath?: string }>;
       windowControls: {
         minimize: () => Promise<void>;
         toggleMaximize: () => Promise<boolean>;

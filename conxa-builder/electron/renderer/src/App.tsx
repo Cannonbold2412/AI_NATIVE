@@ -9,7 +9,6 @@ import { BootstrapScreen } from '@/pages/BootstrapScreen'
 import { UpdateRequiredScreen } from '@/pages/UpdateRequiredScreen'
 
 // Pages
-import { DashboardPage } from '@/pages/DashboardPage'
 import { PluginsPage } from '@/pages/PluginsPage'
 import { PluginDetailPage } from '@/pages/PluginDetailPage'
 import { HumanEditPage } from '@/pages/HumanEditPage'
@@ -22,7 +21,6 @@ import { SettingsPage } from '@/pages/SettingsPage'
 // Studio-exclusive pages (keep existing)
 import { RecordingFeed } from '@/pages/RecordingFeed'
 import { CompileProgress } from '@/pages/CompileProgress'
-import { CompilePage } from '@/pages/CompilePage'
 
 function SplashScreen() {
   return (
@@ -110,12 +108,11 @@ export function App() {
           <DeepLinkHandler />
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/plugins" element={<PluginsPage />} />
+            <Route path="/dashboard" element={<PluginsPage />} />
+            <Route path="/plugins" element={<Navigate to="/dashboard" replace />} />
             <Route path="/plugins/:pluginId" element={<PluginDetailPage />} />
             <Route path="/plugins/:pluginId/record/:workflowName" element={<RecordingFeed />} />
             <Route path="/plugins/:pluginId/compile/:sessionId" element={<CompileProgress />} />
-            <Route path="/compile" element={<CompilePage />} />
             <Route path="/edit" element={<HumanEditPage />} />
             <Route path="/edit/:skillId" element={<HumanEditPage />} />
             <Route path="/build" element={<BuildPage />} />
