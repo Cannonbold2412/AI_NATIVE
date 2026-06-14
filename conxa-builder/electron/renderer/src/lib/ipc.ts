@@ -19,6 +19,17 @@ export interface BackendEvent {
   [k: string]: unknown;
 }
 
+export type UpdateStatusEvent =
+  | { phase: 'download-progress'; percent: number; bytesPerSecond: number; transferred: number; total: number }
+  | { phase: 'downloaded' }
+  | { phase: 'error'; message: string }
+
+export interface UpdateCheckResult {
+  available: boolean;
+  currentVersion: string;
+  latestVersion?: string;
+}
+
 declare global {
   interface Window {
     conxa: {
@@ -35,6 +46,13 @@ declare global {
         onMaximizeChange: (handler: (isMaximized: boolean) => void) => () => void;
       };
       onDeepLink: (handler: (url: string) => void) => () => void;
+      update: {
+        check: () => Promise<UpdateCheckResult>;
+        start: () => Promise<void>;
+        install: () => Promise<void>;
+        getVersion: () => Promise<string>;
+        onStatus: (handler: (event: UpdateStatusEvent) => void) => () => void;
+      };
     };
   }
 }

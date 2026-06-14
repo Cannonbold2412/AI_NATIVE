@@ -19,6 +19,8 @@ import {
   postReorder,
   postSignOff,
   postValidate,
+  redoWorkflow,
+  undoWorkflow,
 } from '@/api/workflowApi'
 import { RecordingScreenshotsPanel } from '@/components/RecordingScreenshotsPanel'
 import { WorkflowViewer } from '@/components/WorkflowViewer'
@@ -45,9 +47,11 @@ import {
   Image as ImageIcon,
   Info,
   Lightbulb,
+  Redo2,
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
+  Undo2,
   Zap,
 } from 'lucide-react'
 
@@ -82,6 +86,10 @@ export function HumanEditPage() {
   const setValidationReport = useEditorStore((s) => s.setValidationReport)
   const validationReport = useEditorStore((s) => s.validationReport)
   const setSelectedStepIndex = useEditorStore((s) => s.setSelectedStepIndex)
+  const canUndo = useEditorStore((s) => s.canUndo)
+  const canRedo = useEditorStore((s) => s.canRedo)
+  const setHistoryState = useEditorStore((s) => s.setHistoryState)
+  const resetHistory = useEditorStore((s) => s.resetHistory)
 
   const skillsListQ = useQuery({
     queryKey: ['skillList'],
@@ -121,8 +129,14 @@ export function HumanEditPage() {
   useEffect(() => {
     if (skillId) {
       setFlowStatus('Editing workflow.')
+      resetHistory()
     }
-  }, [skillId])
+  }, [skillId, resetHistory])
+
+  const onHistoryUpdate = useCallback(
+    (canUndo: boolean, canRedo: boolean) => setHistoryState(canUndo, canRedo),
+    [setHistoryState],
+  )
 
   useEffect(() => {
     if (!q.data) return
@@ -224,12 +238,60 @@ export function HumanEditPage() {
       })
   }
 
+  const handleUndo = useCallback(async () => {
+    if (!skillId || !canUndo) return
+    try {
+      const r = await undoWorkflow(skillId)
+      onWorkflowUpdated(r.workflow)
+      setHistoryState(r.can_undo, r.can_redo)
+      toast.success('Undone')
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not undo'))
+    }
+  }, [skillId, canUndo, onWorkflowUpdated, setHistoryState])
+
+  const handleRedo = useCallback(async () => {
+    if (!skillId || !canRedo) return
+    try {
+      const r = await redoWorkflow(skillId)
+      onWorkflowUpdated(r.workflow)
+      setHistoryState(r.can_undo, r.can_redo)
+      toast.success('Redone')
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not redo'))
+    }
+  }, [skillId, canRedo, onWorkflowUpdated, setHistoryState])
+
+  useEffect(() => {
+    if (!skillId) return
+    const onKey = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey
+      if (!ctrl) return
+      const tag = (document.activeElement as HTMLElement | null)?.tagName?.toLowerCase()
+      const isEditable =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        (document.activeElement as HTMLElement | null)?.isContentEditable
+      if (isEditable) return
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        void handleUndo()
+      } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+        e.preventDefault()
+        void handleRedo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [skillId, handleUndo, handleRedo])
+
   const onReorder = (newOrder: number[]) => {
     if (!skillId) return
     const prevSelected = useEditorStore.getState().selectedStepIndex
     postReorder(skillId, newOrder)
       .then((r) => {
         onWorkflowUpdated(r.workflow)
+        if (r.can_undo !== undefined) setHistoryState(r.can_undo, r.can_redo ?? false)
         if (prevSelected !== null) {
           const newPos = newOrder.findIndex((origIdx) => origIdx === prevSelected)
           if (newPos !== -1) useEditorStore.getState().setSelectedStepIndex(newPos)
@@ -253,6 +315,7 @@ export function HumanEditPage() {
     deleteStep(skillId, index)
       .then((r) => {
         onWorkflowUpdated(r.workflow)
+        if (r.can_undo !== undefined) setHistoryState(r.can_undo, r.can_redo ?? false)
         useEditorStore.getState().reindexDirtyAfterDelete(index)
         const n = r.workflow.steps.length
         const sel = useEditorStore.getState().selectedStepIndex
@@ -288,6 +351,7 @@ export function HumanEditPage() {
         insert_after: insertAfter,
       })
       onWorkflowUpdated(res.workflow)
+      if (res.can_undo !== undefined) setHistoryState(res.can_undo, res.can_redo ?? false)
       const nextIndex = insertAfter === null ? res.workflow.steps.length - 1 : insertAfter + 1
       useEditorStore.getState().setSelectedStepIndex(nextIndex)
       toast.success('Action added')
@@ -349,6 +413,7 @@ export function HumanEditPage() {
       try {
         const res = await postApplyRecordingVisual(skillId, stepIndex, { event_index: eventIndex })
         onWorkflowUpdated(res.workflow)
+        if (res.can_undo !== undefined) setHistoryState(res.can_undo, res.can_redo ?? false)
         useEditorStore.getState().clearStepDirty(stepIndex)
         void qc.invalidateQueries({ queryKey: ['recordingScreenshots', skillId] })
         toast.success('Screenshot attached — anchors recomputed')
@@ -356,7 +421,7 @@ export function HumanEditPage() {
         toast.error(errorMessage(err, 'Could not apply recording screenshot'))
       }
     },
-    [onWorkflowUpdated, qc, skillId],
+    [onWorkflowUpdated, qc, setHistoryState, skillId],
   )
 
   const onClearStepVisual = useCallback(
@@ -365,13 +430,14 @@ export function HumanEditPage() {
       try {
         const res = await postClearStepVisual(skillId, stepIndex)
         onWorkflowUpdated(res.workflow)
+        if (res.can_undo !== undefined) setHistoryState(res.can_undo, res.can_redo ?? false)
         useEditorStore.getState().clearStepDirty(stepIndex)
         toast.success('Screenshot removed — anchors cleared')
       } catch (err) {
         toast.error(errorMessage(err, 'Could not remove screenshot'))
       }
     },
-    [onWorkflowUpdated, skillId],
+    [onWorkflowUpdated, setHistoryState, skillId],
   )
 
   const openSkillForEdit = useCallback(
@@ -691,6 +757,30 @@ export function HumanEditPage() {
       }
       actions={
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] disabled:opacity-40"
+            onClick={() => void handleUndo()}
+            disabled={!canUndo}
+            title="Undo last edit (Ctrl+Z)"
+          >
+            <Undo2 className="size-3.5" />
+            <span className="hidden sm:inline">Undo</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] disabled:opacity-40"
+            onClick={() => void handleRedo()}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 className="size-3.5" />
+            <span className="hidden sm:inline">Redo</span>
+          </Button>
           {fromPath && (
             <Button
               variant="outline"
@@ -792,6 +882,7 @@ export function HumanEditPage() {
           step={currentStep}
           skillId={skillId}
           onWorkflowUpdated={onWorkflowUpdated}
+          onHistoryUpdate={onHistoryUpdate}
           recordingShotDragActive={recordingShotDragActive}
           onDroppedRecordingScreenshot={onDroppedRecordingScreenshot}
           onClearStepVisual={onClearStepVisual}

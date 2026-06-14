@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
-import { cmd } from '@/lib/ipc'
+import { cmd, type UpdateCheckResult } from '@/lib/ipc'
 import { AuthContext, performLogout, type Identity } from '@/contexts/AuthContext'
 import { AppChrome } from '@/components/layout/AppChrome'
 import { LoginOverlay } from '@/components/LoginOverlay'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { BootstrapScreen } from '@/pages/BootstrapScreen'
+import { UpdateRequiredScreen } from '@/pages/UpdateRequiredScreen'
 
 // Pages
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -46,6 +47,9 @@ function DeepLinkHandler() {
 export function App() {
   // 'checking' = deps status not yet known, 'needed' = bootstrap required, 'ready' = deps ok
   const [depsState, setDepsState] = useState<'checking' | 'needed' | 'ready'>('checking')
+  // 'checking' = update check in-flight, 'required' = newer version exists, 'ok' = proceed
+  const [updateState, setUpdateState] = useState<'checking' | 'required' | 'ok'>('checking')
+  const [updateCheckResult, setUpdateCheckResult] = useState<UpdateCheckResult | null>(null)
   const [identity, setIdentity] = useState<Identity | null | 'checking'>('checking')
 
   useEffect(() => {
@@ -59,17 +63,40 @@ export function App() {
       .catch(() => setDepsState('needed'))
   }, [])
 
+  // Check for updates after deps are ready. Fail-open: any error lets the user through.
   useEffect(() => {
     if (depsState !== 'ready') return
+    window.conxa.update.check()
+      .then((result) => {
+        if (result.available) {
+          setUpdateCheckResult(result)
+          setUpdateState('required')
+        } else {
+          setUpdateState('ok')
+        }
+      })
+      .catch(() => setUpdateState('ok'))
+  }, [depsState])
+
+  // Identity check runs only after update check passes.
+  useEffect(() => {
+    if (updateState !== 'ok') return
     cmd<{ identity: Identity | null }>('whoami')
       .then((r) => setIdentity(r?.identity ?? null))
       .catch(() => setIdentity(null))
-  }, [depsState])
+  }, [updateState])
 
   const handleBootstrapComplete = useCallback(() => setDepsState('ready'), [])
 
   if (depsState === 'checking') return <SplashScreen />
   if (depsState === 'needed') return <BootstrapScreen onComplete={handleBootstrapComplete} />
+  if (updateState === 'checking') return <SplashScreen />
+  if (updateState === 'required') return (
+    <UpdateRequiredScreen
+      currentVersion={updateCheckResult?.currentVersion ?? ''}
+      latestVersion={updateCheckResult?.latestVersion ?? ''}
+    />
+  )
   if (identity === 'checking') return <SplashScreen />
 
   const resolvedIdentity = identity as Identity | null
