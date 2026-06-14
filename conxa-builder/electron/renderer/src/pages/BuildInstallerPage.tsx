@@ -8,8 +8,8 @@ import {
   type InstallerBuildResult,
   type Plugin,
 } from '@/api/pluginApi'
+import { fetchEntitlements } from '@/api/usageApi'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { EntitlementMeters } from '@/components/EntitlementMeters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -160,6 +160,15 @@ export function BuildInstallerPage() {
     staleTime: 30_000,
   })
 
+  const entitlementsQ = useQuery({
+    queryKey: ['entitlements'],
+    queryFn: fetchEntitlements,
+    staleTime: 30_000,
+    retry: 1,
+  })
+
+  const slotMeter = entitlementsQ.data?.meters?.installer_slots
+
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [activePluginId, setActivePluginId] = useState<string | null>(null)
   const [logs, setLogs] = useState<string[]>([])
@@ -278,10 +287,19 @@ export function BuildInstallerPage() {
     void window.conxa.openExternal(`file://${installerOutputPath}`)
   }
 
+  const slotPill = slotMeter ? (
+    <div className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px]">
+      <span className="font-semibold text-zinc-200">
+        {slotMeter.unlimited ? slotMeter.used : `${slotMeter.used} / ${slotMeter.limit}`}
+      </span>
+      <span className="text-zinc-500">installer slot{(!slotMeter.unlimited && slotMeter.limit === 1) ? '' : 's'} used</span>
+    </div>
+  ) : null
+
   if (pluginsQ.isLoading) {
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <PageHeader title="Build Installer" />
+        <PageHeader title="Build Installer" actions={slotPill} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex items-center gap-2 text-zinc-500">
             <Loader2 className="size-4 animate-spin" />
@@ -295,7 +313,7 @@ export function BuildInstallerPage() {
   if (pluginsQ.isError || !pluginsQ.data) {
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <PageHeader title="Build Installer" />
+        <PageHeader title="Build Installer" actions={slotPill} />
         <div className="mx-6 mt-6 flex items-start gap-2.5 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-3">
           <XCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
           <p className="text-sm text-red-300">
@@ -311,12 +329,8 @@ export function BuildInstallerPage() {
       <PageHeader
         title="Build Installer"
         description="Package a built plugin into a distributable Windows .exe installer."
+        actions={slotPill}
       />
-
-      {/* Entitlement meters strip */}
-      <div className="border-b border-white/8 px-6 py-3">
-        <EntitlementMeters meters={['installer_slots']} compact />
-      </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left sidebar — package list */}
