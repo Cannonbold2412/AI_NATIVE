@@ -7,7 +7,6 @@ import {
   type TrackingDashboardRange,
   type TrackingDashboardResponse,
 } from '@/api/pluginApi'
-import { BuildStudioWelcomeModal } from '@/components/BuildStudioWelcomeModal'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -586,7 +585,6 @@ export function DashboardPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <BuildStudioWelcomeModal />
       <PageHeader
         title="Dashboard"
         description="Operations overview for installed automations, execution health, and recovery behavior."
