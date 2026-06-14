@@ -271,11 +271,11 @@ ipcMain.handle("update:check", async () => {
     if (!winUrl) {
       return { available: false, currentVersion, error: "Manifest has no win_url" };
     }
-    // Derive the release base directory (strips the filename) so electron-updater can
-    // fetch latest.yml + .blockmap from the same location as the installer.
-    const baseUrl = winUrl.substring(0, winUrl.lastIndexOf("/") + 1);
+    // Point electron-updater at the cloud-served latest.yml so the path: field is
+    // always in sync with CONXA_STUDIO_WIN_URL. The files[].url in that response
+    // is the full GitHub URL, so the actual .exe downloads from GitHub directly.
     ensureUpdateListeners();
-    autoUpdater.setFeedURL({ provider: "generic", url: baseUrl });
+    autoUpdater.setFeedURL({ provider: "generic", url: `${CLOUD_API}/api/v1/updates/studio/` });
     const r = await autoUpdater.checkForUpdates();
     if (r === null) {
       // Not packaged — should not reach here due to IS_DEV guard above; defensive.

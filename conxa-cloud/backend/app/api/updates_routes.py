@@ -11,9 +11,12 @@ on each cold start (cached 24h locally).
 """
 
 import os
+import re
 from datetime import datetime, timezone
+from urllib.parse import unquote
 
 from fastapi import APIRouter
+from fastapi.responses import Response
 
 router = APIRouter(tags=["updates"])
 
@@ -53,6 +56,7 @@ _STUDIO_WIN_URL = os.environ.get(
     f"https://github.com/{_GITHUB_REPO}/releases/download/{_STUDIO_VERSION}/Conxa%20Build%20Studio%20Setup%201.0.0.exe",
 )
 _STUDIO_WIN_SHA256 = os.environ.get("CONXA_STUDIO_WIN_SHA256", "")
+_STUDIO_WIN_SHA512 = os.environ.get("CONXA_STUDIO_WIN_SHA512", "")
 
 
 @router.get("/updates/deps-manifest", include_in_schema=False)
@@ -116,6 +120,29 @@ def deps_manifest() -> dict:
             },
         },
     }
+
+
+@router.get("/updates/studio/latest.yml", include_in_schema=False)
+def studio_latest_yml() -> Response:
+    """
+    Served to electron-updater's generic provider so the path: field is always
+    derived from CONXA_STUDIO_WIN_URL. Using absolute files[].url means the
+    actual .exe downloads directly from GitHub without proxying through the cloud.
+    """
+    bare_version = re.sub(r"^studio-v", "", _STUDIO_VERSION).lstrip("v")
+    filename = unquote(_STUDIO_WIN_URL.split("/")[-1])
+    lines = [
+        f"version: {bare_version}",
+        "files:",
+        f"  - url: {_STUDIO_WIN_URL}",
+    ]
+    if _STUDIO_WIN_SHA512:
+        lines.append(f"    sha512: {_STUDIO_WIN_SHA512}")
+    lines += [
+        f"path: {filename}",
+        f"releaseDate: '{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')}'",
+    ]
+    return Response("\n".join(lines) + "\n", media_type="text/yaml")
 
 
 @router.get("/updates/studio-manifest", include_in_schema=False)
