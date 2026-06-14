@@ -175,48 +175,61 @@ There are two independent auto-update mechanisms: one for **Build Studio** (the 
 
 ---
 
-### 2.1 Build Studio Auto-Updater (Cloud manifest)
+### 2.1 Build Studio Auto-Updater (Cloud manifest + differential download)
 
 The Build Studio uses a **Cloud `studio-manifest`** for app-level updates. Updates are **mandatory and blocking** — the app does not start until the user applies any available update.
 
-**Installer:** per-user NSIS (`oneClick: true`, `perMachine: false`). No wizard, no UAC prompt on update. Installs under `%LOCALAPPDATA%`.
+**Installer:** per-user NSIS (`oneClick: true`, `perMachine: false`). No wizard, no UAC prompt on update. Installs under `%LOCALAPPDATA%`. electron-builder publishes three artifacts per release: the `.exe`, a `.blockmap`, and `latest.yml` — all required for differential downloads.
 
-**Version discovery:** `GET /api/v1/updates/studio-manifest` (public endpoint, no auth). The Render env vars `CONXA_STUDIO_VERSION`, `CONXA_STUDIO_WIN_URL`, and `CONXA_STUDIO_WIN_SHA256` control what version is advertised. The version string may carry a `studio-v` or `v` prefix — this is stripped before semver comparison.
+**Version discovery + download:** `GET /api/v1/updates/studio-manifest` (public endpoint, no auth). The Render env var `CONXA_STUDIO_WIN_URL` controls where the installer lives. `main.js` derives the release directory from that URL (strips the filename), then points **electron-updater's generic provider** at that base URL. electron-updater reads `latest.yml` from the same directory and performs a **differential (blockmap) download** — only blocks that changed from the previously-cached installer are fetched, not the full ~179 MB. Integrity is automatically verified against the `sha512` field in `latest.yml` (stronger than SHA-256; no manual checksum env var needed). `CONXA_STUDIO_VERSION` / `CONXA_STUDIO_WIN_SHA256` are still published in the manifest for other consumers but are no longer used by the Studio updater itself.
 
 ```
-App.tsx (renderer gate)              main.js (IPC)                           Cloud manifest
-───────────────────────              ─────────────                           ──────────────
+App.tsx (renderer gate)              main.js (IPC)                          Cloud + GitHub CDN
+───────────────────────              ─────────────                          ──────────────────
 On cold start (packaged only):
   update:check IPC call
                                        GET /api/v1/updates/studio-manifest
                                        (8 s timeout; fail-open on error)
-                                       stripVersion(manifest.version)
+                                       Derive baseUrl from manifest.win_url
+                                       (strip filename)
+                                       autoUpdater.setFeedURL({
+                                         provider:"generic", url:baseUrl })
+                                       autoUpdater.checkForUpdates()
+                                         → GET baseUrl/latest.yml
+                                       stripVersion(updateInfo.version)
                                        vs. app.getVersion() (semver)
   available=true → block app
   show UpdateRequiredScreen
   user clicks "Update now"
   update:start IPC call
-                                       https.get(manifest.win_url)
-                                       follow redirects (GitHub → CDN 302)
-                                         → "update:status" download-progress events
-  live progress bar in UI              SHA-256 verify (if win_sha256 non-empty)
+                                       autoUpdater.downloadUpdate()
+                                       Differential download via .blockmap:
+                                         fetch only changed blocks from CDN
+                                         (Range requests; CDN honors 206)
+                                         → "update:status" download-progress
+  live progress bar in UI              sha512 auto-verified vs. latest.yml
                                          → "update:status" downloaded
   update:install IPC call
-                                       spawn(installer, ["--updated","/S","--force-run"])
-                                       app.quit()
+                                       autoUpdater.quitAndInstall(
+                                         true /*silent*/, true /*force-run*/)
+                                       (NsisUpdater builds --updated /S --force-run)
   (app relaunches as new version)
 
   available=false (or check error)
   → proceed to identity check
 ```
 
-**Fail-open:** if the manifest fetch fails (offline, timeout, HTTP error), `update:check` returns `{ available: false, error: <message> }`. The startup gate treats any `error` result the same as "no update" and lets the user through. The Settings "Check for Updates" button surfaces the error message instead of silently reporting "up to date."
+**Fail-open:** if the manifest fetch or `checkForUpdates()` fails (offline, timeout, HTTP error), `update:check` returns `{ available: false, error: <message> }`. The startup gate treats any `error` result the same as "no update" and lets the user through. The Settings "Check for Updates" button surfaces the error message instead of silently reporting "up to date."
 
 **In dev (`IS_DEV = !app.isPackaged`):** `update:check` returns `{ available: false }` immediately — the cloud is not contacted, so dev loops are never blocked. Override with `CONXA_FORCE_UPDATE_SCREEN=1` to preview the mandatory-update UI without a packaged build.
 
-**SHA-256 verification:** if `CONXA_STUDIO_WIN_SHA256` is set on Render, the downloaded installer is SHA-256 checked before `update:install` is allowed. Mismatch deletes the download and emits an error. If the env var is empty, verification is skipped (emit a console warning). **Strongly recommended:** populate `CONXA_STUDIO_WIN_SHA256` for every release.
+**Differential download caveats:**
+- The *first* update from a machine with no electron-updater cache will download the full installer (~179 MB). Incremental savings begin from the second update onward, once a cached baseline exists.
+- Actual savings depend on how many installer blocks are byte-identical between builds. The 179 MB is dominated by the bundled PyInstaller backend. If PyInstaller builds are non-reproducible, savings may be limited. Measure real block reuse on representative build pairs and consider splitting the backend into a separately-versioned dep (like `runtime-win.exe` via `deps-manifest`) if overlap is consistently poor.
 
-**NSIS install args** (match electron-builder's `NsisUpdater.doInstall` exactly):
+**Migration-proof:** `CONXA_STUDIO_WIN_URL` is the single control point. When artifacts move from GitHub Releases to Conxa-hosted storage, updating this env var on Render is the only required change — no code touches a GitHub tag or API.
+
+**NSIS install args** (NsisUpdater.quitAndInstall builds these internally):
 - `--updated` — tells the NSIS script this is an update install
 - `/S` — silent mode (no wizard)
 - `--force-run` — relaunch the app after installation
@@ -224,7 +237,7 @@ On cold start (packaged only):
 **Settings — manual update:** the Settings page includes a "Software Update" card showing the current version and a "Check for Updates" button. On finding a new version it shows "Update now" which drives the same download→install flow. On error it shows the error message.
 
 **Key code locations:**
-- `main.js` — `update:check / update:start / update:install / app:version` IPC handlers; `semverGt()`, `stripVersion()`, `pendingUpdate` module state
+- `main.js` — `update:check / update:start / update:install / app:version` IPC handlers; `semverGt()`, `stripVersion()`, `sendUpdateStatus()`, `ensureUpdateListeners()`
 - `renderer/src/pages/UpdateRequiredScreen.tsx` — mandatory blocking gate (early-return from App)
 - `renderer/src/hooks/useUpdater.ts` — shared download state hook used by both the gate and Settings
 - `renderer/src/App.tsx` — gate ordering: deps → update check → identity

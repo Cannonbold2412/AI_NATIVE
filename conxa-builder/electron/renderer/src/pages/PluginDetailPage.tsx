@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CompiledSkillsTab } from '@/components/CompiledSkillsTab'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { KeyRound, ListChecks, Loader2, MousePointer2, PackageCheck, Play, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
+import { Check, Globe, KeyRound, ListChecks, Loader2, MousePointer2, PackageCheck, Play, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
 
 // ─────────────────────────────────────────────────
 // Auth panel
@@ -85,68 +85,109 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
     }
   }, [isRecording, autoFinalizing, finalizeMut, statusQ.data?.browser_open])
 
+  const RECORD_STEPS = ['Open browser', 'Log in', 'Close to save']
+  const recordStep = autoFinalizing ? 2 : 1
+
   return (
     <section>
+      {/* Section header */}
       <div className="flex items-start justify-between gap-3 border-b border-white/8 px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10">
-            <KeyRound className="size-4 text-amber-300" />
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/[0.08]">
+            <KeyRound className="size-[18px] text-amber-300" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-white">Authentication workflow</h2>
-            <p className="mt-1 text-xs text-zinc-500">Capture the login session before recording workflows.</p>
+            <h2 className="text-sm font-semibold text-white">Login Session</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">Capture authentication before recording workflows.</p>
           </div>
         </div>
         {plugin.auth ? (
-          <Badge variant="outline" className="shrink-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
-            Captured
+          <Badge variant="outline" className="shrink-0 border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300">
+            Active
           </Badge>
         ) : (
-          <Badge variant="outline" className="shrink-0 border-amber-500/30 bg-amber-500/10 text-amber-300">
+          <Badge variant="outline" className="shrink-0 border-amber-500/30 bg-amber-500/[0.08] text-amber-300">
             Required
           </Badge>
         )}
       </div>
-      <div className="max-w-3xl space-y-4 p-5">
+
+      <div className="p-5">
+        {/* ── State: Captured ── */}
         {plugin.auth ? (
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-emerald-200">
-                <ShieldCheck className="size-4" />
-                Session ready
-              </div>
-              <p className="mt-1 text-xs text-emerald-100/70">
+          <div className="flex items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+              <ShieldCheck className="size-5 text-emerald-400" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-emerald-200">Login session active</p>
+              <p className="mt-0.5 truncate text-xs text-emerald-100/50">
                 Captured{' '}
                 {new Date(plugin.auth.captured_at * 1000).toLocaleString([], {
                   month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
                 })}
+                {' · '}
+                {plugin.target_url}
               </p>
             </div>
             <Button
               size="sm"
               variant="outline"
-              className="h-9 border-white/10 bg-white/[0.06] px-3 text-zinc-200 hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-100"
+              className="shrink-0 border-white/10 bg-white/[0.06] text-zinc-300 hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-100"
               onClick={() => reRecordMut.mutate()}
               disabled={reRecordMut.isPending}
             >
               <RefreshCw className="size-3.5" />
-              Re-record Auth
+              Re-record Login
             </Button>
           </div>
+
         ) : isRecording ? (
-          <div className="space-y-3">
-            <div className="flex items-start gap-3 rounded-lg border border-blue-500/20 bg-blue-500/[0.07] px-3 py-3">
-              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-blue-300" />
-              <p className="text-xs leading-5 text-blue-100/80">
-                {autoFinalizing ? 'Chromium closed, saving session…' : 'Browser is open. Log in, navigate to the page where workflows should start, then close Chromium.'}
-              </p>
+          /* ── State: Recording in progress ── */
+          <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-5 space-y-5">
+            {/* Step stepper */}
+            <div className="flex items-center">
+              {RECORD_STEPS.map((step, i) => {
+                const done = i < recordStep
+                const current = i === recordStep
+                return (
+                  <div key={step} className="flex items-center" style={{ flex: i < RECORD_STEPS.length - 1 ? '1' : undefined }}>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className={cn(
+                        'flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all',
+                        done ? 'bg-emerald-500 text-white'
+                          : current ? 'bg-sky-500 text-white ring-2 ring-sky-500/30'
+                          : 'bg-white/8 text-zinc-600',
+                      )}>
+                        {done ? <Check className="size-3" /> : current && !autoFinalizing ? <Loader2 className="size-3 animate-spin" /> : i + 1}
+                      </div>
+                      <span className={cn(
+                        'whitespace-nowrap text-[11px] font-medium',
+                        done ? 'text-emerald-300' : current ? 'text-sky-300' : 'text-zinc-600',
+                      )}>
+                        {step}
+                      </span>
+                    </div>
+                    {i < RECORD_STEPS.length - 1 && (
+                      <div className={cn('mb-4 mx-3 h-px flex-1 transition-colors duration-500', done ? 'bg-emerald-500/40' : 'bg-white/8')} />
+                    )}
+                  </div>
+                )
+              })}
             </div>
+            {/* Status message */}
+            <p className="text-xs leading-5 text-sky-100/70">
+              {autoFinalizing
+                ? 'Browser closed — saving your session…'
+                : 'Browser is open. Log in, navigate to the page where workflows should start, then close the browser.'}
+            </p>
+            {/* Actions */}
             {!autoFinalizing && (
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="flex gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 border-white/10 bg-white/[0.06] text-zinc-300 hover:bg-white/10 hover:text-white"
+                  className="flex-1 border-white/10 bg-white/[0.06] text-zinc-300 hover:bg-white/10 hover:text-white"
                   onClick={() => setActiveSession(null)}
                   disabled={finalizeMut.isPending}
                 >
@@ -154,15 +195,12 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
                 </Button>
                 <Button
                   size="sm"
-                  className="h-9 bg-blue-600 text-white hover:bg-blue-500"
+                  className="flex-1 bg-sky-600 text-white hover:bg-sky-500"
                   onClick={() => finalizeMut.mutate()}
                   disabled={finalizeMut.isPending}
                 >
                   {finalizeMut.isPending ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Saving session…
-                    </>
+                    <><Loader2 className="size-4 animate-spin" />Saving session…</>
                   ) : (
                     'Save Session Now'
                   )}
@@ -170,53 +208,74 @@ function AuthPanel({ plugin, onRefresh }: { plugin: Plugin; onRefresh: () => voi
               </div>
             )}
           </div>
+
         ) : (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-3 space-y-2.5">
-              <p className="text-xs font-semibold text-amber-200">How authentication recording works</p>
-              <ol className="space-y-1 list-decimal list-inside">
-                <li className="text-xs text-amber-100/70 leading-5">Click "Record Auth" — a browser opens at your target URL.</li>
-                <li className="text-xs text-amber-100/70 leading-5">Complete the full login flow, including 2FA or SSO.</li>
-                <li className="text-xs text-amber-100/70 leading-5">Navigate to the page where workflows should begin.</li>
-                <li className="text-xs text-amber-100/70 leading-5">Close the browser to save the session.</li>
-              </ol>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/70 mb-1">Best practices</p>
-                <ul className="space-y-1 list-disc list-inside">
-                  <li className="text-xs text-amber-100/60 leading-5">Complete the full flow before closing — partial sessions won't work.</li>
-                  <li className="text-xs text-amber-100/60 leading-5">Land on your app's actual starting page, not the login page.</li>
-                  <li className="text-xs text-amber-100/60 leading-5">Re-record whenever credentials or cookies change.</li>
-                </ul>
+          /* ── State: Not yet captured ── */
+          <div className="grid grid-cols-2 gap-4">
+            {/* Left: Configuration + CTA */}
+            <div className="flex flex-col gap-4 rounded-xl border border-white/8 bg-white/[0.03] p-5">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Globe className="size-3.5 text-zinc-500" />
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Target URL</p>
+                </div>
+                <p className="truncate font-mono text-sm text-zinc-200">{plugin.target_url}</p>
+              </div>
+              <div className="border-t border-white/8" />
+              <p className="text-xs leading-5 text-zinc-500">
+                Log in, navigate to the page where workflows should start, then close the browser.
+              </p>
+              <Button
+                className="mt-auto h-10 w-full bg-amber-500 font-medium text-zinc-950 hover:bg-amber-400"
+                onClick={() => startMut.mutate()}
+                disabled={startMut.isPending}
+              >
+                {startMut.isPending ? (
+                  <><Loader2 className="size-4 animate-spin" />Launching browser…</>
+                ) : (
+                  <><Play className="size-4" />Record Login</>
+                )}
+              </Button>
+            </div>
+
+            {/* Right: How it works */}
+            <div className="flex flex-col gap-4 rounded-xl border border-white/8 bg-white/[0.03] p-5">
+              <p className="text-xs font-semibold text-zinc-300">How it works</p>
+              <div className="space-y-3">
+                {[
+                  'Click "Record Login" — a browser opens at your target URL.',
+                  'Complete the full login flow, including 2FA or SSO.',
+                  'Navigate to the page where workflows should begin.',
+                  'Close the browser to save the session.',
+                ].map((text, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white/8 text-[11px] font-bold text-zinc-400">
+                      {i + 1}
+                    </span>
+                    <p className="text-xs leading-5 text-zinc-400">{text}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-white/8" />
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Best practices</p>
+                {[
+                  'Complete the full flow before closing — partial sessions won\'t work.',
+                  'Land on your app\'s actual starting page, not the login page.',
+                  'Re-record whenever credentials or cookies change.',
+                ].map((tip) => (
+                  <p key={tip} className="text-xs leading-5 text-zinc-500">
+                    <span className="mr-1.5 text-zinc-600">·</span>{tip}
+                  </p>
+                ))}
               </div>
             </div>
-            <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-3">
-              <p className="text-[11px] font-medium text-zinc-500">Target URL</p>
-              <p className="mt-1 truncate font-mono text-xs text-zinc-300">{plugin.target_url}</p>
-              <p className="mt-2 text-xs leading-5 text-zinc-500">
-                Log in, navigate to the page where workflows should start, then close Chromium.
-              </p>
-            </div>
-            <Button
-              size="sm"
-              className="h-9 w-full bg-amber-500 text-zinc-950 hover:bg-amber-400"
-              onClick={() => startMut.mutate()}
-              disabled={startMut.isPending}
-            >
-              {startMut.isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Launching browser…
-                </>
-              ) : (
-                <>
-                  <Play className="size-4" />
-                  Record Auth
-                </>
-              )}
-            </Button>
           </div>
         )}
-        {error ? <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p> : null}
+
+        {error ? (
+          <p className="mt-4 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-300">{error}</p>
+        ) : null}
       </div>
     </section>
   )

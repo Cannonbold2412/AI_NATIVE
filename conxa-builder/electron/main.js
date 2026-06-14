@@ -9,10 +9,16 @@
  */
 
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const { spawn } = require("child_process");
 const path = require("path");
 const readline = require("readline");
 const { Bridge } = require("./bridge");
+
+// electron-updater config — manual-only, no auto-download or auto-install.
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.logger = null; // silence default console noise in production
 
 const IS_DEV = !app.isPackaged;
 const MAX_BACKEND_RESTARTS = 3;
@@ -51,6 +57,30 @@ let mainWindow = null;
 let backend = null;
 let backendRestarts = 0;
 let bridge = null;
+
+// Forward electron-updater events to the renderer's update:status channel.
+// Registered once on first update:check so mainWindow is guaranteed to exist.
+let updateListenersRegistered = false;
+function sendUpdateStatus(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("update:status", payload);
+  }
+}
+function ensureUpdateListeners() {
+  if (updateListenersRegistered) return;
+  updateListenersRegistered = true;
+  autoUpdater.on("download-progress", (info) => {
+    sendUpdateStatus({
+      phase: "download-progress",
+      percent: info.percent,
+      bytesPerSecond: info.bytesPerSecond,
+      transferred: info.transferred,
+      total: info.total,
+    });
+  });
+  autoUpdater.on("update-downloaded", () => sendUpdateStatus({ phase: "downloaded" }));
+  autoUpdater.on("error", (err) => sendUpdateStatus({ phase: "error", message: err.message }));
+}
 // Minimal semver greater-than without an extra dependency.
 function semverGt(a, b) {
   const pa = a.replace(/^v/, "").split(".").map(Number);
@@ -66,10 +96,6 @@ function semverGt(a, b) {
 function stripVersion(v) {
   return v.replace(/^studio-v/i, "").replace(/^v/, "");
 }
-
-// Stashed between update:check and update:start.
-let pendingUpdate = null; // { winUrl, win256 }
-let downloadedInstallerPath = null;
 
 // ─── Backend lifecycle ────────────────────────────────────────────────────────
 
@@ -209,9 +235,10 @@ ipcMain.handle("window:is-maximized", (event) => Boolean(windowFromEvent(event)?
 
 ipcMain.handle("app:version", () => app.getVersion());
 
-// Checks for a newer version by fetching the Cloud studio-manifest.
+// Checks for a newer version by fetching the Cloud studio-manifest, then using
+// electron-updater's generic provider to read latest.yml from the same release directory.
 // Fail-open: any error returns { available: false, error } so startup is never bricked.
-// In dev, skip entirely unless CONXA_FORCE_UPDATE_SCREEN=1 (avoids blocking the dev loop).
+// In dev, checkForUpdates() returns null (not packaged) — short-circuit early to be explicit.
 ipcMain.handle("update:check", async () => {
   const currentVersion = app.getVersion();
   if (process.env.CONXA_FORCE_UPDATE_SCREEN === "1") {
@@ -226,120 +253,47 @@ ipcMain.handle("update:check", async () => {
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
-      const error = `Manifest fetch failed: HTTP ${res.status}`;
-      return { available: false, currentVersion, error };
+      return { available: false, currentVersion, error: `Manifest fetch failed: HTTP ${res.status}` };
     }
     const manifest = await res.json();
-    const latestVersion = stripVersion(manifest.version || "");
-    if (!latestVersion) {
-      return { available: false, currentVersion, error: "Manifest returned no version" };
+    const winUrl = manifest.win_url || "";
+    if (!winUrl) {
+      return { available: false, currentVersion, error: "Manifest has no win_url" };
     }
+    // Derive the release base directory (strips the filename) so electron-updater can
+    // fetch latest.yml + .blockmap from the same location as the installer.
+    const baseUrl = winUrl.substring(0, winUrl.lastIndexOf("/") + 1);
+    ensureUpdateListeners();
+    autoUpdater.setFeedURL({ provider: "generic", url: baseUrl });
+    const r = await autoUpdater.checkForUpdates();
+    if (r === null) {
+      // Not packaged — should not reach here due to IS_DEV guard above; defensive.
+      return { available: false, currentVersion };
+    }
+    const latestVersion = stripVersion(r.updateInfo.version || "");
     const available = semverGt(latestVersion, currentVersion);
-    if (available) {
-      pendingUpdate = { winUrl: manifest.win_url || "", winSha256: manifest.win_sha256 || "" };
-    }
     return { available, currentVersion, latestVersion };
   } catch (err) {
     return { available: false, currentVersion, error: err.message };
   }
 });
 
-// Downloads the installer from pendingUpdate.winUrl with live progress events,
-// then stores the path for update:install.
+// Triggers the differential (blockmap) download via electron-updater. Progress and
+// completion events flow through the listeners registered in ensureUpdateListeners().
+// electron-updater verifies integrity automatically against the sha512 in latest.yml.
 ipcMain.handle("update:start", async () => {
-  if (!pendingUpdate?.winUrl) {
-    sendUpdateStatus({ phase: "error", message: "No update URL available — run check first" });
-    return;
-  }
-  const https = require("https");
-  const fss = require("fs");
-  const crypto = require("crypto");
-  const destPath = path.join(app.getPath("temp"), "conxa-studio-update.exe");
-
-  function sendUpdateStatus(payload) {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("update:status", payload);
-    }
-  }
-
-  // Follow redirects (GitHub release asset URLs 302 → signed CDN URL).
-  function download(url, dest, resolve, reject, hops = 0) {
-    if (hops > 5) { reject(new Error("Too many redirects")); return; }
-    https.get(url, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
-        const location = response.headers.location;
-        response.resume();
-        if (!location) { reject(new Error("Redirect with no Location header")); return; }
-        download(location, dest, resolve, reject, hops + 1);
-        return;
-      }
-      if (response.statusCode !== 200) {
-        reject(new Error(`Download failed: HTTP ${response.statusCode}`));
-        return;
-      }
-      const total = parseInt(response.headers["content-length"] || "0", 10);
-      let transferred = 0;
-      let lastEmit = 0;
-      const hash = crypto.createHash("sha256");
-      const file = fss.createWriteStream(dest);
-
-      response.on("data", (chunk) => {
-        transferred += chunk.length;
-        hash.update(chunk);
-        const now = Date.now();
-        if (now - lastEmit > 250) {
-          lastEmit = now;
-          const elapsed = (now - startTime) / 1000 || 1;
-          sendUpdateStatus({
-            phase: "download-progress",
-            percent: total ? (transferred / total) * 100 : 0,
-            bytesPerSecond: Math.round(transferred / elapsed),
-            transferred,
-            total,
-          });
-        }
-      });
-      response.pipe(file);
-      const startTime = Date.now();
-      file.on("finish", () => resolve({ digest: hash.digest("hex") }));
-      file.on("error", reject);
-      response.on("error", reject);
-    }).on("error", reject);
-  }
-
   try {
-    const { digest } = await new Promise((resolve, reject) =>
-      download(pendingUpdate.winUrl, destPath, resolve, reject)
-    );
-
-    if (pendingUpdate.winSha256) {
-      if (digest.toLowerCase() !== pendingUpdate.winSha256.toLowerCase()) {
-        fss.unlink(destPath, () => {});
-        sendUpdateStatus({ phase: "error", message: "Checksum mismatch — download may be corrupt" });
-        return;
-      }
-    }
-
-    downloadedInstallerPath = destPath;
-    sendUpdateStatus({ phase: "downloaded" });
+    await autoUpdater.downloadUpdate();
   } catch (err) {
     sendUpdateStatus({ phase: "error", message: err.message });
   }
 });
 
-// Launches the downloaded NSIS installer silently then quits.
-// Args match electron-updater's NsisUpdater.doInstall exactly:
-//   --updated  → tells NSIS script this is an update (not a fresh install)
-//   /S         → silent mode (no wizard UI)
-//   --force-run → relaunch the app after installation
+// Launches the downloaded installer silently then relaunches the app.
+// NsisUpdater.quitAndInstall(isSilent=true, isForceRunAfter=true) builds the proven
+// --updated /S --force-run NSIS args, equivalent to what was hand-coded before.
 ipcMain.handle("update:install", () => {
-  if (!downloadedInstallerPath) return;
-  const { spawn: nodeSpawn } = require("child_process");
-  nodeSpawn(downloadedInstallerPath, ["--updated", "/S", "--force-run"], {
-    detached: true,
-    stdio: "ignore",
-  }).unref();
-  app.quit();
+  autoUpdater.quitAndInstall(true /* isSilent */, true /* isForceRunAfter */);
 });
 
 // ─── Window ─────────────────────────────────────────────────────────────────
