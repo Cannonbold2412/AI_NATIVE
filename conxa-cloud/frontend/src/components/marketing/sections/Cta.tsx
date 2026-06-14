@@ -42,7 +42,7 @@ export function Cta() {
         <Reveal delay={0.14}>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <GlowButton href="/sign-up">Get started free</GlowButton>
-            <GlowButton href="mailto:founders@conxa.in" variant="ghost">Talk to founders</GlowButton>
+            <GlowButton href="mailto:noreplay@email.com" variant="ghost">Talk to founders</GlowButton>
           </div>
         </Reveal>
       </div>

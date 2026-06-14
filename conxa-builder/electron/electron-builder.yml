@@ -46,6 +46,7 @@ win:
 
 nsis:
   # Per-user install: no UAC prompt, no wizard, silent update via quitAndInstall().
+  artifactName: "${productName}-Setup-${version}.${ext}"
   perMachine: false
   oneClick: true
   shortcutName: Conxa Build Studio
