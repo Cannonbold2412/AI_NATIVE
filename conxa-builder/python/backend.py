@@ -38,8 +38,8 @@ if _PY_DIR not in sys.path:
 from services import bootstrap as _bootstrap_pkg  # noqa: E402
 
 # Point Playwright at the managed Chromium build before the recorder is imported
-# or used. In frozen builds the browser lives in ~/.conxa/deps/chromium; without
-# this, launches on a non-bootstrap startup fail with "Executable doesn't exist".
+# or used. In frozen builds the browser lives in ~/.conxa-build-studio/deps/chromium;
+# without this, launches on a non-bootstrap startup fail with "Executable doesn't exist".
 _bootstrap_pkg.configure_playwright_browsers_path()
 
 # Pre-import the recorder and plugin store at startup (main thread, before serve()
@@ -1069,7 +1069,7 @@ class Backend:
 
             # Frozen builds run the packed runtime exe, which has no node_modules
             # for an npx-based Playwright install. Point it at the Studio-managed
-            # Chromium (~/.conxa/deps/chromium) — its revision matches the packed
+            # Chromium (~/.conxa-build-studio/deps/chromium) — its revision matches the packed
             # runtime's bundled Playwright, so it launches directly. Dev keeps the
             # per-runtime chromium dir and the npx install path.
             if getattr(sys, "frozen", False):

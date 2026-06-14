@@ -226,7 +226,7 @@ def rollback_dep(dep_name: str) -> bool:
 
 
 def chromium_dir() -> Path:
-    """Managed Playwright browsers directory for frozen builds (~/.conxa/deps/chromium)."""
+    """Managed Playwright browsers directory for frozen builds (~/.conxa-build-studio/deps/chromium)."""
     return _deps_dir() / "chromium"
 
 

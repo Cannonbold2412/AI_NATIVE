@@ -14,12 +14,12 @@ def state_base_dir() -> Path:
 
     Frozen builds are installed under a read-only location (e.g. ``Program Files``
     on Windows), so state cannot live next to the bundled package. Redirect it to
-    the user profile (``~/.conxa``), consistent with the deps/runtime convention.
-    Development keeps the in-repo source default so ``pip install -e`` and
-    ``python backend.py`` workflows are unchanged.
+    ``~/.conxa-build-studio``, keeping all Build Studio state under one root alongside
+    the deps cache. Development keeps the in-repo source default so ``pip install -e``
+    and ``python backend.py`` workflows are unchanged.
     """
     if getattr(sys, "frozen", False):
-        return Path(os.path.expanduser("~/.conxa"))
+        return Path(os.path.expanduser("~/.conxa-build-studio"))
     return Path(__file__).resolve().parent.parent
 
 
