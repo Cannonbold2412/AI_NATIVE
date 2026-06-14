@@ -43,7 +43,12 @@ flowchart TD
     I --> K[Download runtime-win.exe]
     I --> L[Install Playwright Chromium]
     J & K & L --> M[Bootstrap complete]
-    M --> N[Build Studio login prompt]
+    M --> U{Update available?}
+    U -->|Yes| V[Update Required screen blocks app]
+    V --> W[User clicks Update now]
+    W --> X[electron-updater downloads update]
+    X --> Y[quitAndInstall — silent restart]
+    U -->|No or check error| N[Build Studio login prompt]
     N --> O[User clicks Sign In]
     O --> P[Browser opens to Clerk]
     P --> Q[User authenticates]
@@ -55,6 +60,8 @@ flowchart TD
 - Bootstrap (`services/bootstrap.py`) is idempotent. Re-running skips already-present dependencies.
 - All downloads are SHA-256 verified against values from the cloud manifest.
 - If on a corporate network, the bootstrap surfaces the exact URLs for IT whitelisting.
+- The update check (step U) is fail-open: if GitHub Releases is unreachable, the app proceeds normally. Updates are mandatory — the app cannot advance past the Update Required screen without installing.
+- On subsequent (non-first-time) launches the same gate applies: deps check is skipped (already installed), update check runs, then login or dashboard.
 
 ---
 

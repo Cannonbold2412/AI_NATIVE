@@ -177,28 +177,46 @@ There are two independent auto-update mechanisms: one for **Build Studio** (the 
 
 ### 2.1 Build Studio Auto-Updater (electron-updater)
 
-The Build Studio uses `electron-updater` for app-level updates.
+The Build Studio uses `electron-updater` for app-level updates. Updates are **mandatory and blocking** — the app does not start until the user applies any available update.
+
+**Installer:** per-user NSIS (`oneClick: true`, `perMachine: false`). No wizard, no UAC prompt on update. Installs under `%LOCALAPPDATA%`.
 
 ```
-Build Studio (main.js)                  Conxa Cloud / GitHub Releases
-──────────────────────                  ─────────────────────────────
+App.tsx (renderer gate)              main.js (IPC + electron-updater)        GitHub Releases
+───────────────────────              ────────────────────────────────        ──────────────
 On cold start (packaged only):
-  autoUpdater.channel = process.env.CONXA_UPDATE_CHANNEL || "stable"
-  autoUpdater.checkForUpdatesAndNotify()
+  update:check IPC call
+                                       autoUpdater.checkForUpdates()
+                                                                              fetches latest.yml
+                                       result.updateInfo.version
+                                       vs. app.getVersion() (semver)
+  available=true → block app
+  show UpdateRequiredScreen
+  user clicks "Update now"
+  update:start IPC call
+                                       autoUpdater.downloadUpdate()
+                                         → "update:status" download-progress events
+  live progress bar in UI
+                                         → "update:status" downloaded
+  auto-installs + relaunches
+                                       autoUpdater.quitAndInstall()
 
-  Every 4 hours:
-  autoUpdater.checkForUpdatesAndNotify()
-                                          electron-updater fetches latest.yml
-                                          Compares version to running version
-                                          If newer: downloads in background
-
-  When download complete:
-  Dialog: "A new version is ready. Restart to apply?"
-    → "Restart now" → autoUpdater.quitAndInstall()
-    → "Later"       → dismissed; re-prompted on next cold start
+  available=false (or check error)
+  → proceed to identity check
 ```
 
-**In dev (`IS_DEV = !app.isPackaged`):** `initAutoUpdate()` returns immediately. No update checks in dev.
+**Fail-open:** if `checkForUpdates()` throws (offline, GitHub unreachable, timeout), the gate resolves to `available=false` and the user proceeds into the app.
+
+**In dev (`IS_DEV = !app.isPackaged`):** `initAutoUpdate()` returns immediately and `autoUpdater` stays `null`. `update:check` returns `{ available: false }` unless `CONXA_FORCE_UPDATE_SCREEN=1` (dev UI preview).
+
+**Settings — manual update:** the Settings page includes a "Software Update" card showing the current version and a "Check for Updates" button. On finding a new version, it shows "Update now" that drives the same download→install flow.
+
+**Key code locations:**
+- `main.js` — `initAutoUpdate()` (event wiring), `update:check / update:start / update:install / app:version` IPC handlers
+- `renderer/src/pages/UpdateRequiredScreen.tsx` — mandatory blocking gate (early-return from App)
+- `renderer/src/hooks/useUpdater.ts` — shared download state hook used by both the gate and Settings
+- `renderer/src/App.tsx` — gate ordering: deps → update check → identity
+- `renderer/src/pages/SettingsPage.tsx` — `SoftwareUpdateCard` component
 
 ---
 
