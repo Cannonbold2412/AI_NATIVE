@@ -146,6 +146,8 @@ export function postApplyRecordingVisual(
   meta: Record<string, unknown>
   revalidation: Record<string, unknown>
   workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
 }> {
   return cmd('apply_recording_visual', { skill_id: skillId, step_index: stepIndex, ...body })
 }
@@ -158,6 +160,8 @@ export function postClearStepVisual(
   meta: Record<string, unknown>
   revalidation: Record<string, unknown>
   workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
 }> {
   return cmd('clear_step_visual', { skill_id: skillId, step_index: stepIndex })
 }
@@ -171,6 +175,8 @@ export function postUpdateVisualBbox(
   meta: Record<string, unknown>
   revalidation: Record<string, unknown>
   workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
 }> {
   return cmd('update_visual_bbox', { skill_id: skillId, step_index: stepIndex, ...body })
 }
@@ -185,6 +191,8 @@ export function patchStep(
   meta: Record<string, unknown>
   revalidation: Record<string, unknown>
   workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
 }> {
   return cmd('patch_step', { skill_id: skillId, step_index: stepIndex, patch, assist_llm: assistLlm })
 }
@@ -219,6 +227,8 @@ export function postReorder(skillId: string, newOrder: number[]): Promise<{
   skill_id: string
   meta: Record<string, unknown>
   workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
 }> {
   return cmd('reorder_steps', { skill_id: skillId, new_order: newOrder })
 }
@@ -230,6 +240,8 @@ export function postInsertStep(
   skill_id: string
   meta: Record<string, unknown>
   workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
 }> {
   return cmd('insert_step', { skill_id: skillId, ...body })
 }
@@ -238,8 +250,32 @@ export function deleteStep(skillId: string, stepIndex: number): Promise<{
   skill_id: string
   meta: Record<string, unknown>
   workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
 }> {
   return cmd('delete_step', { skill_id: skillId, step_index: stepIndex })
+}
+
+export function undoWorkflow(skillId: string): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  revalidation: Record<string, unknown>
+  workflow: WorkflowResponse
+  can_undo: boolean
+  can_redo: boolean
+}> {
+  return cmd('undo_workflow', { skill_id: skillId })
+}
+
+export function redoWorkflow(skillId: string): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  revalidation: Record<string, unknown>
+  workflow: WorkflowResponse
+  can_undo: boolean
+  can_redo: boolean
+}> {
+  return cmd('redo_workflow', { skill_id: skillId })
 }
 
 export function postCompileUpdated(

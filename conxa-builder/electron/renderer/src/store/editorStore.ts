@@ -4,18 +4,24 @@ type EditorState = {
   selectedStepIndex: number | null
   dirtySteps: Set<number>
   validationReport: Record<string, unknown> | null
+  canUndo: boolean
+  canRedo: boolean
   setSelectedStepIndex: (i: number | null) => void
   markStepDirty: (i: number) => void
   clearStepDirty: (i: number) => void
   clearAllDirty: () => void
   reindexDirtyAfterDelete: (deletedIndex: number) => void
   setValidationReport: (r: Record<string, unknown> | null) => void
+  setHistoryState: (canUndo: boolean, canRedo: boolean) => void
+  resetHistory: () => void
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
   selectedStepIndex: 0,
   dirtySteps: new Set(),
   validationReport: null,
+  canUndo: false,
+  canRedo: false,
   setSelectedStepIndex: (i) => set({ selectedStepIndex: i }),
   markStepDirty: (i) =>
     set((s) => {
@@ -40,4 +46,6 @@ export const useEditorStore = create<EditorState>((set) => ({
       return { dirtySteps: n }
     }),
   setValidationReport: (r) => set({ validationReport: r }),
+  setHistoryState: (canUndo, canRedo) => set({ canUndo, canRedo }),
+  resetHistory: () => set({ canUndo: false, canRedo: false }),
 }))

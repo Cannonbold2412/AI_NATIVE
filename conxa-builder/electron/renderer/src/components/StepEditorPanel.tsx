@@ -139,6 +139,7 @@ type Props = {
   step: StepEditorDTO | null
   skillId: string
   onWorkflowUpdated: (wf: WorkflowResponse) => void
+  onHistoryUpdate?: (canUndo: boolean, canRedo: boolean) => void
   recordingShotDragActive?: boolean
   onDroppedRecordingScreenshot?: (stepIndex: number, eventIndex: number) => void | Promise<void>
   onClearStepVisual?: (stepIndex: number) => void | Promise<void>
@@ -223,6 +224,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
       step,
       skillId,
       onWorkflowUpdated,
+      onHistoryUpdate,
       recordingShotDragActive,
       onDroppedRecordingScreenshot,
       onClearStepVisual,
@@ -247,6 +249,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
           { x: b.x, y: b.y, w: b.w, h: b.h },
         )
         onWorkflowUpdated(res.workflow)
+        if (res.can_undo !== undefined) onHistoryUpdate?.(res.can_undo, res.can_redo ?? false)
         const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
         if (next) methods.reset(defaultsFromStep(next))
         toast.success('Visual bbox saved; anchors recomputed')
@@ -256,7 +259,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         throw e
       }
     },
-    [methods, onWorkflowUpdated, skillId, step],
+    [methods, onHistoryUpdate, onWorkflowUpdated, skillId, step],
   )
 
   const persistStepValues = useCallback(
@@ -293,6 +296,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
+          if (res.can_undo !== undefined) onHistoryUpdate?.(res.can_undo, res.can_redo ?? false)
           const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
           if (next) methods.reset(defaultsFromStep(next))
           if (!silent) toast.success('Step saved')
@@ -325,6 +329,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
+          if (res.can_undo !== undefined) onHistoryUpdate?.(res.can_undo, res.can_redo ?? false)
           const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
           if (next) methods.reset(defaultsFromStep(next))
           if (!silent) toast.success('Step saved')
@@ -346,6 +351,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
+          if (res.can_undo !== undefined) onHistoryUpdate?.(res.can_undo, res.can_redo ?? false)
           const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
           if (next) methods.reset(defaultsFromStep(next))
           if (!silent) toast.success('Step saved')
@@ -376,6 +382,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
+          if (res.can_undo !== undefined) onHistoryUpdate?.(res.can_undo, res.can_redo ?? false)
           const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
           if (next) methods.reset(defaultsFromStep(next))
           if (!silent) toast.success('Step saved')
@@ -416,6 +423,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         try {
           const res = await patchStep(skillId, step.step_index, patch, false)
           onWorkflowUpdated(res.workflow)
+          if (res.can_undo !== undefined) onHistoryUpdate?.(res.can_undo, res.can_redo ?? false)
           const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
           if (next) methods.reset(defaultsFromStep(next))
           if (!silent) toast.success('Step saved')
@@ -462,6 +470,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
       try {
         const res = await patchStep(skillId, step.step_index, patch, false)
         onWorkflowUpdated(res.workflow)
+        if (res.can_undo !== undefined) onHistoryUpdate?.(res.can_undo, res.can_redo ?? false)
         const next = res.workflow.steps.find((s) => s.step_index === step.step_index)
         if (next) methods.reset(defaultsFromStep(next))
         if (!silent) toast.success('Step saved')
@@ -472,7 +481,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         throw e
       }
     },
-    [methods, onWorkflowUpdated, skillId, step],
+    [methods, onHistoryUpdate, onWorkflowUpdated, skillId, step],
   )
 
   useImperativeHandle(

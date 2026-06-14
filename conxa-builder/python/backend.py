@@ -183,12 +183,32 @@ class _Loop:
 # --- the backend -------------------------------------------------------------
 
 class Backend:
+    _MAX_UNDO = 50
+
     def __init__(self) -> None:
         self._loop = _Loop()
         self._active_recording: str | None = None
         self._rec_lock = threading.Lock()
         self._auth = None  # AuthService, lazily built once configured
         self._cloud_api = os.environ.get("CONXA_CLOUD_API", "http://127.0.0.1:8000")
+        self._undo_stacks: dict[str, list] = {}
+        self._redo_stacks: dict[str, list] = {}
+
+    # -- undo / redo helpers -------------------------------------------------
+
+    def _push_undo(self, skill_id: str, snapshot: dict[str, Any]) -> None:
+        """Push a pre-mutation snapshot and clear redo. Caller must pass a safe copy."""
+        stack = self._undo_stacks.setdefault(skill_id, [])
+        stack.append(snapshot)
+        if len(stack) > self._MAX_UNDO:
+            stack.pop(0)
+        self._redo_stacks[skill_id] = []
+
+    def _history_flags(self, skill_id: str) -> dict[str, bool]:
+        return {
+            "can_undo": len(self._undo_stacks.get(skill_id, [])) > 0,
+            "can_redo": len(self._redo_stacks.get(skill_id, [])) > 0,
+        }
 
     # -- lazy auth wiring ----------------------------------------------------
 
@@ -1259,6 +1279,7 @@ class Backend:
         return build_workflow_response(skill_id, document, asset_base_url=asset_base_url).model_dump(mode="json")
 
     def cmd_patch_step(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.compiler.patch import revalidate_step
 
@@ -1268,6 +1289,7 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        snapshot = copy.deepcopy(doc)
         doc = dict(doc)
         skills = list(doc.get("skills") or [])
         if not skills:
@@ -1285,8 +1307,11 @@ class Backend:
         meta["version"] = int(meta.get("version", 1)) + 1
         doc["meta"] = meta
         revalidation = revalidate_step(step)
+        self._push_undo(skill_id, snapshot)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc, revalidation)
+        result = self._skill_response(skill_id, doc, revalidation)
+        result.update(self._history_flags(skill_id))
+        return result
 
     def cmd_validate_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         from conxa_core.storage.json_store import read_skill
@@ -1299,6 +1324,7 @@ class Backend:
         return validate_skill_document(doc)
 
     def cmd_reorder_steps(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.workflow_service import reorder_steps
 
@@ -1307,11 +1333,15 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        self._push_undo(skill_id, copy.deepcopy(doc))
         doc = reorder_steps(doc, new_order)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
 
     def cmd_insert_step(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.workflow_service import insert_step_after
 
@@ -1321,11 +1351,15 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        self._push_undo(skill_id, copy.deepcopy(doc))
         doc = insert_step_after(doc, action_kind, insert_after)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
 
     def cmd_delete_step(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.workflow_service import delete_step_at
 
@@ -1334,9 +1368,12 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        self._push_undo(skill_id, copy.deepcopy(doc))
         doc = delete_step_at(doc, step_index)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
 
     def cmd_update_workflow_inputs(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         from conxa_core.storage.json_store import read_skill, write_skill
@@ -1353,6 +1390,7 @@ class Backend:
         return {"skill_id": skill_id, "ok": True}
 
     def cmd_replace_literals(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.workflow_service import replace_string_literals_in_skill_document
 
@@ -1362,9 +1400,56 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        self._push_undo(skill_id, copy.deepcopy(doc))
         doc = replace_string_literals_in_skill_document(doc, find, replace_with)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
+
+    def cmd_undo_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
+        from conxa_core.storage.json_store import read_skill, write_skill
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        undo_stack = self._undo_stacks.get(skill_id, [])
+        if not undo_stack:
+            raise _CommandError("nothing_to_undo", "No undo history for this skill")
+        current = read_skill(skill_id)
+        if current is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        self._redo_stacks.setdefault(skill_id, []).append(copy.deepcopy(current))
+        prev_doc = undo_stack.pop()
+        prev_doc = dict(prev_doc)
+        meta = dict(prev_doc.get("meta") or {})
+        meta["version"] = int(meta.get("version", 1)) + 1
+        prev_doc["meta"] = meta
+        write_skill(skill_id, prev_doc)
+        result = self._skill_response(skill_id, prev_doc)
+        result.update(self._history_flags(skill_id))
+        return result
+
+    def cmd_redo_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
+        from conxa_core.storage.json_store import read_skill, write_skill
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        redo_stack = self._redo_stacks.get(skill_id, [])
+        if not redo_stack:
+            raise _CommandError("nothing_to_redo", "No redo history for this skill")
+        current = read_skill(skill_id)
+        if current is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        self._undo_stacks.setdefault(skill_id, []).append(copy.deepcopy(current))
+        next_doc = redo_stack.pop()
+        next_doc = dict(next_doc)
+        meta = dict(next_doc.get("meta") or {})
+        meta["version"] = int(meta.get("version", 1)) + 1
+        next_doc["meta"] = meta
+        write_skill(skill_id, next_doc)
+        result = self._skill_response(skill_id, next_doc)
+        result.update(self._history_flags(skill_id))
+        return result
 
     def cmd_sign_off_workflow(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
         import time
@@ -1414,6 +1499,7 @@ class Backend:
         return {"skill_id": skill_id, "session_id": session_id, "items": items}
 
     def cmd_apply_recording_visual(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.recording_visual import apply_recording_event_visual_to_step_or_raise
         from services.llm_proxy_client import CloudUnreachable, EntitlementBlocked, QuotaExceeded
@@ -1424,6 +1510,7 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        snapshot = copy.deepcopy(doc)
         self._install_proxy_router(usage_class="human_edit")
         try:
             doc = apply_recording_event_visual_to_step_or_raise(doc, step_index, event_index)
@@ -1433,10 +1520,14 @@ class Backend:
             raise _CommandError("quota_exceeded", str(exc)) from exc
         except CloudUnreachable as exc:
             raise _CommandError("cloud_unreachable", str(exc)) from exc
+        self._push_undo(skill_id, snapshot)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
 
     def cmd_clear_step_visual(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.recording_visual import clear_step_visual_screenshots_or_raise
 
@@ -1445,11 +1536,15 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        self._push_undo(skill_id, copy.deepcopy(doc))
         doc = clear_step_visual_screenshots_or_raise(doc, step_index)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
 
     def cmd_update_visual_bbox(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
         from conxa_core.storage.json_store import read_skill, write_skill
         from conxa_compile.editor.recording_visual import (
             update_step_visual_bbox_and_regenerate_anchors_or_raise,
@@ -1462,6 +1557,7 @@ class Backend:
         doc = read_skill(skill_id)
         if doc is None:
             raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        snapshot = copy.deepcopy(doc)
         self._install_proxy_router(usage_class="human_edit")
         try:
             doc = update_step_visual_bbox_and_regenerate_anchors_or_raise(doc, step_index, bbox)
@@ -1471,8 +1567,11 @@ class Backend:
             raise _CommandError("quota_exceeded", str(exc)) from exc
         except CloudUnreachable as exc:
             raise _CommandError("cloud_unreachable", str(exc)) from exc
+        self._push_undo(skill_id, snapshot)
         write_skill(skill_id, doc)
-        return self._skill_response(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
 
     # ─── skill library ───────────────────────────────────────────────────────
 
