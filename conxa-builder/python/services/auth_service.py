@@ -29,143 +29,136 @@ _KEYRING_SERVICE = "conxa-studio"
 _TOKEN_KEY = "session"
 _REFRESH_LEEWAY_S = 60
 
-_CALLBACK_HTML = """\
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Conxa — {title}</title>
-<style>
-  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  html, body {{
-    height: 100%;
-    background: #0a0c0f;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: #e4e4e7;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }}
-  .card {{
-    width: min(420px, calc(100vw - 3rem));
-    background: #0d0f12;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 2.5rem 2rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.25rem;
-    box-shadow: 0 24px 48px rgba(0,0,0,0.6);
-  }}
-  .wordmark {{
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    color: #a1a1aa;
-    margin-bottom: 0.25rem;
-  }}
-  .wordmark-dot {{
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #3b82f6;
-  }}
-  .icon-wrap {{
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: {icon_bg};
-  }}
-  h1 {{
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #f4f4f5;
-    text-align: center;
-  }}
-  .subtitle {{
-    font-size: 0.83rem;
-    color: #71717a;
-    text-align: center;
-    line-height: 1.5;
-  }}
-  .countdown {{
-    font-size: 0.75rem;
-    color: #3f3f46;
-    margin-top: 0.25rem;
-  }}
-  .divider {{
-    width: 100%;
-    height: 1px;
-    background: rgba(255,255,255,0.06);
-  }}
-</style>
-{auto_close_script}
-</head>
-<body>
-<div class="card">
-  <div class="wordmark">
-    <span class="wordmark-dot"></span>
-    Conxa
-  </div>
-  <div class="icon-wrap">
-    {icon_svg}
-  </div>
-  <h1>{title}</h1>
-  <p class="subtitle">{subtitle}</p>
-  <div class="divider"></div>
-  <p class="countdown" id="cd">{countdown_text}</p>
-</div>
-</body>
-</html>"""
+_PAGE_CSS = """
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  background: #0a0c0f;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #e4e4e7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+  padding: 2rem 1.5rem;
+  max-width: 380px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #71717a;
+  margin-bottom: 1.5rem;
+}
+.logo-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #3b82f6;
+  flex-shrink: 0;
+}
+.status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  margin-bottom: 0.75rem;
+}
+h1 {
+  font-size: 1.85rem;
+  font-weight: 600;
+  color: #f4f4f5;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.sub {
+  font-size: 0.9rem;
+  color: #71717a;
+  line-height: 1.55;
+  margin-top: 0.1rem;
+}
+.open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 1rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: #a1a1aa;
+  font-size: 0.82rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.open-btn:hover { background: rgba(255,255,255,0.08); color: #e4e4e7; }
+"""
 
-_SUCCESS_ICON = """<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M6 14.5L11.5 20L22 8" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>"""
+_SUCCESS_ICON_SVG = (
+    '<svg width="32" height="32" viewBox="0 0 32 32" fill="none">'
+    '<circle cx="16" cy="16" r="16" fill="rgba(74,222,128,0.12)"/>'
+    '<path d="M9 17L14 22L23 11" stroke="#4ade80" stroke-width="2.5"'
+    ' stroke-linecap="round" stroke-linejoin="round"/>'
+    "</svg>"
+)
 
-_ERROR_ICON = """<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M8 8L20 20M20 8L8 20" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"/>
-</svg>"""
+_ERROR_ICON_SVG = (
+    '<svg width="32" height="32" viewBox="0 0 32 32" fill="none">'
+    '<circle cx="16" cy="16" r="16" fill="rgba(248,113,113,0.12)"/>'
+    '<path d="M10 10L22 22M22 10L10 22" stroke="#f87171" stroke-width="2.5"'
+    ' stroke-linecap="round"/>'
+    "</svg>"
+)
 
-_AUTO_CLOSE_SCRIPT = """\
-<script>
-  var s = 4;
-  function tick() {
-    s--;
-    var el = document.getElementById('cd');
-    if (el) el.textContent = 'Closing in ' + s + 's…';
-    if (s <= 0) { window.close(); }
-    else { setTimeout(tick, 1000); }
-  }
-  setTimeout(tick, 1000);
-</script>"""
+_OPEN_STUDIO_BTN = (
+    '<a href="conxa-studio://open" class="open-btn">'
+    '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">'
+    '<rect x="1" y="2" width="12" height="9" rx="1.5" stroke="#a1a1aa" stroke-width="1.25"/>'
+    '<path d="M5 13h4M7 11v2" stroke="#a1a1aa" stroke-width="1.25" stroke-linecap="round"/>'
+    "</svg>"
+    "Open Conxa Build Studio"
+    "</a>"
+)
+
+_DEEP_LINK_SCRIPT = (
+    "<script>"
+    "setTimeout(function(){window.location.href='conxa-studio://open';},250);"
+    "</script>"
+)
 
 
 def _build_callback_html(success: bool, message: str) -> bytes:
-    if success:
-        return _CALLBACK_HTML.format(
-            title="Signed in successfully",
-            icon_bg="rgba(74,222,128,0.1)",
-            icon_svg=_SUCCESS_ICON,
-            subtitle="You can close this window and return to Build Studio.",
-            countdown_text="Closing in 4s…",
-            auto_close_script=_AUTO_CLOSE_SCRIPT,
-        ).encode()
-    return _CALLBACK_HTML.format(
-        title="Authentication failed",
-        icon_bg="rgba(248,113,113,0.1)",
-        icon_svg=_ERROR_ICON,
-        subtitle=message,
-        countdown_text="You can close this window.",
-        auto_close_script="",
-    ).encode()
+    icon = _SUCCESS_ICON_SVG if success else _ERROR_ICON_SVG
+    title = "Sign in complete" if success else "Authentication failed"
+    subtitle = "You can now close this window." if success else message
+    extra = _OPEN_STUDIO_BTN + _DEEP_LINK_SCRIPT if success else ""
+    html = (
+        "<!DOCTYPE html><html lang='en'><head>"
+        "<meta charset='utf-8'/>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
+        f"<title>Conxa — {title}</title>"
+        f"<style>{_PAGE_CSS}</style>"
+        "</head><body><div class='wrap'>"
+        "<div class='logo'><span class='logo-dot'></span>Conxa</div>"
+        f"<div class='status-icon'>{icon}</div>"
+        f"<h1>{title}</h1>"
+        f"<p class='sub'>{subtitle}</p>"
+        f"{extra}"
+        "</div></body></html>"
+    )
+    return html.encode()
 
 
 def _pkce_pair() -> tuple[str, str]:
