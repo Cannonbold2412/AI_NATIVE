@@ -7,6 +7,7 @@ import { fetchEntitlements } from '@/api/productApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { OpenInStudioButton } from '@/components/OpenInStudioButton'
 import { ChevronRight, Globe, PackageCheck } from 'lucide-react'
 
 function formatCount(value: number | null | undefined) {
@@ -81,7 +82,12 @@ export function PluginsPage() {
       <PageHeader
         title="Plugins"
         description={q.isSuccess && plugins.length > 0 ? `${plugins.length} published plugin${plugins.length !== 1 ? 's' : ''}` : 'Published skills for customer installation.'}
-        actions={<InstallerSlotSummary />}
+        actions={
+          <>
+            <OpenInStudioButton label="Create a Plugin" primary />
+            <InstallerSlotSummary />
+          </>
+        }
       />
       <div className="flex w-full max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6">
         {q.isLoading ? (
@@ -116,6 +122,7 @@ export function PluginsPage() {
               <p className="max-w-xs text-xs text-zinc-500">
                 Build and publish a plugin from the Build Studio. It will appear here once published.
               </p>
+              <OpenInStudioButton label="Create a Plugin" primary />
             </CardContent>
           </Card>
         ) : (
