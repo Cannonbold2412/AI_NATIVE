@@ -168,22 +168,17 @@ def test_binding_source_child_frame_adds_frame_context() -> None:
     assert queued_payload["_frame_offset"] == {"x": 42.0, "y": 18.0}
 
 
-def test_frame_offset_adjusts_visual_bbox_before_capture(monkeypatch, tmp_path) -> None:
+def test_frame_offset_adjusts_visual_bbox_before_capture(tmp_path) -> None:
+    # Screenshots are no longer taken synchronously; we verify the bbox offset adjustment
+    # and viewport capture happen correctly in _finalize_payload_sync.
     sess = RecordingSession(session_id="frame-bbox", data_root=tmp_path)
     sess._video_session_start_wall_ms = 1
-    captured: dict[str, object] = {}
 
     class FakePage:
         viewport_size = {"width": 1280, "height": 720}
 
         def is_closed(self) -> bool:
             return False
-
-    def fake_save_action_images(_page, _session_dir, _seq, bbox, **_kwargs):
-        captured["bbox"] = dict(bbox)
-        return "images/full.jpg", "images/el.jpg"
-
-    monkeypatch.setattr(recorder_session, "save_action_images", fake_save_action_images)
 
     payload = _payload()
     payload["_frame_offset"] = {"x": 50, "y": 20}
@@ -200,13 +195,16 @@ def test_frame_offset_adjusts_visual_bbox_before_capture(monkeypatch, tmp_path) 
 
     event = sess._finalize_payload_sync(FakePage(), tmp_path / "sessions" / sess.session_id, payload)
 
-    assert captured["bbox"] == {"x": 51, "y": 21, "w": 20, "h": 10}
     assert event.visual.bbox == {"x": 51, "y": 21, "w": 20, "h": 10}
     assert event.visual.viewport == "1280x720"
     assert event.frame.chain[0]["selector"] == 'iframe[id="object-builder-ui"]'
+    # full_screenshot is None during recording; frame extractor sets it at shutdown.
+    assert event.visual.full_screenshot is None
 
 
-def test_visual_capture_failure_keeps_event(monkeypatch, tmp_path) -> None:
+def test_visual_capture_is_deferred_to_frame_extraction(tmp_path) -> None:
+    # Screenshots are no longer captured synchronously during recording.
+    # full_screenshot and element_snapshot are always None until frame_extractor runs at shutdown.
     sess = RecordingSession(session_id="visual-fallback", data_root=tmp_path)
     sess._video_session_start_wall_ms = 1
 
@@ -215,17 +213,13 @@ def test_visual_capture_failure_keeps_event(monkeypatch, tmp_path) -> None:
             return False
 
     sess._page = FakePage()
-
-    def fail_screenshot(*_args, **_kwargs):
-        raise RuntimeError("screenshot failed")
-
-    monkeypatch.setattr(recorder_session, "save_action_images", fail_screenshot)
-
     sess._consume_payload_sync(_payload())
 
     assert len(sess.snapshot_events()) == 1
     assert sess.snapshot_events()[0]["visual"]["full_screenshot"] is None
-    assert any(err.startswith("visual_capture_error:click") for err in sess.binding_errors)
+    assert sess.snapshot_events()[0]["visual"]["element_snapshot"] is None
+    # No visual capture errors — capture is deferred, not attempted during recording.
+    assert not any(err.startswith("visual_capture_error:") for err in sess.binding_errors)
 
 
 def test_finalize_video_recording_skips_frame_extraction_when_no_events(tmp_path) -> None:

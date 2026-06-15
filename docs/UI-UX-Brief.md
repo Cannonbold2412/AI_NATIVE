@@ -227,15 +227,44 @@ The `research/frontend/` directory contains a prototype/research copy of both th
 
 ### 2.12 Skill Packages Page (`SkillPackagesPage.tsx`)
 
-**Purpose:** Browse all built skill packages.  
-**Inputs:** None.  
-**Outputs:** Package list with skill count, bundle root path.  
-**User goal:** Manage built packages.
+**Purpose:** Inspect, manage, and compare all locally compiled skill packages.  
+**Inputs:** `fetchSkillPackageList` (package metadata only; file contents loaded on demand via `fetchSkillPackageFiles` when a package is selected).  
+**Outputs:** Renamed/deleted packages (write-back via `renameStoredSkillPackage` / `deleteStoredSkillPackage`); open-folder in OS explorer.  
+**User goal:** Audit built packages, verify file contents before publishing, rename or delete stale packages.
 
-**UX issues:**
-- "Bundle root" is a filesystem path — only meaningful to the engineer.
-- No connection between this page and the Plugin Detail page (disjointed mental model).
-- Rename/delete with no undo.
+**Layout:** 3-pane resizable inspector — left package list, middle file tree, right file preview — all within a single dark `PanelChrome` surface. Panes are mouse-resizable via drag handles (CSS custom properties `--packages-pane-width`, `--structure-pane-width`).
+
+**Stats strip (above inspector):** 4 tiles — Packages (total), Workflows (sum across packages), Files (sum of all compiled file paths), Last updated (relative time of most-recently-modified package). Derived client-side from the already-fetched package list; hidden in loading / error / empty states.
+
+**Left pane — package list:**
+- Live search field (filters by package name, case-insensitive).
+- Sort control: Recently modified (default, `modified_at` desc) / Name A→Z / Most workflows.
+- Result count: "N of M packages" when search is active; "N packages" otherwise.
+- Each row: package name (truncated), relative modified time, workflow-count badge, files-count badge, and an icon tray (open-folder / rename / delete) that appears on hover.
+- Rename via inline `Dialog` (prevents duplicate names, trims whitespace).
+- Delete via `AlertDialog` confirmation (no undo).
+
+**Middle pane — file tree:**
+- Path trie rendered as an expandable tree; nodes toggle expand/collapse on click.
+- Clicking a leaf node selects the file and loads its content into the right pane.
+- Scrollable via `ScrollArea`.
+
+**Right pane — file preview:**
+- Text files rendered in a monospace pre-block with horizontal scroll.
+- Image files (PNG/JPG/WEBP/GIF) rendered inline with `object-contain`.
+- Header shows package name, subtitle "N workflow folders · N files", and a Copy button (copies full file content to clipboard).
+- Placeholder shown when no file is selected.
+
+**States:**
+- Loading: skeleton shimmer in left pane, stats strip hidden.
+- Error: red inline message.
+- Empty (no packages): centred `PackageOpen` icon + call-to-action text; stats strip hidden.
+- No search match: "No matching packages" message + "Clear search" button.
+
+**UX issues (known):**
+- "Bundle root" path (displayed in page header subtitle) is a filesystem path — only meaningful to engineers, not typical users.
+- No connection between this page and the Plugin Detail page (disjointed mental model — packages are the compile output, plugins are the publishable artefact).
+- Rename/delete with no undo; AlertDialog is the only guard.
 
 ---
 
