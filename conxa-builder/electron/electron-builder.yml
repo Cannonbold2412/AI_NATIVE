@@ -25,17 +25,13 @@ directories:
   buildResources: build
   output: dist/studio
 
-# Auto-update via GitHub Releases (electron-updater)
+# Auto-update via Conxa Cloud (generic provider).
+# The Render backend serves /api/v1/updates/studio/latest.yml with the correct
+# sha512 checksum sourced from the CONXA_STUDIO_WIN_SHA512 env var.
+# Actual .exe downloads directly from GitHub — the cloud only serves the manifest.
 publish:
-  provider: github
-  owner: Cannonbold2412
-  repo: AI_NATIVE
-  private: false
-  releaseType: release
-
-# Update channels: stable (default) + beta (opt-in)
-# The running app reads the channel from electron-store; this sets the build
-# channel metadata that electron-updater reads from latest.yml / latest-beta.yml.
+  provider: generic
+  url: https://apis.conxa.com/api/v1/updates/studio
 
 win:
   icon: build/icon.ico
