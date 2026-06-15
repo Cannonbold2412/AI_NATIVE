@@ -15,6 +15,7 @@ build/
 !conxa-builder/electron/build/
 !conxa-builder/electron/build/icon.png
 !conxa-builder/electron/build/icon.ico
+!conxa-builder/electron/renderer/src/components/build/
 !frontend/app/(protected)/build/
 !frontend/app/(protected)/build/page.tsx
 dist/
