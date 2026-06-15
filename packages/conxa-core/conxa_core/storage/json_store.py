@@ -8,6 +8,7 @@ from typing import Any
 
 from conxa_core.config import settings
 from conxa_core.db import db_get, db_set, db_delete, db_list
+from conxa_core.sanitize import scrub_surrogates
 
 
 def skills_dir() -> Path:
@@ -17,14 +18,12 @@ def skills_dir() -> Path:
 
 
 def write_skill(skill_id: str, document: dict[str, Any]) -> Path:
+    document = scrub_surrogates(document)
     is_update = read_skill(skill_id) is not None
     db_set("skills", skill_id, document)
     path = skills_dir() / f"{skill_id}.json"
     try:
-        json_str = json.dumps(document, indent=2, ensure_ascii=False)
-        # Strip lone surrogates (Windows recording artifacts) to keep the file valid UTF-8
-        json_str = json_str.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace")
-        path.write_text(json_str, encoding="utf-8")
+        path.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError:
         pass
     if is_update:
@@ -39,11 +38,11 @@ def write_skill(skill_id: str, document: dict[str, Any]) -> Path:
 def read_skill(skill_id: str) -> dict[str, Any] | None:
     data = db_get("skills", skill_id)
     if data is not None:
-        return data
+        return scrub_surrogates(data)
     path = skills_dir() / f"{skill_id}.json"
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    return scrub_surrogates(json.loads(path.read_text(encoding="utf-8")))
 
 
 def delete_skill(skill_id: str) -> bool:
