@@ -1,12 +1,17 @@
-"""Extract 4 video frames per event for LLM-native selector verification.
+"""Extract 5 video frames per event for LLM-native selector verification.
 
 For each event at timestamp T (in ms since video start), extract:
 - T-500ms → frames/evt_NNNN_before_far.png
-- T-100ms → frames/evt_NNNN_before_near.png
-- T+100ms → frames/evt_NNNN_after_near.png
+- T-250ms → frames/evt_NNNN_before_near.png  (default representative)
+- T+0ms   → frames/evt_NNNN_at.png
+- T+250ms → frames/evt_NNNN_after_near.png
 - T+500ms → frames/evt_NNNN_after_far.png
 
-Updates events.jsonl in place: each event's visual.frames dict gets the 4 paths.
+After extraction, sets visual["full_screenshot"] to the before_near frame path
+and visual["element_snapshot"] to a JPEG element crop from that frame (or None
+when bbox w/h < 2). This replaces the old synchronous page.screenshot() capture.
+
+Updates events.jsonl in place: each event's visual.frames dict gets the 5 paths.
 Uses ffmpeg (from Playwright's bundled binary, imageio-ffmpeg, or PATH).
 
 Raises on any failure (missing video, missing ffmpeg, per-frame failure,
@@ -21,6 +26,9 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
+
+from conxa_core.config import settings
+from conxa_compile.recorder.visual import crop_element_from_frame
 
 
 def _is_executable_file(path: Path) -> bool:
@@ -133,8 +141,9 @@ def extract_frames_for_session(session_dir: Path) -> dict[int, dict[str, str]]:
 
     offsets = [
         ("before_far", -500),
-        ("before_near", -100),
-        ("after_near", 100),
+        ("before_near", -250),
+        ("at", 0),
+        ("after_near", 250),
         ("after_far", 500),
     ]
 
@@ -163,6 +172,27 @@ def extract_frames_for_session(session_dir: Path) -> dict[int, dict[str, str]]:
             frames[label] = f"frames/evt_{i + 1:04d}_{label}.png"
 
         visual["frames"] = frames
+
+        # Set the default representative: before_near frame (T-250ms).
+        # This is after the user initiated the action but before any page reaction/navigation,
+        # so the target element is still present and the bbox is valid.
+        representative_rel = frames["before_near"]
+        visual["full_screenshot"] = representative_rel
+
+        # Derive the element crop from the representative frame.
+        representative_abs = session_dir / representative_rel
+        bbox = visual.get("bbox") if isinstance(visual.get("bbox"), dict) else {}
+        images_dir = session_dir / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        el_out = images_dir / f"evt_{i + 1:04d}_element.jpg"
+        el_rel = crop_element_from_frame(
+            representative_abs,
+            bbox,
+            el_out,
+            jpeg_quality=settings.screenshot_jpeg_quality,
+        )
+        visual["element_snapshot"] = el_rel
+
         result[i] = frames
 
     with open(events_path, "w", encoding="utf-8") as f:

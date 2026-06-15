@@ -26,11 +26,13 @@ from conxa_core.metrics.store import metrics
 from conxa_core.models.events import RecordedEvent
 from conxa_compile.policy.bundle import get_policy_bundle
 from conxa_compile.policy.timing import resolve_event_timing
-from conxa_compile.recorder.visual import save_action_images
+from conxa_core.sanitize import scrub_surrogates as _sanitize_surrogates
 from conxa_core.storage import snapshots as snapshot_store
 
 
 _URL_DYNAMIC_SEG = re.compile(r"^(?:[0-9]+|[0-9a-f]{8,}|[A-Za-z0-9_-]{16,})$")
+
+
 _URL_VOLATILE_PARAMS = frozenset({
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "ts", "_", "t", "ref",
@@ -718,6 +720,7 @@ class RecordingSession:
         }
 
     def _finalize_payload_sync(self, page, session_dir: Path, payload: dict[str, Any]) -> RecordedEvent:
+        payload = _sanitize_surrogates(payload)
         self._seq += 1
         seq = self._seq
         vph = dict(payload.get("visual_placeholder") or {})
@@ -735,21 +738,11 @@ class RecordingSession:
                 pass
         action = payload["action"]
         action_name = str((action or {}).get("action") or "")
+        # Screenshots are no longer captured synchronously during recording.
+        # full_screenshot and element_snapshot are set at session shutdown by
+        # frame_extractor.py after extracting 5 frames per action from recording.webm.
         full_rel: str | None = None
         el_rel: str | None = None
-        try:
-            if page is not None and not page.is_closed():
-                full_rel, el_rel = save_action_images(
-                    page,
-                    session_dir,
-                    seq,
-                    bbox,
-                    jpeg_quality=settings.screenshot_jpeg_quality,
-                )
-            else:
-                self.binding_errors.append(f"visual_capture_skipped:{action_name}: page_closed")
-        except Exception as exc:  # noqa: BLE001
-            self.binding_errors.append(f"visual_capture_error:{action_name}: {exc!s}")
         pol = get_policy_bundle().data
         timing = resolve_event_timing(action_name, pol)
 

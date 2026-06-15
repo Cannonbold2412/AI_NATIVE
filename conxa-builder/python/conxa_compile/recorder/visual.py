@@ -1,4 +1,4 @@
-"""Viewport screenshots + compressed element crops (paths only in events)."""
+"""Element crop helper — reads from a video frame (PNG) and produces a JPEG element snapshot."""
 
 from __future__ import annotations
 
@@ -9,54 +9,43 @@ from typing import Any
 from PIL import Image
 
 
-def _dpr_from_page(page) -> float:
-    dpr = page.evaluate("() => window.devicePixelRatio || 1")
-    try:
-        return float(dpr)
-    except (TypeError, ValueError):
-        return 1.0
-
-
-def save_action_images(
-    page,
-    session_dir: Path,
-    seq: int,
+def crop_element_from_frame(
+    frame_path: Path,
     bbox: dict[str, Any],
+    out_path: Path,
     *,
     jpeg_quality: int,
-) -> tuple[str | None, str | None]:
+) -> str | None:
     """
-    Writes full viewport JPEG and optional element crop.
-    Returns relative paths from session_dir (posix-style for JSON portability).
-    """
-    images_dir = session_dir / "images"
-    images_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"evt_{seq:04d}"
-    full_name = f"{stem}_full.jpg"
-    full_path = images_dir / full_name
-    raw = page.screenshot(type="jpeg", quality=jpeg_quality, full_page=False)
-    full_path.write_bytes(raw)
+    Crop the element region from a video frame PNG and write a JPEG element snapshot.
 
+    Video frames are captured at the recording viewport resolution (1280×720, DPR=1),
+    so bbox x/y/w/h from bridge.js can be used directly without DPR scaling.
+
+    Returns the relative path from the session_dir (posix-style), or None when the
+    bbox is too small or the crop would be empty.
+    """
     w = int(bbox.get("w") or 0)
     h = int(bbox.get("h") or 0)
     if w < 2 or h < 2:
-        return f"images/{full_name}", None
+        return None
 
-    dpr = _dpr_from_page(page)
-    x = max(0, int(round(float(bbox["x"]) * dpr)))
-    y = max(0, int(round(float(bbox["y"]) * dpr)))
-    x2 = x + max(1, int(round(float(w) * dpr)))
-    y2 = y + max(1, int(round(float(h) * dpr)))
+    x = max(0, int(round(float(bbox.get("x") or 0))))
+    y = max(0, int(round(float(bbox.get("y") or 0))))
+    x2 = x + max(1, int(round(float(w))))
+    y2 = y + max(1, int(round(float(h))))
 
+    raw = frame_path.read_bytes()
     with Image.open(io.BytesIO(raw)) as im:
         im = im.convert("RGB")
         W, H = im.size
         x2 = min(W, x2)
         y2 = min(H, y2)
         if x2 <= x or y2 <= y:
-            return f"images/{full_name}", None
+            return None
         crop = im.crop((x, y, x2, y2))
-        el_name = f"{stem}_element.jpg"
-        el_path = images_dir / el_name
-        crop.save(el_path, format="JPEG", quality=jpeg_quality, optimize=True)
-        return f"images/{full_name}", f"images/{el_name}"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        crop.save(out_path, format="JPEG", quality=jpeg_quality, optimize=True)
+
+    # out_path is always <session_dir>/images/<name>; return images/<name>.
+    return f"images/{out_path.name}"
