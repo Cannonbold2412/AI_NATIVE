@@ -1,1 +1,0 @@
-export { mockOpenAIResponse } from './mockOpenAIResponse';

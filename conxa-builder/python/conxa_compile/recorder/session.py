@@ -344,7 +344,10 @@ class RecordingSession:
             self._playwright.stop()
             self._playwright = None
         self._page = None
-        self._finalize_video_recording_sync()
+        try:
+            self._finalize_video_recording_sync()
+        except Exception as exc:  # noqa: BLE001
+            self.binding_errors.append(f"frame_extraction_error: {exc!s}")
 
     def _finalize_video_recording_sync(self) -> None:
         """Rename Playwright's auto-generated .webm to recording.webm + extract frames.

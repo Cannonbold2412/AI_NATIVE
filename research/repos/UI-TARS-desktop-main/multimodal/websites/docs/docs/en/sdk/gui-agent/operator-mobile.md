@@ -1,1 +1,0 @@
-# @gui-agent/operator-mobile

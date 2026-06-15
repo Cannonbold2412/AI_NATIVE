@@ -787,7 +787,22 @@ class Backend:
 
         try:
             sess = registry.get(session_id)
-            raw = sess.snapshot_events() if sess else read_session_events(session_id)
+            if sess is not None:
+                # Frame extraction runs in the recorder thread after stop() and writes
+                # frames to events.jsonl on disk — it never updates the in-memory
+                # _materialized list. Wait for the thread to finish so the on-disk
+                # events.jsonl is complete before we read it.
+                thread = getattr(sess, '_thread', None)
+                if thread is not None and thread.is_alive():
+                    _log("Waiting for post-recording frame extraction to complete…")
+                    thread.join(timeout=120)
+                    if thread.is_alive():
+                        _log("Frame extraction thread still running after 120 s — compiling without frames.", level="warn")
+            raw = read_session_events(session_id)
+            if sess is not None:
+                errs = [e for e in (getattr(sess, 'binding_errors', None) or []) if 'frame_extraction' in e]
+                for e in errs:
+                    _log(f"Warning: {e}", level="warn")
         except Exception:
             if reservation_id and not reservation_committed:
                 self._release_compile_credit(reservation_id)
