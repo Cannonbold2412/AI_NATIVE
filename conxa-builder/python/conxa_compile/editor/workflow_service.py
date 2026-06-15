@@ -26,7 +26,7 @@ from conxa_compile.editor.action_registry import (
 )
 from conxa_compile.editor.assets import asset_url
 from conxa_compile.editor.describe import describe_step
-from conxa_compile.editor.dto import StepEditorDTO, StepFlags, StepScreenshotDTO, SuggestionItem, WorkflowResponse
+from conxa_compile.editor.dto import FrameDTO, StepEditorDTO, StepFlags, StepScreenshotDTO, SuggestionItem, WorkflowResponse, _FRAME_OFFSETS
 from conxa_compile.editor.step_view import skill_step_for_destructive_check
 from conxa_compile.policy.bundle import get_policy_bundle
 from conxa_compile.policy.intent_ontology import generic_intents
@@ -142,7 +142,7 @@ def _persisted_visual_path(rel: str, source_session_id: str) -> str:
     if r.startswith("sessions/"):
         return r
     sid = source_session_id.strip()
-    if sid and r.startswith("images/"):
+    if sid and (r.startswith("images/") or r.startswith("frames/")):
         return f"sessions/{sid}/{r}"
     return r
 
@@ -161,6 +161,12 @@ def _screenshot_dto(
             return None
         return asset_url(persisted, asset_base_url=asset_base_url, skill_id=skill_id)
 
+    raw_frames = visual.get("frames") if isinstance(visual.get("frames"), dict) else {}
+    frame_dtos = [
+        FrameDTO(label=label, offset_ms=_FRAME_OFFSETS.get(label, 0), url=u(str(raw_frames.get(label) or "")))
+        for label in ("before_far", "before_near", "at", "after_near", "after_far")
+        if label in raw_frames
+    ]
     return StepScreenshotDTO(
         full_url=u(str(visual.get("full_screenshot") or "")),
         element_url=u(str(visual.get("element_snapshot") or "")),
@@ -168,6 +174,8 @@ def _screenshot_dto(
         bbox=visual.get("bbox") if isinstance(visual.get("bbox"), dict) else {},
         viewport=str(visual.get("viewport") or ""),
         scroll_position=str(visual.get("scroll_position") or ""),
+        frames=frame_dtos,
+        default_frame_label=str(visual.get("default_frame_label") or "") or None,
     )
 
 

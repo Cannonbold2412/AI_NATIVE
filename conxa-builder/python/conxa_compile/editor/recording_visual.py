@@ -370,3 +370,136 @@ def clear_step_visual_screenshots_or_raise(
     meta["version"] = int(meta.get("version", 1)) + 1
     doc["meta"] = meta
     return doc
+
+
+def apply_step_frame_or_raise(
+    document: dict[str, Any],
+    step_index: int,
+    frame_label: str,
+    *,
+    policy_bundle: PolicyBundle | None = None,
+) -> dict[str, Any]:
+    """Set a specific video frame as the step representative and re-run vision anchors.
+
+    Picks ``frame_label`` (one of before_far/before_near/at/after_near/after_far) from
+    ``signals.visual.frames``, crops a new element snapshot, re-runs the vision anchor
+    LLM, and bumps meta.version. Returns a new document dict.
+    """
+    bundle = policy_bundle or get_policy_bundle()
+    policy = bundle.data
+
+    _VALID_LABELS = {"before_far", "before_near", "at", "after_near", "after_far"}
+    if frame_label not in _VALID_LABELS:
+        raise ValueError(f"invalid_frame_label: {frame_label!r}")
+
+    doc = dict(document)
+    skills = list(doc.get("skills") or [])
+    if not skills:
+        raise ValueError("no_skills_block")
+    block = dict(skills[0])
+    steps = list(block.get("steps") or [])
+    if step_index < 0 or step_index >= len(steps):
+        raise ValueError("step_index_out_of_range")
+
+    step = dict(steps[step_index])
+    if action_name(step).lower() == "scroll":
+        raise ValueError("cannot_swap_frame_on_scroll_step")
+
+    signals = dict(step.get("signals") or {})
+    visual = dict(signals.get("visual") if isinstance(signals.get("visual"), dict) else {})
+
+    frames = visual.get("frames") if isinstance(visual.get("frames"), dict) else {}
+    frame_path_rel = frames.get(frame_label)
+    if not frame_path_rel or not isinstance(frame_path_rel, str):
+        raise ValueError(f"frame_not_available: {frame_label!r}")
+
+    # Resolve the frame file on disk.
+    frame_abs = resolve_skill_asset(frame_path_rel)
+    if not frame_abs.is_file():
+        raise ValueError("frame_file_missing_on_disk")
+
+    # Generate a new element crop from the chosen frame.
+    from conxa_compile.recorder.visual import crop_element_from_frame
+    from conxa_core.config import settings as _settings
+
+    bbox = visual.get("bbox") if isinstance(visual.get("bbox"), dict) else {}
+    # frame_abs is data_dir/sessions/<id>/frames/<name> (already .resolve()-d by resolve_skill_asset)
+    session_abs = frame_abs.parent.parent  # data_dir/sessions/<id>
+    images_dir = session_abs / "images"
+    el_out = images_dir / f"step_{step_index:04d}_frame_{frame_label}_element.jpg"
+    cropped = crop_element_from_frame(frame_abs, bbox, el_out, jpeg_quality=_settings.screenshot_jpeg_quality)
+    # Store as data-dir-relative path; el_out is absolute and under data_dir (resolved).
+    el_rel: str | None = None
+    if cropped is not None:
+        try:
+            el_rel = str(el_out.relative_to(_settings.data_dir.resolve())).replace("\\", "/")
+        except ValueError:
+            # Fallback: construct from session path
+            try:
+                el_rel = str(el_out.relative_to(session_abs.parent.parent)).replace("\\", "/")
+            except ValueError:
+                pass
+
+    visual["full_screenshot"] = frame_path_rel
+    visual["element_snapshot"] = el_rel
+    visual["default_frame_label"] = frame_label
+
+    from conxa_compile.compiler.intent_access import get_effective_intent_from_skill_step
+
+    intent = get_effective_intent_from_skill_step(step) or str(step.get("intent") or "").strip()
+    if not intent.strip():
+        raise ValueError("intent_required_for_frame_apply")
+
+    meta = document.get("meta") if isinstance(document.get("meta"), dict) else {}
+    session_id = str(meta.get("source_session_id") or "").strip()
+
+    session_root = (settings.data_dir / "sessions" / session_id).resolve() if session_id else frame_abs.parent.parent
+    ev_llm = {"visual": dict(visual)}
+    try:
+        anchors = generate_anchors_for_step_or_raise(
+            ev_llm,
+            session_root=session_root,
+            final_intent=intent,
+            policy=policy,
+            step_index=step_index,
+        )
+    except VisionAnchorGenerationError:
+        anchors = []
+
+    anchors = rank_merged_anchors(anchors, _ev_rank_stub_from_step(step), intent, policy)
+
+    prev_vis = signals.get("visual") if isinstance(signals.get("visual"), dict) else {}
+    merged_visual = dict(prev_vis)
+    merged_visual.update(visual)
+    signals["visual"] = merged_visual
+    signals["anchors"] = list(anchors)
+    step["signals"] = signals
+
+    recovery = dict(step.get("recovery") or {})
+    recovery["anchors"] = list(anchors)
+    recovery["intent"] = intent
+    recovery["final_intent"] = intent
+    wf = (step.get("validation") or {}).get("wait_for") or {}
+    recovery = merge_recovery_strategies_for_wait_shape(
+        recovery,
+        dict(wf) if isinstance(wf, dict) else {},
+        policy,
+    )
+    step["recovery"] = recovery
+
+    proto_base = dict(step.get("confidence_protocol") or _default_confidence_protocol(bundle))
+    step["confidence_protocol"] = _merge_compile_warnings(
+        proto_base,
+        skill_step_for_destructive_check(step),
+        anchors,
+        policy,
+    )
+
+    steps[step_index] = step
+    block["steps"] = steps
+    skills[0] = block
+    doc["skills"] = skills
+    meta2 = dict(doc.get("meta") or {})
+    meta2["version"] = int(meta2.get("version", 1)) + 1
+    doc["meta"] = meta2
+    return doc
