@@ -63,7 +63,12 @@ _RECOVERABLE_VISION_ANCHOR_REASONS = frozenset({
     "vision_llm_request_failed",
     "vision_llm_empty_response",
     "vision_llm_invalid_primary_phrase",
+    # Frame extraction deferred to session shutdown; in-memory events won't have
+    # full_screenshot set if extraction hasn't completed yet (e.g. stop() timeout).
+    "full_screenshot_path_missing",
 })
+
+_RECOVERABLE_VISION_ANCHOR_REASON_PREFIXES = ("screenshot_file_missing:",)
 
 
 def _compile_log(event: str, message: str, data: dict[str, Any] | None = None) -> None:
@@ -143,7 +148,9 @@ def _merge_compile_warnings(
 
 def _vision_anchor_failure_is_recoverable(exc: VisionAnchorGenerationError) -> bool:
     reason = str(exc.reason or "")
-    return reason in _RECOVERABLE_VISION_ANCHOR_REASONS
+    return reason in _RECOVERABLE_VISION_ANCHOR_REASONS or any(
+        reason.startswith(p) for p in _RECOVERABLE_VISION_ANCHOR_REASON_PREFIXES
+    )
 
 
 def _fallback_anchors_from_event(ev_with_intent: dict[str, Any], policy: dict[str, Any]) -> list[dict[str, Any]]:
@@ -591,6 +598,12 @@ def _build_signals(
             "element_snapshot": _persisted_visual_asset_path(
                 ev, visual.get("element_snapshot"), session_id_fallback=asset_session_id
             ),
+            "frames": {
+                label: _persisted_visual_asset_path(ev, path, session_id_fallback=asset_session_id)
+                for label, path in (visual.get("frames") or {}).items()
+                if path and isinstance(path, str)
+            },
+            "default_frame_label": "before_near",
         },
     }
     if is_scroll:

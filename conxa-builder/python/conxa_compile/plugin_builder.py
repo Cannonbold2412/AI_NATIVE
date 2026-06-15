@@ -35,6 +35,7 @@ from conxa_compile.compiler.action_policy import RECOVERY_ACTION_TYPES
 from conxa_compile.editor.action_registry import is_marker_action, is_supported_action, normalize_action_kind
 from conxa_compile.editor.assets import resolve_skill_asset
 from conxa_compile.llm.anchor_vision_llm import _apply_bbox_highlight
+from conxa_core.sanitize import dumps_safe, scrub_text
 from conxa_core.storage.plugin_store import get_plugin, set_build
 from conxa_core.storage.json_store import read_skill
 
@@ -776,10 +777,10 @@ def _build_workflow_from_saved_skill(
         source_session_id=source_session_id,
     )
     recovery = _build_saved_skill_recovery(source_steps, step_ids, visuals_dir)
-    (skill_dir / "execution.json").write_text(json.dumps(execution_steps, indent=2, ensure_ascii=False), encoding="utf-8")
-    (skill_dir / "recovery.json").write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
-    (skill_dir / "input.json").write_text(json.dumps({"inputs": inputs}, indent=2, ensure_ascii=False), encoding="utf-8")
-    (skill_dir / "SKILL.md").write_text(_render_saved_skill_markdown(title, inputs, execution_steps), encoding="utf-8")
+    (skill_dir / "execution.json").write_text(dumps_safe(execution_steps, indent=2, ensure_ascii=False), encoding="utf-8")
+    (skill_dir / "recovery.json").write_text(dumps_safe(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
+    (skill_dir / "input.json").write_text(dumps_safe({"inputs": inputs}, indent=2, ensure_ascii=False), encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text(scrub_text(_render_saved_skill_markdown(title, inputs, execution_steps)), encoding="utf-8")
 
 
 # ─────────────────────────────────────────────────
@@ -897,7 +898,7 @@ def _write_skill_packs_format(
             "checksum":         checksums,
         }
         (dest_dir / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+            dumps_safe(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
         )
         written_slugs.append(slug)
 
@@ -943,7 +944,7 @@ def _write_skill_packs_format(
     }
 
     (skill_packs / "pack.json").write_text(
-        json.dumps(pack, indent=2, ensure_ascii=False), encoding="utf-8"
+        dumps_safe(pack, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
 
@@ -1217,7 +1218,7 @@ def build_plugin(
     if repository_url:
         plugin_config["source"] = {"kind": "git+https", "repository_url": repository_url}
     (bundle_root / "plugin.json").write_text(
-        json.dumps(plugin_config, indent=2, ensure_ascii=False), encoding="utf-8"
+        dumps_safe(plugin_config, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     _log("Written plugin.json", skills=skill_slugs, package_id=package_id, visibility=visibility)
 
