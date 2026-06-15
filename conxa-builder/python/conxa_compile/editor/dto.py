@@ -13,6 +13,21 @@ class StepFlags(BaseModel):
     generic_intent: bool = False
 
 
+class FrameDTO(BaseModel):
+    label: str
+    offset_ms: int
+    url: str | None = None
+
+
+_FRAME_OFFSETS: dict[str, int] = {
+    "before_far": -500,
+    "before_near": -250,
+    "at": 0,
+    "after_near": 250,
+    "after_far": 500,
+}
+
+
 class StepScreenshotDTO(BaseModel):
     """Resolved asset URLs + geometry for bbox overlay in the client."""
 
@@ -22,6 +37,10 @@ class StepScreenshotDTO(BaseModel):
     bbox: dict[str, Any] = Field(default_factory=dict)
     viewport: str = ""
     scroll_position: str = ""
+    # Video frames for this step (5 entries, ordered by offset_ms).
+    frames: list[FrameDTO] = Field(default_factory=list)
+    # Label of the currently-applied representative frame.
+    default_frame_label: str | None = None
 
 
 class StepEditorDTO(BaseModel):

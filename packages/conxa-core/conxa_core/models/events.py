@@ -74,7 +74,7 @@ class AnchorRelation(BaseModel):
     relation: Literal["below", "above", "inside", "near"]
 
 
-_REQUIRED_FRAME_KEYS = {"before_far", "before_near", "after_near", "after_far"}
+_REQUIRED_FRAME_KEYS = {"before_far", "before_near", "at", "after_near", "after_far"}
 
 
 class VisualFeatures(BaseModel):
@@ -85,8 +85,9 @@ class VisualFeatures(BaseModel):
     scroll_position: str
     # Milliseconds since video recording started. Required for all non-auth events.
     timestamp_ms: int
-    # Extracted video frames at T-500ms, T-100ms, T+100ms, T+500ms (relative paths).
+    # Extracted video frames at T-500ms, T-250ms, T+0ms, T+250ms, T+500ms (relative paths).
     # Empty while recording; populated by the shutdown frame extractor.
+    # full_screenshot is set to frames["before_near"] (T-250ms) as the default representative.
     frames: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
