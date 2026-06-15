@@ -1,0 +1,53 @@
+```
+{{ action_history }}
+```
+{% if recent_dialog_messages_str %}
+Browser alert messages raised during the previous step (the agent auto-accepted each one). Use these as additional context: if a message indicates a validation error or that the previous action was rejected, change the value, its format, or the target element before retrying — do NOT retry the same INPUT_TEXT with the same text on the same field. Treat purely informational messages (e.g. "Saved successfully") as confirmation, not as a signal to change anything.
+```
+{{ recent_dialog_messages_str }}
+```
+{% endif %}
+{% if complete_criterion %}
+Complete criterion:
+```
+{{ complete_criterion }}
+```{% endif %}
+
+User goal:
+```
+{{ navigation_goal }}
+```
+{% if error_code_mapping_str %}
+Use the error codes and their descriptions to surface user-defined errors. Do not return any error that's not defined by the user. User defined errors:
+```
+{{ error_code_mapping_str }}
+```{% endif %}
+{% if data_extraction_goal %}
+User Data Extraction Goal:
+```
+{{ data_extraction_goal }}
+```
+{% endif %}
+
+User details:
+```
+{{ navigation_payload_str }}
+```
+
+{% if open_tabs_context %}
+Open browser tabs ({% if show_switch_tab_action %}use SWITCH_TAB with the tab's number to make a different tab active, and CLOSE_PAGE closes the tab marked [current]{% else %}CLOSE_PAGE always closes the tab marked [current] — other tabs are shown for context only{% endif %}):
+```
+{{ open_tabs_context }}
+```
+{% endif %}
+Clickable elements from `{{ current_url }}`:
+```
+{{ elements }}
+```
+
+The URL of the page you're on right now is `{{ current_url }}`.
+
+Current datetime, ISO format:
+```
+{{ local_datetime }}
+```

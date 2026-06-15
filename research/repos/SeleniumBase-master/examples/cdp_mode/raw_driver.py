@@ -1,0 +1,11 @@
+import atexit
+from seleniumbase import Driver
+
+driver = Driver(uc=True, guest=True)
+atexit.register(driver.quit)
+driver.activate_cdp_mode()
+driver.open("www.planetminecraft.com/account")
+driver.sleep(3)
+driver.solve_captcha()
+driver.wait_for_element_absent("input[disabled]")
+driver.sleep(2)

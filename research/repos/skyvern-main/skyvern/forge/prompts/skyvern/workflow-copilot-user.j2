@@ -1,0 +1,86 @@
+CURRENT WORKFLOW YAML:
+
+{% if workflow_yaml %}
+The user's current workflow definition is:
+
+```
+{{ workflow_yaml }}
+```
+{% else %}
+The user is starting with an empty workflow.
+{% endif %}
+
+{% if workflow_summary is defined and workflow_summary %}
+Workflow block summary:
+
+```
+{{ workflow_summary }}
+```
+
+Use this summary as a block-label index, then inspect the full workflow definition above for exact block details.
+{% endif %}
+
+{% if user_workflow_change_summary is defined and user_workflow_change_summary %}
+USER WORKFLOW CHANGES SINCE LAST COPILOT TURN:
+
+```
+{{ user_workflow_change_summary }}
+```
+{% endif %}
+
+PREVIOUS CONTEXT:
+
+{% if chat_history %}
+Recent conversation history:
+
+```
+{{ chat_history }}
+```
+{% endif %}
+
+{% if global_llm_context %}
+Overall goal (long-term memory):
+
+```
+{{ global_llm_context }}
+```
+{% endif %}
+
+{% if not chat_history and not global_llm_context %}
+No previous context available.
+{% endif %}
+
+{% if request_policy_summary is defined and request_policy_summary %}
+REQUEST POLICY: {{ request_policy_summary }}
+Follow this policy. If `allow_run_blocks` is false, do not call block-running tools. If `resolved_credentials` are present, use those `credential_id` values.
+{% endif %}
+DEBUGGER RUN INFORMATION:
+
+{% if debug_run_info %}
+The user has run the workflow in the debugger. Here's the most recent block execution information:
+
+```
+{{ debug_run_info }}
+```
+
+Use this information to help diagnose issues, suggest fixes, or explain what might be going wrong.
+If there's a failure, analyze the failure reason and visible elements to provide specific guidance.
+
+{% else %}
+No debugger run information available. The workflow hasn't been run yet, or no run data is accessible.
+{% endif %}
+
+{% if repeated_reply_warning is defined and repeated_reply_warning %}
+REPEATED REPLY WARNING:
+
+```
+{{ repeated_reply_warning }}
+```
+{% endif %}
+USER MESSAGE:
+
+The user says:
+
+```
+{{ user_message }}
+```

@@ -1,0 +1,454 @@
+import logging
+import re
+import sys
+from pathlib import Path
+from types import TracebackType
+
+import structlog
+from structlog.typing import EventDict
+
+from skyvern._version import __version__
+from skyvern.config import settings
+from skyvern.forge.sdk.core import skyvern_context
+
+# Bearer JWTs occasionally leak into log messages via WebSocket connection
+# URLs that pass `?token=Bearer%20<jwt>` as a query string. Redact before
+# anything ships to Datadog. Matches both raw and URL-encoded forms.
+_BEARER_TOKEN_RE = re.compile(r"(?i)(token=)(?:Bearer(?:%20|\s+))?[A-Za-z0-9._%-]+")
+
+LOGGING_LEVEL_MAP: dict[str, int] = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
+
+# Resolved once at setup time and injected into every log event.
+_entrypoint: str = "unknown"
+
+
+def _get_entrypoint() -> str:
+    """Derive a human-readable entrypoint name for the current process.
+
+    For ``python -m skyvern.forge`` → ``skyvern.forge``
+    For ``python scripts/take_screenshot_worker.py`` → ``take_screenshot_worker``
+    """
+    # For -m invocations, __spec__ gives the clean module name.
+    main_mod = sys.modules.get("__main__")
+    spec = getattr(main_mod, "__spec__", None) if main_mod else None
+    spec_name = getattr(spec, "name", None) if spec else None
+    if spec_name and spec_name != "__main__":
+        if spec_name.endswith(".__main__"):
+            spec_name = spec_name[: -len(".__main__")]
+        return spec_name
+
+    # For direct script / uvicorn-reload invocations, use sys.argv[0].
+    if sys.argv and sys.argv[0] not in ("-c", "-m"):
+        argv0 = Path(sys.argv[0])
+        # Handle __main__.py paths (e.g. /path/to/skyvern/forge/__main__.py → skyvern.forge)
+        if argv0.name == "__main__.py":
+            # Walk up through Python packages (directories with __init__.py)
+            parts: list[str] = []
+            current = argv0.parent
+            while (current / "__init__.py").exists():
+                parts.append(current.name)
+                current = current.parent
+            if parts:
+                return ".".join(reversed(parts))
+            # Namespace package (no __init__.py) — use the directory name
+            return argv0.parent.name
+        return argv0.stem
+
+    return "unknown"
+
+
+def _add_entrypoint(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
+    """Inject the process entrypoint into every log event (runs for both JSON and console)."""
+    event_dict["entrypoint"] = _entrypoint
+    return event_dict
+
+
+def add_kv_pairs_to_msg(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
+    """
+    A custom processor to add key-value pairs to the 'msg' field.
+    """
+    # Add context to the log
+    context = skyvern_context.current()
+    if context:
+        if context.request_id:
+            event_dict["request_id"] = context.request_id
+        if context.organization_id:
+            event_dict["organization_id"] = context.organization_id
+        if context.organization_name:
+            event_dict["organization_name"] = context.organization_name
+        if context.step_id:
+            event_dict["step_id"] = context.step_id
+        if context.task_id:
+            event_dict["task_id"] = context.task_id
+        if context.run_id:
+            event_dict["run_id"] = context.run_id
+        if context.workflow_id:
+            event_dict["workflow_id"] = context.workflow_id
+        if context.workflow_run_id:
+            event_dict["workflow_run_id"] = context.workflow_run_id
+        if context.workflow_permanent_id:
+            event_dict["workflow_permanent_id"] = context.workflow_permanent_id
+        if context.task_v2_id:
+            event_dict["task_v2_id"] = context.task_v2_id
+        if context.browser_session_id:
+            event_dict["browser_session_id"] = context.browser_session_id
+        if context.browser_container_ip:
+            event_dict["browser_container_ip"] = context.browser_container_ip
+        if context.browser_container_task_arn:
+            event_dict["browser_container_task_arn"] = context.browser_container_task_arn
+
+    # Add process-level context to the log
+    event_dict["env"] = settings.ENV
+    event_dict["version"] = __version__
+
+    if method_name not in ["info", "warning", "error", "critical", "exception"]:
+        # Only modify the log for these log levels
+        return event_dict
+
+    # Assuming 'event' or 'msg' is the field to update
+    msg_field = event_dict.get("msg", "")
+
+    # Add key-value pairs
+    kv_pairs = {k: v for k, v in event_dict.items() if k not in ["msg", "timestamp", "level"]}
+    if kv_pairs:
+        additional_info = ", ".join(f"{k}={v}" for k, v in kv_pairs.items())
+        msg_field += f" | {additional_info}"
+
+    event_dict["msg"] = msg_field
+
+    return event_dict
+
+
+def redact_bearer_tokens(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
+    """Redact Bearer JWTs from any string value in the event dict.
+
+    Defense-in-depth for log lines that interpolate URLs containing
+    `?token=Bearer%20<jwt>` (e.g. WebSocket connection URLs).
+    """
+    for key, value in list(event_dict.items()):
+        if isinstance(value, str) and "token=" in value:
+            event_dict[key] = _BEARER_TOKEN_RE.sub(r"\1<redacted>", value)
+    return event_dict
+
+
+def compact_action_objects(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
+    """Compact verbose Action / ActionResult kwargs to a few key fields.
+
+    LOG.info(..., action=action, ...) was emitting ~3 KB per line because the
+    Action dataclass dumps 25+ attributes including LLM-generated reasoning /
+    intention / response strings. Full action data is persisted to the DB and
+    queryable there; logs only need enough to correlate.
+    """
+    action = event_dict.get("action")
+    if action is not None and not isinstance(action, (str, int, float, bool, dict, list, type(None))):
+        try:
+            event_dict["action"] = {
+                "id": getattr(action, "action_id", None),
+                "type": str(getattr(action, "action_type", type(action).__name__)),
+                "element_id": getattr(action, "element_id", None),
+            }
+        except Exception:
+            pass
+
+    action_result = event_dict.get("action_result")
+    if isinstance(action_result, list) and action_result:
+        try:
+            event_dict["action_result"] = {
+                "count": len(action_result),
+                "success": all(getattr(r, "success", False) for r in action_result),
+            }
+        except Exception:
+            pass
+
+    return event_dict
+
+
+def skyvern_logs_processor(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
+    """
+    A custom processor to add skyvern logs to the context
+    """
+    if method_name not in ["info", "warning", "error", "critical", "exception"]:
+        return event_dict
+
+    context = skyvern_context.current()
+    if context:
+        log_entry = dict(event_dict)
+        context.log.append(log_entry)
+
+    return event_dict
+
+
+def add_filename_section(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
+    """
+    Add a fixed-width, bracketed filename:lineno section after the log level for console logs.
+    """
+    filename = event_dict.get("filename", "")
+    lineno = event_dict.get("lineno", "")
+    padded = f"[{filename:<30}:{lineno:<4}]" if filename else "[unknown        ]"
+    event_dict["file"] = padded
+    event_dict.pop("filename", None)
+    event_dict.pop("lineno", None)
+    return event_dict
+
+
+class CustomConsoleRenderer(structlog.dev.ConsoleRenderer):
+    """
+    Show the bracketed filename:lineno section after the log level for console logs, and
+    colorize it.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(sort_keys=False)
+
+    def __call__(self, logger: logging.Logger, name: str, event_dict: EventDict) -> str:
+        file_section = event_dict.pop("file", "")
+        file_section_colored = f"\x1b[90m{file_section}\x1b[0m" if file_section else ""
+        rendered = super().__call__(logger, name, event_dict)
+        first_bracket = rendered.find("]")
+
+        if first_bracket != -1:
+            return rendered[: first_bracket + 1] + f" {file_section_colored}" + rendered[first_bracket + 1 :]
+        else:
+            return f"{file_section_colored} {rendered}"
+
+
+def add_error_processor(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
+    """
+    A custom processor extending error logs with additional info
+    """
+    exc_info = event_dict.get("exc_info")
+
+    if exc_info:
+        if exc_info is True:
+            exc_info = sys.exc_info()
+
+        if isinstance(exc_info, tuple) and len(exc_info) >= 2:
+            exc_type = exc_info[0]
+            exc_traceback: TracebackType | None = exc_info[2] if len(exc_info) >= 3 else None
+
+            if exc_type is not None:
+                # Get the fully qualified exception name (module.ClassName)
+                error_type = (
+                    f"{exc_type.__module__}.{exc_type.__name__}"
+                    if hasattr(exc_type, "__module__")
+                    else exc_type.__name__
+                )
+                event_dict["error_type"] = error_type
+
+                # Categorize the exception
+                category = _categorize_exception(exc_type, exc_type.__name__)
+                event_dict["error_category"] = category
+
+                # Generate exception hash from stack trace (stable identifier)
+                if exc_traceback is not None:
+                    exc_hash = _generate_exception_hash(exc_type, exc_traceback)
+                    event_dict["exception_hash"] = exc_hash
+
+    return event_dict
+
+
+def _generate_exception_hash(exc_type: type, tb: TracebackType) -> str:
+    """
+    Generate a stable hash for an exception based on:
+    - Exception type
+    - Stack trace (filename, line number, function name)
+
+    Excludes dynamic data like error messages to ensure the same
+    error from the same location always produces the same hash.
+    """
+    import hashlib  # noqa: PLC0415
+
+    hasher = hashlib.sha256()
+
+    hasher.update(f"{exc_type.__module__}.{exc_type.__name__}".encode())
+
+    current_tb: TracebackType | None = tb
+    while current_tb is not None:
+        frame = current_tb.tb_frame
+        code = frame.f_code
+
+        filename = Path(code.co_filename).name
+        lineno = current_tb.tb_lineno
+        func_name = code.co_name
+        hasher.update(f"{filename}:{lineno}:{func_name}".encode())
+
+        current_tb = current_tb.tb_next
+
+    return hasher.hexdigest()[:16]
+
+
+def _categorize_exception(exc_type: type, exc_name: str) -> str:
+    """
+    Categorize an exception into TRANSIENT, BUG, or ERROR.
+
+    TRANSIENT: Network/IO errors that might succeed on retry
+    BUG: Programming errors indicating bugs
+    ERROR: Everything else
+    """
+    # Check if it's a subclass of known exception types
+    # TRANSIENT - IO and network related errors
+    transient_exceptions = (
+        IOError,
+        OSError,
+        ConnectionError,
+        TimeoutError,
+        ConnectionRefusedError,
+        ConnectionAbortedError,
+        ConnectionResetError,
+        BrokenPipeError,
+    )
+
+    # BUG - Programming errors that indicate bugs
+    bug_exceptions = (
+        ZeroDivisionError,
+        AttributeError,
+        TypeError,
+        KeyError,
+        IndexError,
+        NameError,
+        AssertionError,
+        NotImplementedError,
+        RecursionError,
+        UnboundLocalError,
+        IndentationError,
+        SyntaxError,
+    )
+
+    # Check for common HTTP/network library exceptions by name
+    # (to avoid import dependencies)
+    transient_patterns = [
+        "HTTPError",
+        "RequestException",
+        "Timeout",
+        "ConnectionError",
+        "ConnectTimeout",
+        "ReadTimeout",
+        "ProxyError",
+        "SSLError",
+        "ChunkedEncodingError",
+        "ContentDecodingError",
+        "StreamConsumedError",
+        "RetryError",
+        "MaxRetryError",
+        "URLError",
+        "ProtocolError",
+    ]
+
+    # Check if exception is a subclass of transient exceptions
+    try:
+        if issubclass(exc_type, transient_exceptions):
+            return "TRANSIENT"
+    except TypeError:
+        pass
+
+    # Check if exception is a subclass of bug exceptions
+    try:
+        if issubclass(exc_type, bug_exceptions):
+            return "BUG"
+    except TypeError:
+        pass
+
+    # Check exception name against patterns
+    for pattern in transient_patterns:
+        if pattern in exc_name:
+            return "TRANSIENT"
+
+    # Default to ERROR for everything else
+    return "ERROR"
+
+
+def setup_logger() -> None:
+    """
+    Setup the logger with the specified format
+    """
+    global _entrypoint  # noqa: PLW0603
+    _entrypoint = _get_entrypoint()
+
+    # logging.config.dictConfig(logging_config)
+    renderer = structlog.processors.JSONRenderer() if settings.JSON_LOGGING else CustomConsoleRenderer()
+    additional_processors = (
+        [
+            redact_bearer_tokens,
+            compact_action_objects,
+            structlog.processors.EventRenamer("msg"),
+            add_kv_pairs_to_msg,
+            structlog.processors.CallsiteParameterAdder(
+                {
+                    structlog.processors.CallsiteParameter.PATHNAME,
+                    structlog.processors.CallsiteParameter.FILENAME,
+                    structlog.processors.CallsiteParameter.MODULE,
+                    structlog.processors.CallsiteParameter.FUNC_NAME,
+                    structlog.processors.CallsiteParameter.LINENO,
+                }
+            ),
+        ]
+        if settings.JSON_LOGGING
+        else [
+            redact_bearer_tokens,
+            compact_action_objects,
+            structlog.processors.CallsiteParameterAdder(
+                {
+                    structlog.processors.CallsiteParameter.FILENAME,
+                    structlog.processors.CallsiteParameter.LINENO,
+                }
+            ),
+            add_filename_section,
+        ]
+    )
+    LOG_LEVEL_VAL = LOGGING_LEVEL_MAP.get(settings.LOG_LEVEL, logging.INFO)
+
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(LOG_LEVEL_VAL),
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            _add_entrypoint,
+            add_error_processor,
+            structlog.processors.format_exc_info,
+        ]
+        + additional_processors
+        + [skyvern_logs_processor, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
+    )
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.TimeStamper(fmt="iso"),
+                renderer,
+            ]
+        )
+    )
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+    # Root at WARNING so third-party loggers (temporalio, grpc, litellm, …)
+    # only surface warnings and errors.  Our packages get the configured level.
+    root_logger.setLevel(logging.WARNING)
+    for name in ("skyvern", "cloud", "workers", "scripts", "browser_controller"):
+        logging.getLogger(name).setLevel(LOG_LEVEL_VAL)
+
+    # uvicorn calls logging.config.dictConfig(LOGGING_CONFIG) during its own
+    # startup, which RESETS the disabled flag on these loggers back to False.
+    # setLevel() survives because uvicorn's default config sets level=INFO,
+    # which is below WARNING/CRITICAL — our higher levels stay in effect when
+    # __main__.py also passes a no-op log_config to uvicorn.run().
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.CRITICAL)
+
+    # Suppress noisy websockets library INFO logs ("connection open", "connection closed")
+    # These are high-volume and not useful for debugging
+    logging.getLogger("websockets").setLevel(logging.WARNING)
+    logging.getLogger("websockets.server").setLevel(logging.WARNING)
+    logging.getLogger("websockets.client").setLevel(logging.WARNING)
+    logging.getLogger("websockets.legacy").setLevel(logging.WARNING)
+    logging.getLogger("websockets.legacy.server").setLevel(logging.WARNING)

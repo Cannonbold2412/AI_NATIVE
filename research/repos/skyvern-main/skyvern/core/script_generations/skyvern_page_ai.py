@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+from skyvern.config import settings
+
+# Sentinel for the optional ``system_prompt`` parameter on ``ai_extract``.
+# Distinguishes "caller omitted the argument" (resolve from workflow context,
+# honoring the current block's ``ignore_workflow_system_prompt`` flag) from
+# "caller passed None" (opt out, send no system prompt).
+SYSTEM_PROMPT_UNSET: Any = object()
+
+
+class SkyvernPageAi(Protocol):
+    """Protocol defining the interface for AI-powered page interactions."""
+
+    async def ai_click(
+        self,
+        selector: str | None,
+        intention: str,
+        data: str | dict[str, Any] | None = None,
+        timeout: float = settings.BROWSER_ACTION_TIMEOUT_MS,
+        failed_selector: str | None = None,
+        block_label: str | None = None,
+        recoverable_marker_id: int | None = None,
+        v3_parent_episode_id: str | None = None,
+    ) -> str | None:
+        """Click an element using AI to locate it based on intention.
+
+        ``v3_parent_episode_id`` is set on the recursive fall-through call when
+        the v3 mid-run agent gave up (Class B). It tells the implementation to
+        update the existing fallback episode rather than create a duplicate.
+        """
+        ...
+
+    async def ai_input_text(
+        self,
+        selector: str | None,
+        value: str | None,
+        intention: str,
+        data: str | dict[str, Any] | None = None,
+        totp_identifier: str | None = None,
+        totp_url: str | None = None,
+        timeout: float = settings.BROWSER_ACTION_TIMEOUT_MS,
+        failed_selector: str | None = None,
+        block_label: str | None = None,
+        recoverable_marker_id: int | None = None,
+        v3_parent_episode_id: str | None = None,
+    ) -> str:
+        """Input text into an element using AI to determine the value.
+
+        See ``ai_click`` for the ``v3_parent_episode_id`` contract.
+        """
+        ...
+
+    async def ai_upload_file(
+        self,
+        selector: str | None,
+        files: str | None,
+        intention: str,
+        data: str | dict[str, Any] | None = None,
+        timeout: float = settings.BROWSER_ACTION_TIMEOUT_MS,
+        public_url_only: bool = False,
+    ) -> str:
+        """Upload a file using AI to process the file URL."""
+        ...
+
+    async def ai_select_option(
+        self,
+        selector: str | None,
+        value: str | None,
+        intention: str,
+        data: str | dict[str, Any] | None = None,
+        timeout: float = settings.BROWSER_ACTION_TIMEOUT_MS,
+    ) -> str:
+        """Select an option from a dropdown using AI."""
+        ...
+
+    async def ai_extract(
+        self,
+        prompt: str,
+        schema: dict[str, Any] | list | str | None = None,
+        error_code_mapping: dict[str, str] | None = None,
+        intention: str | None = None,
+        data: str | dict[str, Any] | None = None,
+        skip_refresh: bool = False,
+        include_extracted_text: bool = True,
+        system_prompt: str | None | Any = SYSTEM_PROMPT_UNSET,
+    ) -> dict[str, Any] | list | str | None:
+        """Extract information from the page using AI."""
+        ...
+
+    async def ai_validate(
+        self,
+        prompt: str,
+        model: dict[str, Any] | None = None,
+    ) -> bool:
+        """Validate the current page state using AI based on the given criteria."""
+        ...
+
+    async def ai_act(
+        self,
+        prompt: str,
+        skip_refresh: bool = False,
+        use_economy_tree: bool = False,
+    ) -> None:
+        """Perform an action on the page using AI based on a natural language prompt."""
+        ...
+
+    async def ai_locate_element(
+        self,
+        prompt: str,
+    ) -> str | None:
+        """Locate an element on the page using AI and return its XPath selector."""
+        ...
+
+    async def ai_classify(
+        self,
+        options: dict[str, str],
+        url_patterns: dict[str, str] | None = None,
+        text_patterns: dict[str, str | list[str]] | None = None,
+    ) -> str:
+        """Classify the current page state against named options using a tiered cascade.
+
+        Tier 0: URL pattern matching (FREE)
+        Tier 1: Text presence check in extracted text (FREE, requires scrape)
+        Tier 2: Mini-LLM classification (~$0.001)
+
+        Returns the matching option key or "UNKNOWN".
+        """
+        ...
+
+    async def ai_element_fallback(
+        self,
+        navigation_goal: str,
+        max_steps: int = 5,
+        validate_first: bool = False,
+    ) -> None:
+        """Activate the AI agent from the CURRENT page position to achieve a navigation goal.
+
+        This is a mid-block fallback that picks up from the current page state
+        instead of re-running the entire block from scratch.
+
+        ``validate_first=True`` re-enables the legacy pre-act validate on
+        iteration 0 for defensive callers that may invoke this when the page
+        already satisfies the goal.
+        """
+        ...
+
+    async def ai_prompt(
+        self,
+        prompt: str,
+        schema: dict[str, Any] | None = None,
+        model: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | list | str | None:
+        """Send a prompt to the LLM and get a response based on the provided schema."""
+        ...

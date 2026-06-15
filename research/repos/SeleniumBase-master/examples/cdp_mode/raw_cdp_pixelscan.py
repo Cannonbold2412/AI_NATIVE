@@ -1,0 +1,16 @@
+from seleniumbase import sb_cdp
+
+sb = sb_cdp.Chrome(guest=True, ad_block=True)
+sb.goto("https://pixelscan.net/fingerprint-check")
+sb.sleep(1)
+sb.wait_for_element("pxlscn-dynamic-ad")
+sb.sleep(0.5)
+sb.remove_elements("pxlscn-dynamic-ad")
+sb.sleep(1)
+sb.assert_text("No automated behavior", "pxlscn-bot-detection")
+sb.wait_for_element("span.status-success")
+sb.assert_text("No masking detected", "pxlscn-fingerprint-masking")
+sb.highlight("span.status-success")
+sb.highlight("pxlscn-fingerprint-masking p")
+sb.highlight("pxlscn-bot-detection p")
+print("Bot Not Detected")

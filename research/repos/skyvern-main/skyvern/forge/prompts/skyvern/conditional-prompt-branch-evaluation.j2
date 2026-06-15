@@ -1,0 +1,23 @@
+Evaluate if the following condition(s) are TRUE or FALSE.
+
+CRITICAL RULE: If all the data needed to evaluate a condition is already present in the condition text, you MUST evaluate it using ONLY the condition text. Do NOT reference the page content. Only use the page content (screenshot/HTML) when the condition explicitly asks about what is on the page (e.g., "the date in the page", "the column under payments section").
+
+Each condition is ONE expression. If a condition contains "and"/"or" or repeated "if" clauses (e.g., "If A and if B"), evaluate the whole expression using logical operators and return ONE result. Do NOT split a condition into multiple sub-results. You MUST return exactly {{ conditions|length }} {{ 'result' if conditions|length == 1 else 'results' }}, one per numbered condition, in the same order.
+
+{% if conditions|length == 1 %}
+Condition: {{ conditions[0] }}
+{% else %}
+{% for condition in conditions %}
+Condition {{ loop.index }}: {{ condition }}
+{% endfor %}
+{% endif %}
+{% if context_json %}
+
+Use this context to understand variable values:
+{{ context_json }}
+{% endif %}
+
+Return exactly {{ conditions|length }} evaluation object{{ '' if conditions|length == 1 else 's' }} — one per numbered condition, covering every condition_index from 1 to {{ conditions|length }} exactly once. Do not merge, skip, or add conditions. For each condition, provide IN THIS ORDER:
+1. "condition_index": The 1-based number of the condition this object evaluates (Condition 1 -> 1, Condition 2 -> 2, ...).
+2. "reasoning": Explain your reasoning for evaluating the condition. Compare the actual values.
+3. "result": The boolean result (true/false) based on the condition.

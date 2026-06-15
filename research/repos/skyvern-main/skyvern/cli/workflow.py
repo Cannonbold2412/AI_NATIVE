@@ -1,0 +1,370 @@
+"""Workflow-related CLI commands with MCP-parity flags and output."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import typer
+
+from skyvern._cli_bootstrap import prepare_cli_runtime
+from skyvern.utils.env_paths import EnvIntent
+
+from .commands._output import resolve_inline_or_file, run_tool
+
+workflow_app = typer.Typer(help="Manage Skyvern workflows.", no_args_is_help=True)
+
+
+async def tool_workflow_list(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_list  # noqa: PLC0415
+
+    return await skyvern_workflow_list(**kwargs)
+
+
+async def tool_workflow_get(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_get  # noqa: PLC0415
+
+    return await skyvern_workflow_get(**kwargs)
+
+
+async def tool_workflow_run_list(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_run_list  # noqa: PLC0415
+
+    return await skyvern_workflow_run_list(**kwargs)
+
+
+async def tool_workflow_create(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_create  # noqa: PLC0415
+
+    return await skyvern_workflow_create(**kwargs)
+
+
+async def tool_workflow_update(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_update  # noqa: PLC0415
+
+    return await skyvern_workflow_update(**kwargs)
+
+
+async def tool_workflow_delete(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_delete  # noqa: PLC0415
+
+    return await skyvern_workflow_delete(**kwargs)
+
+
+async def tool_workflow_run(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_run  # noqa: PLC0415
+
+    return await skyvern_workflow_run(**kwargs)
+
+
+async def tool_workflow_status(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_status  # noqa: PLC0415
+
+    return await skyvern_workflow_status(**kwargs)
+
+
+async def tool_workflow_cancel(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_cancel  # noqa: PLC0415
+
+    return await skyvern_workflow_cancel(**kwargs)
+
+
+async def tool_workflow_retry(**kwargs: Any) -> dict[str, Any]:
+    from .mcp_tools.workflow import skyvern_workflow_retry  # noqa: PLC0415
+
+    return await skyvern_workflow_retry(**kwargs)
+
+
+@workflow_app.callback()
+def workflow_callback(
+    api_key: str | None = typer.Option(
+        None,
+        "--api-key",
+        help="Skyvern API key",
+        envvar="SKYVERN_API_KEY",
+    ),
+) -> None:
+    """Load workflow CLI environment and optional API key override."""
+    prepare_cli_runtime(intent=EnvIntent.CLOUD)
+    if api_key:
+        from skyvern.config import settings  # noqa: PLC0415
+
+        settings.SKYVERN_API_KEY = api_key
+
+
+@workflow_app.command("list")
+def workflow_list(
+    search: str | None = typer.Option(
+        None,
+        "--search",
+        help="Search across workflow titles, folder names, and parameter metadata.",
+    ),
+    page: int = typer.Option(1, "--page", min=1, help="Page number (1-based)."),
+    page_size: int = typer.Option(10, "--page-size", min=1, max=100, help="Results per page."),
+    only_workflows: bool = typer.Option(
+        False,
+        "--only-workflows",
+        help="Only return multi-step workflows (exclude saved tasks).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """List workflows."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool_workflow_list(
+            search=search,
+            page=page,
+            page_size=page_size,
+            only_workflows=only_workflows,
+        )
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check your API key and workflow list filters.",
+        action="skyvern_workflow_list",
+        telemetry_tool_name="skyvern_workflow_list",
+    )
+
+
+@workflow_app.command("get")
+def workflow_get(
+    workflow_id: str = typer.Option(..., "--id", help="Workflow permanent ID (wpid_...)."),
+    version: int | None = typer.Option(None, "--version", min=1, help="Specific version to retrieve."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Get a workflow definition by ID."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool_workflow_get(workflow_id=workflow_id, version=version)
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check your API key and workflow ID.",
+        action="skyvern_workflow_get",
+        telemetry_tool_name="skyvern_workflow_get",
+    )
+
+
+@workflow_app.command("runs")
+def workflow_runs(
+    workflow_id: str = typer.Option(..., "--id", help="Workflow permanent ID (wpid_...)."),
+    page: int = typer.Option(1, "--page", min=1, help="Page number (1-based)."),
+    page_size: int = typer.Option(10, "--page-size", min=1, max=100, help="Results per page."),
+    status: list[str] | None = typer.Option(None, "--status", help="Filter by workflow run status."),
+    search_key: str | None = typer.Option(None, "--search-key", help="Search run IDs, parameters, and headers."),
+    error_code: str | None = typer.Option(None, "--error-code", help="Filter by task error code."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """List runs for a workflow."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool_workflow_run_list(
+            workflow_id=workflow_id,
+            page=page,
+            page_size=page_size,
+            status=status,
+            search_key=search_key,
+            error_code=error_code,
+        )
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check your API key, workflow ID, and run filters.",
+        action="skyvern_workflow_run_list",
+        telemetry_tool_name="skyvern_workflow_run_list",
+    )
+
+
+@workflow_app.command("create")
+def workflow_create(
+    definition: str = typer.Option(
+        ...,
+        "--definition",
+        help="Workflow definition as YAML/JSON string or @file path.",
+    ),
+    definition_format: str = typer.Option(
+        "auto",
+        "--format",
+        help="Definition format: json, yaml, or auto.",
+    ),
+    folder_id: str | None = typer.Option(None, "--folder-id", help="Folder ID (fld_...) for the workflow."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Create a workflow."""
+
+    async def _run() -> dict[str, Any]:
+        resolved_definition = resolve_inline_or_file(definition, param_name="definition")
+        return await tool_workflow_create(
+            definition=definition if resolved_definition is None else resolved_definition,
+            format=definition_format,
+            folder_id=folder_id,
+        )
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check the workflow definition syntax.",
+        action="skyvern_workflow_create",
+        telemetry_tool_name="skyvern_workflow_create",
+    )
+
+
+@workflow_app.command("update")
+def workflow_update(
+    workflow_id: str = typer.Option(..., "--id", help="Workflow permanent ID (wpid_...)."),
+    definition: str = typer.Option(
+        ...,
+        "--definition",
+        help="Updated workflow definition as YAML/JSON string or @file path.",
+    ),
+    definition_format: str = typer.Option(
+        "auto",
+        "--format",
+        help="Definition format: json, yaml, or auto.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Update a workflow definition."""
+
+    async def _run() -> dict[str, Any]:
+        resolved_definition = resolve_inline_or_file(definition, param_name="definition")
+        return await tool_workflow_update(
+            workflow_id=workflow_id,
+            definition=definition if resolved_definition is None else resolved_definition,
+            format=definition_format,
+        )
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check the workflow ID and definition syntax.",
+        action="skyvern_workflow_update",
+        telemetry_tool_name="skyvern_workflow_update",
+    )
+
+
+@workflow_app.command("delete")
+def workflow_delete(
+    workflow_id: str = typer.Option(..., "--id", help="Workflow permanent ID (wpid_...)."),
+    force: bool = typer.Option(False, "--force", help="Confirm permanent deletion."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Delete a workflow."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool_workflow_delete(workflow_id=workflow_id, force=force)
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check the workflow ID and your permissions.",
+        action="skyvern_workflow_delete",
+        telemetry_tool_name="skyvern_workflow_delete",
+    )
+
+
+@workflow_app.command("run")
+def workflow_run(
+    workflow_id: str = typer.Option(..., "--id", help="Workflow permanent ID (wpid_...)."),
+    params: str | None = typer.Option(
+        None,
+        "--params",
+        "--parameters",
+        "-p",
+        help="Workflow parameters as JSON string or @file path.",
+    ),
+    session: str | None = typer.Option(None, "--session", help="Browser session ID (pbs_...) to reuse."),
+    webhook: str | None = typer.Option(None, "--webhook", help="Status webhook callback URL."),
+    proxy: str | None = typer.Option(None, "--proxy", help="Proxy location (e.g., RESIDENTIAL)."),
+    wait: bool = typer.Option(False, "--wait", help="Wait for workflow completion before returning."),
+    timeout: int = typer.Option(
+        300,
+        "--timeout",
+        min=10,
+        max=3600,
+        help="Max wait time in seconds when --wait is set.",
+    ),
+    run_with: str | None = typer.Option(None, "--run-with", help="Execution mode (e.g., 'code' for cached script)."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Run a workflow."""
+
+    async def _run() -> dict[str, Any]:
+        resolved_params = resolve_inline_or_file(params, param_name="params")
+        return await tool_workflow_run(
+            workflow_id=workflow_id,
+            parameters=resolved_params,
+            browser_session_id=session,
+            webhook_url=webhook,
+            proxy_location=proxy,
+            wait=wait,
+            timeout_seconds=timeout,
+            run_with=run_with,
+        )
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check the workflow ID and run parameters.",
+        action="skyvern_workflow_run",
+        telemetry_tool_name="skyvern_workflow_run",
+    )
+
+
+@workflow_app.command("status")
+def workflow_status(
+    run_id: str = typer.Option(..., "--run-id", help="Run ID (wr_... or tsk_v2_...)."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Get workflow run status."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool_workflow_status(run_id=run_id, verbosity="full")
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check the run ID and API key.",
+        action="skyvern_workflow_status",
+        telemetry_tool_name="skyvern_workflow_status",
+    )
+
+
+@workflow_app.command("cancel")
+def workflow_cancel(
+    run_id: str = typer.Option(..., "--run-id", help="Run ID (wr_... or tsk_v2_...)."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Cancel a workflow run."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool_workflow_cancel(run_id=run_id)
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check the run ID and API key.",
+        action="skyvern_workflow_cancel",
+        telemetry_tool_name="skyvern_workflow_cancel",
+    )
+
+
+@workflow_app.command("retry")
+def workflow_retry(
+    workflow_run_id: str = typer.Option(..., "--run-id", help="Workflow run ID to retry (wr_...)."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+) -> None:
+    """Retry a terminal workflow run."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool_workflow_retry(workflow_run_id=workflow_run_id)
+
+    run_tool(
+        _run,
+        json_output=json_output,
+        hint_on_exception="Check the workflow run ID and API key.",
+        action="skyvern_workflow_retry",
+        telemetry_tool_name="skyvern_workflow_retry",
+    )

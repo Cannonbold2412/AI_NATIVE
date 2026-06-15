@@ -1,0 +1,4817 @@
+import Dagre from "@dagrejs/dagre";
+import { type Node, Edge } from "@xyflow/react";
+import { nanoid } from "nanoid";
+
+import { TSON } from "@/util/tson";
+
+import {
+  WorkflowBlockType,
+  WorkflowBlockTypes,
+  WorkflowParameterTypes,
+  WorkflowParameterValueType,
+  BranchCriteriaTypes,
+  debuggableWorkflowBlockTypes,
+  type AWSSecretParameter,
+  type BranchCriteriaType,
+  type OutputParameter,
+  type Parameter,
+  type WorkflowApiResponse,
+  type WorkflowBlock,
+  type WorkflowSettings,
+  type ConditionalBlock,
+  type ForLoopBlock,
+  type WhileLoopBlock,
+  isNestedLoopWorkflowBlock,
+} from "../types/workflowTypes";
+import {
+  ActionBlockYAML,
+  BlockYAML,
+  CodeBlockYAML,
+  ConditionalBlockYAML,
+  DownloadToS3BlockYAML,
+  FileUrlParserBlockYAML,
+  ForLoopBlockYAML,
+  WhileLoopBlockYAML,
+  ParameterYAML,
+  SendEmailBlockYAML,
+  TaskBlockYAML,
+  TextPromptBlockYAML,
+  UploadToS3BlockYAML,
+  ValidationBlockYAML,
+  HumanInteractionBlockYAML,
+  NavigationBlockYAML,
+  WorkflowCreateYAMLRequest,
+  ExtractionBlockYAML,
+  LoginBlockYAML,
+  WaitBlockYAML,
+  FileDownloadBlockYAML,
+  PDFParserBlockYAML,
+  Taskv2BlockYAML,
+  URLBlockYAML,
+  FileUploadBlockYAML,
+  HttpRequestBlockYAML,
+  PrintPageBlockYAML,
+  WorkflowTriggerBlockYAML,
+  GoogleSheetsReadBlockYAML,
+  GoogleSheetsWriteBlockYAML,
+} from "../types/workflowYamlTypes";
+import {
+  EMAIL_BLOCK_SENDER,
+  REACT_FLOW_EDGE_Z_INDEX,
+  SMTP_HOST_AWS_KEY,
+  SMTP_HOST_PARAMETER_KEY,
+  SMTP_PASSWORD_AWS_KEY,
+  SMTP_PASSWORD_PARAMETER_KEY,
+  SMTP_PORT_AWS_KEY,
+  SMTP_PORT_PARAMETER_KEY,
+  SMTP_USERNAME_AWS_KEY,
+  SMTP_USERNAME_PARAMETER_KEY,
+} from "./constants";
+import { ParametersState } from "./types";
+import { AppNode, isWorkflowBlockNode, WorkflowBlockNode } from "./nodes";
+import { codeBlockNodeDefaultData } from "./nodes/CodeBlockNode/types";
+import { downloadNodeDefaultData } from "./nodes/DownloadNode/types";
+import {
+  isFileParserNode,
+  fileParserNodeDefaultData,
+} from "./nodes/FileParserNode/types";
+import {
+  cloneBranchConditions,
+  conditionalNodeDefaultData,
+  createDefaultBranchConditions,
+  ConditionalNode,
+  isConditionalNode,
+} from "./nodes/ConditionalNode/types";
+import {
+  isLoopNode,
+  LoopNode,
+  loopNodeDefaultData,
+} from "./nodes/LoopNode/types";
+import { NodeAdderNode } from "./nodes/NodeAdderNode/types";
+import { sendEmailNodeDefaultData } from "./nodes/SendEmailNode/types";
+import {
+  isStartNode,
+  isWorkflowStartNodeData,
+  StartNode,
+  StartNodeData,
+} from "./nodes/StartNode/types";
+import { isTaskNode, taskNodeDefaultData } from "./nodes/TaskNode/types";
+import {
+  isTextPromptNode,
+  textPromptNodeDefaultData,
+} from "./nodes/TextPromptNode/types";
+import { NodeBaseData } from "./nodes/types";
+import { uploadNodeDefaultData } from "./nodes/UploadNode/types";
+import {
+  isValidationNode,
+  validationNodeDefaultData,
+} from "./nodes/ValidationNode/types";
+import {
+  isHumanInteractionNode,
+  humanInteractionNodeDefaultData,
+} from "./nodes/HumanInteractionNode/types";
+import { actionNodeDefaultData, isActionNode } from "./nodes/ActionNode/types";
+import {
+  isNavigationNode,
+  navigationNodeDefaultData,
+  MAX_STEPS_DEFAULT,
+} from "./nodes/NavigationNode/types";
+import {
+  extractionNodeDefaultData,
+  isExtractionNode,
+} from "./nodes/ExtractionNode/types";
+import { isLoginNode, loginNodeDefaultData } from "./nodes/LoginNode/types";
+import { isWaitNode, waitNodeDefaultData } from "./nodes/WaitNode/types";
+import {
+  fileDownloadNodeDefaultData,
+  isFileDownloadNode,
+} from "./nodes/FileDownloadNode/types";
+import { ProxyLocation, RunEngine } from "@/api/types";
+import {
+  isPdfParserNode,
+  pdfParserNodeDefaultData,
+} from "./nodes/PDFParserNode/types";
+import { urlNodeDefaultData } from "./nodes/URLNode/types";
+import { fileUploadNodeDefaultData } from "./nodes/FileUploadNode/types";
+import {
+  httpRequestNodeDefaultData,
+  isHttpRequestNode,
+} from "./nodes/HttpRequestNode/types";
+import {
+  validateUrl,
+  validateJson,
+} from "./nodes/HttpRequestNode/httpValidation";
+import { printPageNodeDefaultData } from "./nodes/PrintPageNode/types";
+import { validateErrorCodeMapping } from "./validateErrorCodeMapping";
+import {
+  isWorkflowTriggerNode,
+  workflowTriggerNodeDefaultData,
+} from "./nodes/WorkflowTriggerNode/types";
+import {
+  googleSheetsReadNodeDefaultData,
+  isGoogleSheetsReadNode,
+} from "./nodes/GoogleSheetsReadNode/types";
+import { validateGoogleSheetsReadNode } from "./nodes/GoogleSheetsReadNode/validate";
+import {
+  googleSheetsWriteNodeDefaultData,
+  isGoogleSheetsWriteNode,
+} from "./nodes/GoogleSheetsWriteNode/types";
+import { validateGoogleSheetsWriteNode } from "./nodes/GoogleSheetsWriteNode/validate";
+import {
+  containsJinjaReference,
+  getAffectedBlocks,
+  removeJinjaReference,
+  replaceJinjaReference,
+  type AffectedBlock,
+} from "./jinjaReferences";
+
+/** If the trimmed expression is exactly one `{{ ... }}` wrapper, use `jinja2_template`; otherwise `prompt`. */
+export function inferBranchCriteriaTypeFromExpression(
+  expression: string,
+): BranchCriteriaType {
+  const stripped = expression.trim();
+  const openCount = (stripped.match(/\{\{/g) ?? []).length;
+  if (stripped.startsWith("{{") && stripped.endsWith("}}") && openCount === 1) {
+    return BranchCriteriaTypes.Jinja2Template;
+  }
+  return BranchCriteriaTypes.Prompt;
+}
+
+function buildWhileLoopBlockYAML(args: {
+  label: string;
+  continue_on_failure: boolean;
+  next_loop_on_failure: boolean;
+  next_block_label: string | null;
+  ignore_workflow_system_prompt: boolean;
+  loop_blocks: Array<BlockYAML>;
+  criteria_type: BranchCriteriaType;
+  expression: string;
+  description: string | null;
+}): WhileLoopBlockYAML {
+  return {
+    block_type: "while_loop",
+    label: args.label,
+    continue_on_failure: args.continue_on_failure,
+    next_loop_on_failure: args.next_loop_on_failure,
+    next_block_label: args.next_block_label,
+    ignore_workflow_system_prompt: args.ignore_workflow_system_prompt,
+    loop_blocks: args.loop_blocks,
+    condition: {
+      criteria_type: args.criteria_type,
+      expression: args.expression,
+      description: args.description,
+    },
+  };
+}
+
+function serializeLoopNodeWhileBranchToYAML(
+  node: LoopNode,
+  loopChildren: Array<BlockYAML>,
+  nextBlockLabel: string | null,
+): WhileLoopBlockYAML {
+  return buildWhileLoopBlockYAML({
+    label: node.data.label,
+    continue_on_failure: node.data.continueOnFailure,
+    next_loop_on_failure: node.data.nextLoopOnFailure ?? false,
+    next_block_label: nextBlockLabel,
+    ignore_workflow_system_prompt:
+      node.data.ignoreWorkflowSystemPrompt ?? false,
+    loop_blocks: loopChildren,
+    criteria_type: node.data.whileConditionCriteriaType,
+    expression: node.data.whileConditionExpression,
+    description: node.data.whileConditionDescription ?? null,
+  });
+}
+
+export const NEW_NODE_LABEL_PREFIX = "block_";
+
+type ConditionalEdgeData = {
+  conditionalNodeId?: string;
+  conditionalBranchId?: string;
+};
+
+function layoutUtil(
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+  options: Dagre.configUnion = {},
+  allNodes?: Array<AppNode>,
+  heightOverrides?: Map<string, number>,
+): { nodes: Array<AppNode>; edges: Array<Edge> } {
+  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "TB", ...options });
+
+  edges.forEach((edge) => g.setEdge(edge.source, edge.target));
+  nodes.forEach((node) => {
+    let width = measuredOr(node.measured?.width, DEFAULT_BLOCK_WIDTH);
+    let height =
+      heightOverrides?.get(node.id) ??
+      measuredOr(node.measured?.height, DEFAULT_BLOCK_HEIGHT);
+
+    if (
+      (node.type === "loop" || node.type === "conditional") &&
+      !node.measured?.width
+    ) {
+      width = getLoopNodeWidth(node, allNodes ?? nodes);
+      if (!heightOverrides?.has(node.id)) {
+        height = 300;
+      }
+    }
+
+    g.setNode(node.id, {
+      ...node,
+      width,
+      height,
+    });
+  });
+
+  Dagre.layout(g);
+
+  return {
+    nodes: nodes.map((node) => {
+      const dagreNode = g.node(node.id);
+      // Use the same dimensions that were fed to Dagre so center-to-topleft
+      // conversion is consistent with the layout.
+      const nodeWidth = dagreNode.width as number;
+      const nodeHeight = dagreNode.height as number;
+      const x = dagreNode.x - nodeWidth / 2;
+      const y = dagreNode.y - nodeHeight / 2;
+
+      return { ...node, position: { x, y } };
+    }),
+    edges,
+  };
+}
+
+// Returns descendants of `id` in topological order: a node's parent always
+// appears earlier in the array than the node itself. Callers that walk the
+// result and read parent state from a per-node map (see
+// applyDescendantCollapseVisibility / updateNodeAndDescendantsVisibility)
+// rely on this contract.
+export function descendants(nodes: Array<AppNode>, id: string): Array<AppNode> {
+  const children = nodes.filter((n) => n.parentId === id);
+  return children.concat(...children.map((c) => descendants(nodes, c.id)));
+}
+
+/**
+ * Updates visibility for a node and all its descendants.
+ * When hiding, hides everything in a single pass.
+ * When showing, processes top-down (parents before children) so that each
+ * node's visibility decision can read its parent conditional's already-resolved
+ * visibility. This is critical for deeply nested conditionals: a child should
+ * only be shown if its parent conditional is visible AND its branch is active.
+ */
+export function updateNodeAndDescendantsVisibility(
+  nodes: Array<AppNode>,
+  nodeId: string,
+  shouldHide: boolean,
+): Array<AppNode> {
+  const nodeDescendants = descendants(nodes, nodeId);
+  const descendantIds = new Set([nodeId, ...nodeDescendants.map((n) => n.id)]);
+
+  // When hiding, all descendants are hidden — single pass is fine
+  if (shouldHide) {
+    return nodes.map((node) => {
+      if (!descendantIds.has(node.id)) return node;
+      return { ...node, hidden: true };
+    });
+  }
+
+  // When showing, process top-down so parent visibility is resolved before
+  // children. descendants() returns in parent-first order (parents appear
+  // before their children in the array).
+  const result = [...nodes];
+  const indexById = new Map(result.map((n, i) => [n.id, i]));
+
+  // Show the root node
+  const rootIdx = indexById.get(nodeId);
+  if (rootIdx !== undefined) {
+    result[rootIdx] = { ...result[rootIdx]!, hidden: false };
+  }
+
+  // Process descendants in parent-first order, reading from `result`
+  // which reflects visibility decisions made for earlier (parent) nodes.
+  for (const desc of nodeDescendants) {
+    const idx = indexById.get(desc.id);
+    if (idx === undefined) continue;
+
+    const node = result[idx]!;
+
+    // Workflow block nodes inside a conditional: check parent conditional
+    if (isWorkflowBlockNode(node) && node.data.conditionalNodeId) {
+      const conditionalIdx = indexById.get(node.data.conditionalNodeId);
+      const conditionalNode =
+        conditionalIdx !== undefined ? result[conditionalIdx] : undefined;
+
+      if (conditionalNode && isWorkflowBlockNode(conditionalNode)) {
+        // If parent conditional is hidden, hide this node too
+        if (conditionalNode.hidden) {
+          result[idx] = { ...node, hidden: true };
+          continue;
+        }
+
+        const conditionalData = conditionalNode.data as {
+          activeBranchId?: string | null;
+        };
+        const activeBranchId = conditionalData.activeBranchId;
+        const shouldShow = node.data.conditionalBranchId === activeBranchId;
+        result[idx] = { ...node, hidden: !shouldShow };
+        continue;
+      }
+    }
+
+    // Non-workflow-block nodes (start, adder): inherit parent's visibility
+    if (node.parentId) {
+      const parentIdx = indexById.get(node.parentId);
+      const parentNode =
+        parentIdx !== undefined ? result[parentIdx] : undefined;
+      if (parentNode) {
+        result[idx] = { ...node, hidden: parentNode.hidden ?? false };
+        continue;
+      }
+    }
+
+    // Default: show the node
+    result[idx] = { ...node, hidden: false };
+  }
+
+  return result;
+}
+
+// w-[30rem] = 480px - the standard width for leaf block cards.
+const DEFAULT_BLOCK_WIDTH = 480;
+// Approximate rendered height of a typical leaf block card (header + one field + padding).
+const DEFAULT_BLOCK_HEIGHT = 200;
+
+function measuredOr(value: number | undefined, fallback: number): number {
+  return value && value > 0 ? value : fallback;
+}
+
+export function getLoopNodeWidth(node: AppNode, nodes: Array<AppNode>): number {
+  const maxNesting = maxNestingLevel(nodes);
+  const nestingLevel = getNestingLevel(node, nodes);
+  return 450 + (maxNesting - nestingLevel) * 50;
+}
+
+function maxNestingLevel(nodes: Array<AppNode>): number {
+  return Math.max(...nodes.map((node) => getNestingLevel(node, nodes)));
+}
+
+function getNestingLevel(node: AppNode, nodes: Array<AppNode>): number {
+  let level = 0;
+  let current = nodes.find((n) => n.id === node.parentId);
+  while (current) {
+    level++;
+    current = nodes.find((n) => n.id === current?.parentId);
+  }
+  return level;
+}
+
+// Extra margin to add when a block is being debugged and shows the status row
+const TARGETTED_BLOCK_EXTRA_MARGIN = 48;
+
+function layout(
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+  targettedBlockLabel?: string,
+): { nodes: Array<AppNode>; edges: Array<Edge> } {
+  // Computed heights for containers after laying out their children.
+  // Propagated to parent layouts so Dagre uses accurate heights instead
+  // of stale measured values from the previous render cycle.
+  const computedHeights = new Map<string, number>();
+
+  // Collect all container nodes (loops + conditionals), sorted deepest
+  // first so child containers are laid out before their parents.
+  const containerNodes = nodes.filter(
+    (node) =>
+      (node.type === "loop" || node.type === "conditional") && !node.hidden,
+  );
+  containerNodes.sort((a, b) => {
+    return getNestingLevel(b, nodes) - getNestingLevel(a, nodes);
+  });
+
+  const containerChildrenMap = new Map<string, Array<AppNode>>();
+
+  containerNodes.forEach((node) => {
+    const childNodes = nodes.filter((n) => n.parentId === node.id && !n.hidden);
+    const childNodeIds = new Set(childNodes.map((child) => child.id));
+
+    const childEdges = edges.filter(
+      (edge) => childNodeIds.has(edge.source) && childNodeIds.has(edge.target),
+    );
+
+    const containerWidth =
+      node.type === "loop" || node.type === "conditional"
+        ? getLoopNodeWidth(node, nodes)
+        : DEFAULT_BLOCK_WIDTH;
+
+    const maxChildWidth = Math.max(
+      ...childNodes.map((child) =>
+        child.type === "loop" || child.type === "conditional"
+          ? getLoopNodeWidth(child, nodes)
+          : measuredOr(child.measured?.width, DEFAULT_BLOCK_WIDTH),
+      ),
+    );
+
+    const childNodesWithResetPositions = childNodes.map((n) => ({
+      ...n,
+      position: { x: 0, y: 0 },
+    }));
+
+    const nodeLabel = isWorkflowBlockNode(node) ? node.data.label : undefined;
+    const isTargetted =
+      targettedBlockLabel && nodeLabel === targettedBlockLabel;
+
+    let baseMargin: number;
+    if (node.type === "loop" && isLoopNode(node)) {
+      const headerHeight = node.data._headerHeight;
+      baseMargin = headerHeight ? headerHeight + 28 : 225;
+      if (isTargetted && !headerHeight) {
+        baseMargin += TARGETTED_BLOCK_EXTRA_MARGIN;
+      }
+    } else if (node.type === "conditional" && isConditionalNode(node)) {
+      const headerHeight = node.data._headerHeight;
+      baseMargin = headerHeight ? headerHeight + 28 : 225;
+      if (isTargetted && !headerHeight) {
+        baseMargin += TARGETTED_BLOCK_EXTRA_MARGIN;
+      }
+    } else {
+      baseMargin = 225;
+    }
+
+    const layouted = layoutUtil(
+      childNodesWithResetPositions,
+      childEdges,
+      {
+        marginx: (containerWidth - maxChildWidth) / 2,
+        marginy: baseMargin,
+      },
+      nodes,
+      computedHeights,
+    );
+
+    const centeredChildren = layouted.nodes.map((n) => {
+      const nodeWidth =
+        (n.type === "loop" || n.type === "conditional") && !n.measured?.width
+          ? getLoopNodeWidth(n, nodes)
+          : measuredOr(n.measured?.width, DEFAULT_BLOCK_WIDTH);
+      return {
+        ...n,
+        position: {
+          x: (containerWidth - nodeWidth) / 2,
+          y: n.position.y,
+        },
+      };
+    });
+
+    containerChildrenMap.set(node.id, centeredChildren);
+
+    // Only override the container's height when it has visible children.
+    // Collapsed containers have all children hidden; their measured.height
+    // (the collapsed card) is already correct and must not be replaced.
+    if (centeredChildren.length > 0) {
+      let maxChildBottom = 0;
+      for (const child of centeredChildren) {
+        const childHeight =
+          computedHeights.get(child.id) ??
+          measuredOr(child.measured?.height, DEFAULT_BLOCK_HEIGHT);
+        const bottom = child.position.y + childHeight;
+        if (bottom > maxChildBottom) {
+          maxChildBottom = bottom;
+        }
+      }
+      computedHeights.set(node.id, maxChildBottom + 24);
+    }
+  });
+
+  const topLevelNodes = nodes.filter((node) => !node.parentId && !node.hidden);
+  const topLevelNodeIds = new Set(topLevelNodes.map((node) => node.id));
+
+  // Include edges even if marked hidden, as long as both nodes are visible
+  const layoutEdges = edges.filter(
+    (edge) =>
+      topLevelNodeIds.has(edge.source) && topLevelNodeIds.has(edge.target),
+  );
+
+  const syntheticEdges: Array<Edge> = [];
+  nodes.forEach((node) => {
+    if (node.type !== "conditional" || node.hidden) {
+      return;
+    }
+    const mergeTargetId = findConditionalMergeTargetId(node.id, nodes, edges);
+    if (
+      mergeTargetId &&
+      topLevelNodeIds.has(mergeTargetId) &&
+      !nodes.find((n) => n.id === mergeTargetId)?.hidden
+    ) {
+      syntheticEdges.push({
+        id: `conditional-layout-${node.id}-${mergeTargetId}`,
+        source: node.id,
+        target: mergeTargetId,
+        type: "edgeWithAddButton",
+        style: { strokeWidth: 0 },
+        selectable: false,
+      });
+    }
+  });
+
+  const topLevelNodesLayout = layoutUtil(
+    topLevelNodes,
+    layoutEdges.concat(syntheticEdges),
+    {},
+    nodes,
+    computedHeights,
+  );
+
+  // Collect all hidden nodes to preserve them
+  const hiddenNodes = nodes.filter((node) => node.hidden);
+
+  // Combine all layouted nodes and sort by nesting depth to ensure parents come before children
+  const allContainerChildren: Array<AppNode> = [];
+  for (const children of containerChildrenMap.values()) {
+    allContainerChildren.push(...children);
+  }
+  const allLayoutedNodes =
+    topLevelNodesLayout.nodes.concat(allContainerChildren);
+
+  // Sort by depth: top-level first, then depth-1, depth-2, etc.
+  const nodeDepths = new Map<string, number>();
+  const computeDepth = (nodeId: string): number => {
+    if (nodeDepths.has(nodeId)) {
+      return nodeDepths.get(nodeId)!;
+    }
+    // Look in both layouted nodes and full nodes array to find parents
+    let node = allLayoutedNodes.find((n) => n.id === nodeId);
+    if (!node) {
+      node = nodes.find((n) => n.id === nodeId);
+    }
+    if (!node) {
+      // Node doesn't exist anywhere, treat as top-level
+      nodeDepths.set(nodeId, 0);
+      return 0;
+    }
+    if (!node.parentId) {
+      // Node exists but has no parent
+      nodeDepths.set(nodeId, 0);
+      return 0;
+    }
+    const depth = computeDepth(node.parentId) + 1;
+    nodeDepths.set(nodeId, depth);
+    return depth;
+  };
+
+  allLayoutedNodes.forEach((node) => computeDepth(node.id));
+
+  const sortedNodes = allLayoutedNodes.sort((a, b) => {
+    const depthA = nodeDepths.get(a.id) ?? 0;
+    const depthB = nodeDepths.get(b.id) ?? 0;
+    return depthA - depthB;
+  });
+
+  const finalNodes = sortedNodes.concat(hiddenNodes);
+
+  return {
+    nodes: finalNodes,
+    edges,
+  };
+}
+
+function convertToNode(
+  identifiers: { id: string; parentId?: string },
+  block: WorkflowBlock,
+  editable: boolean,
+): AppNode {
+  const common = {
+    draggable: false,
+    position: { x: 0, y: 0 },
+    connectable: false,
+  };
+  const commonData: NodeBaseData = {
+    debuggable: debuggableWorkflowBlockTypes.has(block.block_type),
+    label: block.label,
+    continueOnFailure: block.continue_on_failure,
+    nextLoopOnFailure: block.next_loop_on_failure,
+    editable,
+    model: block.model,
+    ignoreWorkflowSystemPrompt: block.ignore_workflow_system_prompt ?? false,
+  };
+  switch (block.block_type) {
+    case "conditional": {
+      const branches =
+        block.branch_conditions && block.branch_conditions.length > 0
+          ? cloneBranchConditions(block.branch_conditions)
+          : createDefaultBranchConditions();
+      const defaultBranch =
+        branches.find((branch) => branch.is_default) ?? null;
+      // Prefer the first branch for initial selection to display the first condition
+      const activeBranchId = branches[0]?.id ?? defaultBranch?.id ?? null;
+      return {
+        ...identifiers,
+        ...common,
+        type: "conditional",
+        data: {
+          ...conditionalNodeDefaultData,
+          ...commonData,
+          branches,
+          activeBranchId,
+          mergeLabel: block.next_block_label ?? null,
+        },
+      };
+    }
+    case "task": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "task",
+        data: {
+          ...commonData,
+          url: block.url ?? "",
+          navigationGoal: block.navigation_goal ?? "",
+          dataExtractionGoal: block.data_extraction_goal ?? "",
+          dataSchema:
+            block.data_schema == null
+              ? "null"
+              : typeof block.data_schema === "string"
+                ? block.data_schema
+                : JSON.stringify(block.data_schema, null, 2),
+          errorCodeMapping: JSON.stringify(block.error_code_mapping, null, 2),
+          allowDownloads: block.complete_on_download ?? false,
+          downloadSuffix: block.download_suffix ?? null,
+          maxRetries: block.max_retries ?? null,
+          maxStepsOverride: block.max_steps_per_run ?? null,
+          parameterKeys: block.parameters.map((p) => p.key),
+          totpIdentifier: block.totp_identifier ?? null,
+          totpVerificationUrl: block.totp_verification_url ?? null,
+          disableCache: block.disable_cache ?? false,
+          completeCriterion: block.complete_criterion ?? "",
+          terminateCriterion: block.terminate_criterion ?? "",
+          includeActionHistoryInVerification:
+            block.include_action_history_in_verification ?? false,
+          engine: block.engine ?? RunEngine.SkyvernV1,
+        },
+      };
+    }
+    case "task_v2": {
+      // Convert task_v2 blocks to navigation nodes with engine=SkyvernV2
+      return {
+        ...identifiers,
+        ...common,
+        type: "navigation",
+        data: {
+          ...commonData,
+          // V2-specific fields
+          prompt: block.prompt,
+          url: block.url ?? "",
+          maxSteps: block.max_steps ?? MAX_STEPS_DEFAULT,
+          disableCache: block.disable_cache ?? false,
+          totpIdentifier: block.totp_identifier,
+          totpVerificationUrl: block.totp_verification_url,
+          // Set engine to SkyvernV2 to indicate V2 mode
+          engine: RunEngine.SkyvernV2,
+          // Default V1 fields (not used in V2 mode but needed for type compatibility)
+          navigationGoal: "",
+          errorCodeMapping: "null",
+          completeCriterion: "",
+          terminateCriterion: "",
+          maxRetries: null,
+          maxStepsOverride: null,
+          allowDownloads: false,
+          downloadSuffix: null,
+          parameterKeys: [],
+          includeActionHistoryInVerification: false,
+          legacyV2Available: true,
+        },
+      };
+    }
+    case "validation": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "validation",
+        data: {
+          ...commonData,
+          errorCodeMapping: JSON.stringify(block.error_code_mapping, null, 2),
+          completeCriterion: block.complete_criterion ?? "",
+          terminateCriterion: block.terminate_criterion ?? "",
+          parameterKeys: block.parameters.map((p) => p.key),
+          disableCache: block.disable_cache ?? false,
+        },
+      };
+    }
+    case "action": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "action",
+        data: {
+          ...commonData,
+          url: block.url ?? "",
+          navigationGoal: block.navigation_goal ?? "",
+          errorCodeMapping: JSON.stringify(block.error_code_mapping, null, 2),
+          allowDownloads: block.complete_on_download ?? false,
+          downloadSuffix: block.download_suffix ?? null,
+          maxRetries: block.max_retries ?? null,
+          parameterKeys: block.parameters.map((p) => p.key),
+          totpIdentifier: block.totp_identifier ?? null,
+          totpVerificationUrl: block.totp_verification_url ?? null,
+          disableCache: block.disable_cache ?? false,
+          engine: block.engine ?? RunEngine.SkyvernV1,
+        },
+      };
+    }
+    case "navigation": {
+      const isV2Engine = block.engine === RunEngine.SkyvernV2;
+      return {
+        ...identifiers,
+        ...common,
+        type: "navigation",
+        data: {
+          ...commonData,
+          url: block.url ?? "",
+          navigationGoal: block.navigation_goal ?? "",
+          errorCodeMapping: JSON.stringify(block.error_code_mapping, null, 2),
+          allowDownloads: block.complete_on_download ?? false,
+          downloadSuffix: block.download_suffix ?? null,
+          maxRetries: block.max_retries ?? null,
+          parameterKeys: block.parameters.map((p) => p.key),
+          totpIdentifier: block.totp_identifier ?? null,
+          totpVerificationUrl: block.totp_verification_url ?? null,
+          disableCache: block.disable_cache ?? false,
+          maxStepsOverride: block.max_steps_per_run ?? null,
+          completeCriterion: block.complete_criterion ?? "",
+          terminateCriterion: block.terminate_criterion ?? "",
+          engine: block.engine ?? RunEngine.SkyvernV1,
+          legacyV2Available: isV2Engine,
+          includeActionHistoryInVerification:
+            block.include_action_history_in_verification ?? false,
+          // When engine is SkyvernV2, use navigation_goal as the prompt
+          prompt: isV2Engine ? (block.navigation_goal ?? "") : "",
+          maxSteps: isV2Engine
+            ? (block.max_steps_per_run ?? MAX_STEPS_DEFAULT)
+            : MAX_STEPS_DEFAULT,
+        },
+      };
+    }
+    case "human_interaction": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "human_interaction",
+        data: {
+          ...commonData,
+          instructions: block.instructions,
+          positiveDescriptor: block.positive_descriptor,
+          negativeDescriptor: block.negative_descriptor,
+          timeoutSeconds: block.timeout_seconds,
+          recipients: block.recipients.join(", "),
+          subject: block.subject,
+          body: block.body,
+          sender: block.sender,
+        },
+      };
+    }
+    case "extraction": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "extraction",
+        data: {
+          ...commonData,
+          url: block.url ?? "",
+          dataExtractionGoal: block.data_extraction_goal ?? "",
+          dataSchema:
+            block.data_schema == null
+              ? "null"
+              : typeof block.data_schema === "string"
+                ? block.data_schema
+                : JSON.stringify(block.data_schema, null, 2),
+          parameterKeys: block.parameters.map((p) => p.key),
+          maxRetries: block.max_retries ?? null,
+          maxStepsOverride: block.max_steps_per_run ?? null,
+          disableCache: block.disable_cache ?? false,
+          engine: block.engine ?? RunEngine.SkyvernV1,
+        },
+      };
+    }
+    case "login": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "login",
+        data: {
+          ...commonData,
+          url: block.url ?? "",
+          navigationGoal: block.navigation_goal ?? "",
+          errorCodeMapping: JSON.stringify(block.error_code_mapping, null, 2),
+          maxRetries: block.max_retries ?? null,
+          parameterKeys: block.parameters.map((p) => p.key),
+          totpIdentifier: block.totp_identifier ?? null,
+          totpVerificationUrl: block.totp_verification_url ?? null,
+          disableCache: block.disable_cache ?? false,
+          maxStepsOverride: block.max_steps_per_run ?? null,
+          completeCriterion: block.complete_criterion ?? "",
+          terminateCriterion: block.terminate_criterion ?? "",
+          engine: block.engine ?? RunEngine.SkyvernV1,
+        },
+      };
+    }
+    case "wait": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "wait",
+        data: {
+          ...commonData,
+          waitInSeconds: String(block.wait_sec ?? 1),
+        },
+      };
+    }
+    case "file_download": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "fileDownload",
+        data: {
+          ...commonData,
+          url: block.url ?? "",
+          navigationGoal: block.navigation_goal ?? "",
+          errorCodeMapping: JSON.stringify(block.error_code_mapping, null, 2),
+          downloadSuffix: block.download_suffix ?? null,
+          maxRetries: block.max_retries ?? null,
+          parameterKeys: block.parameters.map((p) => p.key),
+          totpIdentifier: block.totp_identifier ?? null,
+          totpVerificationUrl: block.totp_verification_url ?? null,
+          disableCache: block.disable_cache ?? false,
+          maxStepsOverride: block.max_steps_per_run ?? null,
+          engine: block.engine ?? RunEngine.SkyvernV1,
+          downloadTimeout: block.download_timeout ?? null, // seconds
+        },
+      };
+    }
+    case "code": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "codeBlock",
+        data: {
+          ...commonData,
+          code: block.code,
+          parameterKeys: block.parameters.map((p) => p.key),
+        },
+      };
+    }
+    case "send_email": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "sendEmail",
+        data: {
+          ...commonData,
+          body: block.body,
+          fileAttachments: block.file_attachments.join(", "),
+          recipients: block.recipients.join(", "),
+          subject: block.subject,
+          sender: block.sender,
+          smtpHostSecretParameterKey: block.smtp_host?.key,
+          smtpPortSecretParameterKey: block.smtp_port?.key,
+          smtpUsernameSecretParameterKey: block.smtp_username?.key,
+          smtpPasswordSecretParameterKey: block.smtp_password?.key,
+        },
+      };
+    }
+    case "text_prompt": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "textPrompt",
+        data: {
+          ...commonData,
+          prompt: block.prompt,
+          jsonSchema: JSON.stringify(block.json_schema, null, 2),
+          parameterKeys: block.parameters.map((p) => p.key),
+        },
+      };
+    }
+    case "for_loop": {
+      const loopVariableReference =
+        block.loop_variable_reference !== null
+          ? block.loop_variable_reference
+          : (block.loop_over?.key ?? "");
+      return {
+        ...identifiers,
+        ...common,
+        type: "loop",
+        data: {
+          ...loopNodeDefaultData,
+          ...commonData,
+          loopKind: "for_each",
+          loopValue: block.loop_over?.key ?? "",
+          loopVariableReference: loopVariableReference,
+          completeIfEmpty: block.complete_if_empty,
+          nextLoopOnFailure: block.next_loop_on_failure,
+          dataSchema:
+            block.data_schema == null
+              ? "null"
+              : typeof block.data_schema === "string"
+                ? block.data_schema
+                : JSON.stringify(block.data_schema, null, 2),
+        },
+      };
+    }
+    case "while_loop": {
+      const wblock = block as WhileLoopBlock;
+      const rawExpr = wblock.condition.expression;
+      const whileConditionExpression =
+        rawExpr.trim() === "" ? "{{ true }}" : rawExpr;
+      return {
+        ...identifiers,
+        ...common,
+        type: "loop",
+        data: {
+          ...loopNodeDefaultData,
+          ...commonData,
+          loopKind: "while",
+          loopValue: "",
+          loopVariableReference: "",
+          completeIfEmpty: false,
+          dataSchema: "null",
+          whileConditionExpression,
+          whileConditionDescription: wblock.condition.description ?? null,
+          whileConditionCriteriaType:
+            rawExpr.trim() === ""
+              ? inferBranchCriteriaTypeFromExpression(whileConditionExpression)
+              : wblock.condition.criteria_type,
+        },
+      };
+    }
+    case "file_url_parser": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "fileParser",
+        data: {
+          ...commonData,
+          fileUrl: block.file_url,
+          fileType: block.file_type ?? "auto_detect",
+          jsonSchema: JSON.stringify(block.json_schema, null, 2),
+          model: block.model,
+        },
+      };
+    }
+
+    case "pdf_parser": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "pdfParser",
+        data: {
+          ...commonData,
+          fileUrl: block.file_url,
+          jsonSchema: JSON.stringify(block.json_schema, null, 2),
+          model: block.model,
+        },
+      };
+    }
+
+    case "download_to_s3": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "download",
+        data: {
+          ...commonData,
+          url: block.url,
+        },
+      };
+    }
+
+    case "upload_to_s3": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "upload",
+        data: {
+          ...commonData,
+          path: block.path,
+        },
+      };
+    }
+
+    case "file_upload": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "fileUpload",
+        data: {
+          ...commonData,
+          path: block.path,
+          storageType: block.storage_type,
+          s3Bucket: block.s3_bucket ?? "",
+          awsAccessKeyId: block.aws_access_key_id ?? "",
+          awsSecretAccessKey: block.aws_secret_access_key ?? "",
+          regionName: block.region_name ?? "",
+          azureStorageAccountName: block.azure_storage_account_name ?? "",
+          azureStorageAccountKey: block.azure_storage_account_key ?? "",
+          azureBlobContainerName: block.azure_blob_container_name ?? "",
+        },
+      };
+    }
+
+    case "goto_url": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "url",
+        data: {
+          ...commonData,
+          url: block.url,
+        },
+      };
+    }
+    case "http_request": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "http_request",
+        data: {
+          ...commonData,
+          method: block.method,
+          url: block.url ?? "",
+          headers: JSON.stringify(block.headers || {}, null, 2),
+          body: JSON.stringify(block.body || {}, null, 2),
+          files: JSON.stringify(block.files || {}, null, 2),
+          timeout: block.timeout,
+          followRedirects: block.follow_redirects,
+          parameterKeys: block.parameters.map((p) => p.key),
+          downloadFilename: block.download_filename ?? "",
+          saveResponseAsFile: block.save_response_as_file ?? false,
+        },
+      };
+    }
+    case "print_page": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "printPage",
+        data: {
+          ...commonData,
+          includeTimestamp: block.include_timestamp ?? false,
+          customFilename: block.custom_filename ?? "",
+          format: block.format ?? "A4",
+          landscape: block.landscape ?? false,
+          printBackground: block.print_background ?? true,
+          parameterKeys: block.parameters.map((p) => p.key),
+        },
+      };
+    }
+    case "workflow_trigger": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "workflowTrigger",
+        data: {
+          ...commonData,
+          workflowPermanentId: block.workflow_permanent_id ?? "",
+          workflowTitle: "",
+          payload: JSON.stringify(block.payload || {}, null, 2),
+          waitForCompletion: block.wait_for_completion ?? true,
+          browserSessionId: block.browser_session_id ?? "",
+          useParentBrowserSession: block.use_parent_browser_session ?? false,
+          parameterKeys: block.parameters.map((p) => p.key),
+        },
+      };
+    }
+    case "google_sheets_read": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "googleSheetsRead",
+        data: {
+          ...commonData,
+          spreadsheetUrl: block.spreadsheet_url ?? "",
+          sheetName: block.sheet_name ?? "",
+          range: block.range ?? "",
+          credentialId: block.credential_id ?? "",
+          hasHeaderRow: block.has_header_row ?? true,
+          parameterKeys: block.parameters.map((p) => p.key),
+        },
+      };
+    }
+    case "google_sheets_write": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "googleSheetsWrite",
+        data: {
+          ...commonData,
+          spreadsheetUrl: block.spreadsheet_url ?? "",
+          sheetName: block.sheet_name ?? "",
+          range: block.range ?? "",
+          credentialId: block.credential_id ?? "",
+          writeMode: block.write_mode ?? "append",
+          values: block.values ?? "",
+          columnMapping: block.column_mapping
+            ? JSON.stringify(block.column_mapping, null, 2)
+            : "",
+          createSheetIfMissing: block.create_sheet_if_missing ?? false,
+          parameterKeys: block.parameters.map((p) => p.key),
+        },
+      };
+    }
+  }
+}
+
+function serializeConditionalBlock(
+  node: ConditionalNode,
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): ConditionalBlockYAML {
+  const mergeLabel = findConditionalMergeLabel(node, nodes, edges) ?? null;
+
+  const branchConditions = node.data.branches.map((branch) => {
+    const orderedNodes = getConditionalBranchNodeSequence(
+      node.id,
+      branch.id,
+      nodes,
+      edges,
+    );
+    const nextBlockLabel = orderedNodes[0]?.data.label ?? mergeLabel ?? null;
+
+    return {
+      ...branch,
+      next_block_label: nextBlockLabel,
+      criteria: branch.criteria
+        ? {
+            ...branch.criteria,
+          }
+        : null,
+    };
+  });
+
+  return {
+    block_type: "conditional",
+    label: node.data.label,
+    continue_on_failure: node.data.continueOnFailure,
+    next_block_label: mergeLabel,
+    branch_conditions: branchConditions,
+  };
+}
+
+function generateNodeData(blocks: Array<WorkflowBlock>): Array<{
+  id: string;
+  previous: string | null;
+  next: string | null;
+  parentId: string | null;
+  block: WorkflowBlock;
+}> {
+  const idMap = new WeakMap<WorkflowBlock, string>();
+  const stack = [...blocks];
+
+  while (stack.length > 0) {
+    const block = stack.pop()!;
+    const id = nanoid();
+    idMap.set(block, id);
+    if (isNestedLoopWorkflowBlock(block)) {
+      stack.push(...block.loop_blocks);
+    }
+  }
+
+  return getNodeData(blocks, idMap, null);
+}
+
+function getNodeData(
+  blocks: Array<WorkflowBlock>,
+  ids: WeakMap<WorkflowBlock, string>,
+  parentId: string | null,
+): Array<{
+  id: string;
+  previous: string | null;
+  next: string | null;
+  parentId: string | null;
+  block: WorkflowBlock;
+}> {
+  const data: Array<{
+    id: string;
+    previous: string | null;
+    next: string | null;
+    parentId: string | null;
+    block: WorkflowBlock;
+  }> = [];
+
+  blocks.forEach((block, index) => {
+    const id = ids.get(block)!;
+    const previous = index === 0 ? null : ids.get(blocks[index - 1]!)!;
+    const next =
+      index === blocks.length - 1 ? null : ids.get(blocks[index + 1]!)!;
+    data.push({ id, previous, next, parentId, block });
+    if (isNestedLoopWorkflowBlock(block)) {
+      data.push(...getNodeData(block.loop_blocks, ids, id));
+    }
+  });
+
+  return data;
+}
+
+function buildLabelToBlockMap(
+  blocks: Array<WorkflowBlock>,
+): Map<string, WorkflowBlock> {
+  const map = new Map<string, WorkflowBlock>();
+
+  const traverse = (list: Array<WorkflowBlock>) => {
+    list.forEach((block) => {
+      map.set(block.label, block);
+      if (isNestedLoopWorkflowBlock(block)) {
+        traverse(block.loop_blocks);
+      }
+    });
+  };
+
+  traverse(blocks);
+  return map;
+}
+
+export function referencedLabels(blocks: Array<WorkflowBlock>): Set<string> {
+  const ref = new Set<string>();
+  for (const block of blocks) {
+    if (block.next_block_label) {
+      ref.add(block.next_block_label);
+    }
+    if (block.block_type === "conditional") {
+      const cond = block as ConditionalBlock;
+      for (const branch of cond.branch_conditions) {
+        if (branch.next_block_label) {
+          ref.add(branch.next_block_label);
+        }
+      }
+    }
+  }
+  return ref;
+}
+
+export function findChainRoot(
+  blocks: Array<WorkflowBlock>,
+): WorkflowBlock | null {
+  if (blocks.length === 0) return null;
+  const ref = referencedLabels(blocks);
+  const roots = blocks.filter((b) => !ref.has(b.label));
+  if (roots.length !== 1) return null;
+  return roots[0]!;
+}
+
+type LoopChildEntry = {
+  id: string;
+  block: WorkflowBlock;
+};
+
+function orderLoopChildrenByChain(
+  childBlocks: Array<WorkflowBlock>,
+  byLabel: Map<string, LoopChildEntry>,
+): Array<LoopChildEntry> {
+  const childLabels = new Set(childBlocks.map((b) => b.label));
+  const referenced = new Set<string>();
+  for (const block of childBlocks) {
+    const next = block.next_block_label;
+    if (next && childLabels.has(next)) {
+      referenced.add(next);
+    }
+    if (block.block_type === "conditional") {
+      const cond = block as ConditionalBlock;
+      for (const branch of cond.branch_conditions) {
+        if (
+          branch.next_block_label &&
+          childLabels.has(branch.next_block_label)
+        ) {
+          referenced.add(branch.next_block_label);
+        }
+      }
+    }
+  }
+  const roots = childBlocks.filter((b) => !referenced.has(b.label));
+  const result: Array<LoopChildEntry> = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined =
+    roots.length === 1 ? roots[0]!.label : undefined;
+  while (cursor && childLabels.has(cursor) && !seen.has(cursor)) {
+    seen.add(cursor);
+    const entry = byLabel.get(cursor);
+    if (entry) result.push(entry);
+    const next: string | null | undefined = entry?.block.next_block_label;
+    cursor = next && childLabels.has(next) ? next : undefined;
+  }
+  for (const block of childBlocks) {
+    if (!seen.has(block.label)) {
+      const entry = byLabel.get(block.label);
+      if (entry) result.push(entry);
+    }
+  }
+  return result;
+}
+
+export class WorkflowValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkflowValidationError";
+  }
+}
+
+export function validateWorkflowBlocks(
+  blocks: Array<WorkflowBlock>,
+  loopLabel: string | null = null,
+): void {
+  if (blocks.length === 0) return;
+  const labelToBlock = new Map<string, WorkflowBlock>();
+  const where = loopLabel ? ` inside loop ${loopLabel}` : "";
+
+  for (const block of blocks) {
+    if (labelToBlock.has(block.label)) {
+      throw new WorkflowValidationError(
+        `Duplicate block label detected${where}: ${block.label}`,
+      );
+    }
+    labelToBlock.set(block.label, block);
+  }
+
+  const adjacency = new Map<string, Set<string>>();
+  const incoming = new Map<string, number>();
+  for (const label of labelToBlock.keys()) {
+    adjacency.set(label, new Set());
+    incoming.set(label, 0);
+  }
+
+  const addEdge = (source: string, target: string | null | undefined): void => {
+    if (!target) return;
+    if (!labelToBlock.has(target)) {
+      throw new WorkflowValidationError(
+        `Block ${source} references unknown next_block_label ${target}${where}`,
+      );
+    }
+    const adj = adjacency.get(source)!;
+    if (!adj.has(target)) {
+      adj.add(target);
+      incoming.set(target, (incoming.get(target) ?? 0) + 1);
+    }
+  };
+
+  for (const [label, block] of labelToBlock.entries()) {
+    if (block.block_type === "conditional") {
+      const cond = block as ConditionalBlock;
+      for (const branch of cond.branch_conditions) {
+        addEdge(label, branch.next_block_label);
+      }
+    } else {
+      addEdge(label, block.next_block_label);
+    }
+  }
+
+  const roots: Array<string> = [];
+  for (const [label, count] of incoming.entries()) {
+    if (count === 0) roots.push(label);
+  }
+  if (roots.length === 0) {
+    throw new WorkflowValidationError(
+      `Circular reference detected${where}: every block is the target of another block's next_block_label, so there is no starting block.`,
+    );
+  }
+  if (roots.length > 1) {
+    throw new WorkflowValidationError(
+      `Disconnected blocks detected${where}: blocks (${roots.sort().join(", ")}) are not reachable from any other block. Every block must be reachable from the first block through next_block_label or conditional branch references.`,
+    );
+  }
+
+  const queue: Array<string> = [roots[0]!];
+  const inDegree = new Map(incoming);
+  let visited = 0;
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    visited += 1;
+    for (const neighbor of adjacency.get(node)!) {
+      inDegree.set(neighbor, inDegree.get(neighbor)! - 1);
+      if (inDegree.get(neighbor) === 0) queue.push(neighbor);
+    }
+  }
+  if (visited !== labelToBlock.size) {
+    throw new WorkflowValidationError(
+      `Circular reference detected${where}: some blocks form a loop through their next_block_label references, causing an infinite cycle.`,
+    );
+  }
+
+  for (const block of blocks) {
+    if (isNestedLoopWorkflowBlock(block)) {
+      validateWorkflowBlocks(block.loop_blocks, block.label);
+    }
+  }
+}
+
+export function applySequentialDefaulting(
+  blocks: Array<WorkflowBlock>,
+): Array<WorkflowBlock> {
+  if (blocks.length === 0) return blocks;
+  const hasConditional = blocks.some((b) => b.block_type === "conditional");
+  // Only fill in defaults when the chain cannot already be resolved via
+  // adjacency at this level. This mirrors BE validate_loop_blocks
+  // (skip_sequential_defaulting=True) for already-explicit chains while still
+  // upgrading legacy v1 lists where every next_block_label is null.
+  const needsDefaulting = !hasConditional && findChainRoot(blocks) === null;
+
+  return blocks.map((block, index) => {
+    let next = block.next_block_label ?? null;
+    if (needsDefaulting && next === null && index < blocks.length - 1) {
+      next = blocks[index + 1]!.label;
+    }
+    if (isNestedLoopWorkflowBlock(block)) {
+      return {
+        ...block,
+        next_block_label: next,
+        loop_blocks: applySequentialDefaulting(block.loop_blocks),
+      } as WorkflowBlock;
+    }
+    if (next === (block.next_block_label ?? null)) {
+      return block;
+    }
+    return { ...block, next_block_label: next } as WorkflowBlock;
+  });
+}
+
+function collectLabelsForBranch(
+  startLabel: string | null,
+  stopLabel: string | null,
+  blocksByLabel: Map<string, WorkflowBlock>,
+  excludeLabels?: Set<string>,
+): Array<string> {
+  const labels: Array<string> = [];
+  const visited = new Set<string>();
+  let current = startLabel ?? null;
+
+  while (current && current !== stopLabel && !visited.has(current)) {
+    if (excludeLabels?.has(current)) {
+      break;
+    }
+    visited.add(current);
+    labels.push(current);
+    const block = blocksByLabel.get(current);
+    if (!block) {
+      break;
+    }
+    current = block.next_block_label ?? null;
+  }
+
+  return labels;
+}
+
+// Labels at or before `targetLabel` in execution order: the conditional itself
+// plus every block that can reach it via next_block_label / branch references.
+// Branch collection excludes these so a back-reference chain cannot pull the
+// conditional (or an earlier block) into its own branch (SKY-8216). Computed
+// from the graph rather than array position so it is independent of the order
+// branch children happen to be serialized in (SKY-10460).
+function labelsAtOrBeforeConditional(
+  targetLabel: string,
+  blocks: Array<WorkflowBlock>,
+): Set<string> {
+  const present = new Set(blocks.map((block) => block.label));
+  const predecessors = new Map<string, Array<string>>();
+  const addEdge = (from: string, to: string | null | undefined): void => {
+    if (!to || !present.has(to)) {
+      return;
+    }
+    const list = predecessors.get(to) ?? [];
+    list.push(from);
+    predecessors.set(to, list);
+  };
+  for (const block of blocks) {
+    addEdge(block.label, block.next_block_label);
+    if (block.block_type === "conditional") {
+      for (const branch of (block as ConditionalBlock).branch_conditions) {
+        addEdge(block.label, branch.next_block_label);
+      }
+    }
+  }
+
+  const result = new Set<string>([targetLabel]);
+  const queue = [targetLabel];
+  while (queue.length > 0) {
+    const label = queue.shift()!;
+    for (const pred of predecessors.get(label) ?? []) {
+      if (!result.has(pred)) {
+        result.add(pred);
+        queue.push(pred);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Reconstructs the proper hierarchical structure for conditional blocks from a flat blocks array.
+ * This is the deserialization counterpart to the edge-based serialization logic.
+ *
+ * Process:
+ * 1. Identifies conditional blocks
+ * 2. Follows next_block_label chains to determine branch membership
+ * 3. Sets parentId and conditional metadata for branch nodes
+ * 4. Creates START and NodeAdder nodes for each conditional
+ * 5. Creates branch-specific edges based on next_block_label
+ */
+function reconstructConditionalStructure(
+  blocks: Array<WorkflowBlock>,
+  nodes: Array<AppNode>,
+  labelToNodeMap: Map<string, AppNode>,
+  blocksByLabel: Map<string, WorkflowBlock>,
+): { nodes: Array<AppNode>; edges: Array<Edge> } {
+  const newNodes = [...nodes];
+  const newEdges: Array<Edge> = [];
+  const conditionalStartNodeIds = new Map<string, string>();
+  const conditionalAdderNodeIds = new Map<string, string>();
+
+  // Initialize all workflow block nodes with null conditional metadata
+  newNodes.forEach((node) => {
+    if (isWorkflowBlockNode(node)) {
+      node.data.conditionalBranchId = node.data.conditionalBranchId ?? null;
+      node.data.conditionalLabel = node.data.conditionalLabel ?? null;
+      node.data.conditionalNodeId = node.data.conditionalNodeId ?? null;
+      node.data.conditionalMergeLabel = node.data.conditionalMergeLabel ?? null;
+    }
+  });
+
+  // Process each conditional block
+  blocks.forEach((block) => {
+    if (block.block_type !== "conditional") {
+      if (isNestedLoopWorkflowBlock(block)) {
+        // Recursively handle conditionals inside loops
+        const recursiveResult = reconstructConditionalStructure(
+          block.loop_blocks,
+          newNodes,
+          labelToNodeMap,
+          blocksByLabel,
+        );
+        // Merge edges from recursive call
+        newEdges.push(...recursiveResult.edges);
+        // Merge nodes from recursive call (deduplicate by id)
+        const existingNodeIds = new Set(newNodes.map((n) => n.id));
+        recursiveResult.nodes.forEach((node) => {
+          if (!existingNodeIds.has(node.id)) {
+            newNodes.push(node);
+            existingNodeIds.add(node.id);
+          }
+        });
+      }
+      return;
+    }
+
+    const conditionalNode = labelToNodeMap.get(block.label);
+    if (!conditionalNode) {
+      return;
+    }
+
+    const excludeLabels = labelsAtOrBeforeConditional(block.label, blocks);
+
+    // Create START and NodeAdder nodes for this conditional
+    const startNodeId = nanoid();
+    const adderNodeId = nanoid();
+
+    newNodes.push(
+      startNode(
+        startNodeId,
+        {
+          withWorkflowSettings: false,
+          editable: true,
+          label: "__start_block__",
+          showCode: false,
+          parentNodeType: "conditional",
+        },
+        conditionalNode.id,
+      ),
+    );
+
+    newNodes.push(nodeAdderNode(adderNodeId, conditionalNode.id));
+
+    conditionalStartNodeIds.set(conditionalNode.id, startNodeId);
+    conditionalAdderNodeIds.set(conditionalNode.id, adderNodeId);
+
+    // Process each branch
+    block.branch_conditions.forEach((branch) => {
+      // Collect all block labels in this branch by following next_block_label chain
+      const labels = collectLabelsForBranch(
+        branch.next_block_label,
+        block.next_block_label ?? null,
+        blocksByLabel,
+        excludeLabels,
+      );
+
+      // Set metadata and parentId for all nodes in this branch
+      labels.forEach((label) => {
+        const targetNode = labelToNodeMap.get(label);
+        if (targetNode && isWorkflowBlockNode(targetNode)) {
+          targetNode.data = {
+            ...targetNode.data,
+            conditionalBranchId: branch.id,
+            conditionalLabel: block.label,
+            conditionalNodeId: conditionalNode.id,
+            conditionalMergeLabel: block.next_block_label ?? null,
+          };
+          targetNode.parentId = conditionalNode.id;
+        }
+      });
+
+      // Create edges for this branch
+      if (labels.length === 0) {
+        // Empty branch: START → NodeAdder
+        newEdges.push({
+          id: nanoid(),
+          type: "default",
+          source: startNodeId,
+          target: adderNodeId,
+          style: { strokeWidth: 2 },
+          data: {
+            conditionalNodeId: conditionalNode.id,
+            conditionalBranchId: branch.id,
+          },
+        });
+      } else {
+        // Branch with blocks
+        const branchNodeIds = labels
+          .map((label) => labelToNodeMap.get(label)?.id)
+          .filter(Boolean) as string[];
+
+        // START → first block
+        if (branchNodeIds[0]) {
+          newEdges.push({
+            id: nanoid(),
+            type: "edgeWithAddButton",
+            source: startNodeId,
+            target: branchNodeIds[0],
+            style: { strokeWidth: 2 },
+            data: {
+              conditionalNodeId: conditionalNode.id,
+              conditionalBranchId: branch.id,
+            },
+          });
+        }
+
+        // Chain blocks together based on next_block_label
+        for (let i = 0; i < labels.length - 1; i++) {
+          const currentLabel = labels[i];
+          const nextLabel = labels[i + 1];
+          const currentNodeId = labelToNodeMap.get(currentLabel!)?.id;
+          const nextNodeId = labelToNodeMap.get(nextLabel!)?.id;
+
+          if (currentNodeId && nextNodeId) {
+            newEdges.push({
+              id: nanoid(),
+              type: "edgeWithAddButton",
+              source: currentNodeId,
+              target: nextNodeId,
+              style: { strokeWidth: 2 },
+              data: {
+                conditionalNodeId: conditionalNode.id,
+                conditionalBranchId: branch.id,
+              },
+            });
+          }
+        }
+
+        // Last block → NodeAdder
+        const lastNodeId = branchNodeIds[branchNodeIds.length - 1];
+        if (lastNodeId) {
+          newEdges.push({
+            id: nanoid(),
+            type: "default",
+            source: lastNodeId,
+            target: adderNodeId,
+            style: { strokeWidth: 2 },
+            data: {
+              conditionalNodeId: conditionalNode.id,
+              conditionalBranchId: branch.id,
+            },
+          });
+        }
+      }
+    });
+  });
+
+  return { nodes: newNodes, edges: newEdges };
+}
+
+export function getConditionalBranchNodeSequence(
+  conditionalNodeId: string,
+  branchId: string,
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): Array<WorkflowBlockNode> {
+  const branchNodes = nodes.filter(
+    (node): node is WorkflowBlockNode =>
+      isWorkflowBlockNode(node) &&
+      node.data.conditionalNodeId === conditionalNodeId &&
+      node.data.conditionalBranchId === branchId,
+  );
+
+  if (branchNodes.length === 0) {
+    return [];
+  }
+
+  const nodeById = new Map(branchNodes.map((node) => [node.id, node]));
+  const branchNodeIds = new Set(nodeById.keys());
+
+  const heads = branchNodes.filter((node) => {
+    const incoming = edges.filter((edge) => edge.target === node.id);
+    return !incoming.some((edge) => branchNodeIds.has(edge.source));
+  });
+
+  const startNode = heads[0] ?? branchNodes[0]!;
+  const ordered: Array<WorkflowBlockNode> = [];
+  const visited = new Set<string>();
+  let current: WorkflowBlockNode | undefined = startNode;
+
+  while (current && !visited.has(current.id)) {
+    ordered.push(current);
+    visited.add(current.id);
+    const nextEdge = edges.find((edge) => edge.source === current!.id);
+    if (!nextEdge || !branchNodeIds.has(nextEdge.target)) {
+      break;
+    }
+    current = nodeById.get(nextEdge.target);
+  }
+
+  return ordered;
+}
+
+function getConditionalBranchNodeIds(
+  conditionalNodeId: string,
+  nodes: Array<AppNode>,
+): Set<string> {
+  return new Set(
+    nodes
+      .filter(
+        (node) =>
+          isWorkflowBlockNode(node) &&
+          // Do NOT filter by !node.hidden here. Hidden is a UI-only concept
+          // for branch tab visibility. Serialization must consider all branch
+          // nodes to correctly identify merge targets.
+          node.data.conditionalNodeId === conditionalNodeId &&
+          Boolean(node.data.conditionalBranchId),
+      )
+      .map((node) => node.id),
+  );
+}
+
+function findConditionalMergeTargetId(
+  conditionalNodeId: string,
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): string | null {
+  const branchNodeIds = getConditionalBranchNodeIds(conditionalNodeId, nodes);
+  const visited = new Set<string>();
+  let currentSource = conditionalNodeId;
+  const maxIterations = 1000;
+  let iterations = 0;
+  // Use ALL edges when finding merge target, not just visible ones
+  // We need to consider all branches when serializing
+  const allEdges = edges;
+
+  while (iterations < maxIterations) {
+    iterations++;
+    const nextEdge = allEdges.find((edge) => edge.source === currentSource);
+    if (!nextEdge) {
+      return null;
+    }
+    if (visited.has(nextEdge.target)) {
+      return null;
+    }
+    visited.add(nextEdge.target);
+    if (branchNodeIds.has(nextEdge.target)) {
+      currentSource = nextEdge.target;
+      continue;
+    }
+    const targetNode = nodes.find((node) => node.id === nextEdge.target);
+    // Don't filter by hidden when serializing - we need all nodes
+    if (!targetNode) {
+      return null;
+    }
+    if (targetNode.type === "nodeAdder" || targetNode.type === "start") {
+      currentSource = targetNode.id;
+      continue;
+    }
+    return targetNode.id;
+  }
+
+  return null;
+}
+
+function findConditionalMergeLabel(
+  conditionalNode: ConditionalNode,
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): string | null {
+  const mergeTargetId = findConditionalMergeTargetId(
+    conditionalNode.id,
+    nodes,
+    edges,
+  );
+  if (!mergeTargetId) {
+    return null;
+  }
+  const targetNode = nodes.find(
+    (node) => node.id === mergeTargetId && isWorkflowBlockNode(node),
+  ) as WorkflowBlockNode | undefined;
+  return targetNode?.data.label ?? null;
+}
+
+export function defaultEdge(source: string, target: string): Edge {
+  return {
+    id: nanoid(),
+    type: "default",
+    source,
+    target,
+    style: {
+      strokeWidth: 2,
+    },
+  } as Edge;
+}
+
+export function edgeWithAddButton(source: string, target: string): Edge {
+  return {
+    id: nanoid(),
+    type: "edgeWithAddButton",
+    source,
+    target,
+    style: {
+      strokeWidth: 2,
+    },
+    zIndex: REACT_FLOW_EDGE_Z_INDEX,
+  } as Edge;
+}
+
+export function startNode(
+  id: string,
+  data: StartNodeData,
+  parentId?: string,
+): StartNode {
+  const node: StartNode = {
+    id,
+    type: "start",
+    position: { x: 0, y: 0 },
+    data,
+    draggable: false,
+    connectable: false,
+  };
+  if (parentId) {
+    node.parentId = parentId;
+  }
+  return node;
+}
+
+export function nodeAdderNode(id: string, parentId?: string): NodeAdderNode {
+  const node: NodeAdderNode = {
+    id,
+    type: "nodeAdder",
+    position: { x: 0, y: 0 },
+    data: {},
+    draggable: false,
+    connectable: false,
+  };
+  if (parentId) {
+    node.parentId = parentId;
+  }
+  return node;
+}
+
+function getElements(
+  blocks: Array<WorkflowBlock>,
+  settings: WorkflowSettings,
+  editable: boolean,
+): {
+  nodes: Array<AppNode>;
+  edges: Array<Edge>;
+  validationError: WorkflowValidationError | null;
+} {
+  blocks = applySequentialDefaulting(blocks);
+
+  // In editor / debugger contexts, surface the same shape errors the backend
+  // raises at execute-time. Comparison/visualization views (editable=false)
+  // intentionally stay permissive to render historical snapshots. We catch
+  // here (instead of letting it propagate to the route error boundary) so
+  // workflows saved before the validator landed still render — callers can
+  // surface `validationError` as a banner and let users repair in-UI.
+  let validationError: WorkflowValidationError | null = null;
+  if (editable) {
+    try {
+      validateWorkflowBlocks(blocks);
+    } catch (err) {
+      if (err instanceof WorkflowValidationError) {
+        validationError = err;
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  const data = generateNodeData(blocks);
+  const nodes: Array<AppNode> = [];
+  const edges: Array<Edge> = [];
+  const blocksByLabel = buildLabelToBlockMap(blocks);
+
+  const startNodeId = nanoid();
+  nodes.push(
+    startNode(startNodeId, {
+      withWorkflowSettings: true,
+      persistBrowserSession: settings.persistBrowserSession,
+      browserProfileId: settings.browserProfileId,
+      proxyLocation: settings.proxyLocation ?? ProxyLocation.Residential,
+      webhookCallbackUrl: settings.webhookCallbackUrl ?? "",
+      model: settings.model,
+      maxScreenshotScrolls: settings.maxScreenshotScrolls,
+      maxElapsedTimeMinutes: settings.maxElapsedTimeMinutes ?? null,
+      extraHttpHeaders: settings.extraHttpHeaders,
+      cdpConnectHeaders: settings.cdpConnectHeaders,
+      editable,
+      runWith: settings.runWith,
+      codeVersion: settings.codeVersion,
+      scriptCacheKey: settings.scriptCacheKey,
+      aiFallback: settings.aiFallback ?? true,
+      label: "__start_block__",
+      showCode: false,
+      runSequentially: settings.runSequentially,
+      sequentialKey: settings.sequentialKey,
+      finallyBlockLabel: settings.finallyBlockLabel ?? null,
+      workflowSystemPrompt: settings.workflowSystemPrompt ?? null,
+    }),
+  );
+
+  const labelToNode = new Map<string, AppNode>();
+
+  // Create all nodes first (without edges)
+  data.forEach((d) => {
+    const node = convertToNode(
+      {
+        id: d.id,
+        parentId: d.parentId ?? undefined,
+      },
+      d.block,
+      editable,
+    );
+    nodes.push(node);
+    if (isWorkflowBlockNode(node)) {
+      labelToNode.set(node.data.label, node);
+    }
+  });
+
+  const loopBlocks = data.filter(
+    (d): d is typeof d & { block: ForLoopBlock | WhileLoopBlock } =>
+      isNestedLoopWorkflowBlock(d.block),
+  );
+  loopBlocks.forEach((block) => {
+    const loopBlock = block.block;
+    const startNodeId = nanoid();
+    nodes.push(
+      startNode(
+        startNodeId,
+        {
+          withWorkflowSettings: false,
+          editable,
+          label: "__start_block__",
+          showCode: false,
+        },
+        block.id,
+      ),
+    );
+
+    // Collect labels that belong to conditional branches inside this loop so we
+    // don't chain them as top-level loop children (they are handled by the
+    // conditional's own edges).
+    const branchLabels = new Set<string>();
+    const collectBranchLabels = (loopChildren: Array<WorkflowBlock>) => {
+      loopChildren.forEach((child) => {
+        if (child.block_type === "conditional") {
+          const loopExclude = labelsAtOrBeforeConditional(
+            child.label,
+            loopChildren,
+          );
+          child.branch_conditions.forEach((branch) => {
+            collectLabelsForBranch(
+              branch.next_block_label,
+              child.next_block_label ?? null,
+              blocksByLabel,
+              loopExclude,
+            ).forEach((label) => branchLabels.add(label));
+          });
+        }
+        if (isNestedLoopWorkflowBlock(child)) {
+          collectBranchLabels(child.loop_blocks);
+        }
+      });
+    };
+    collectBranchLabels(loopBlock.loop_blocks);
+
+    // Only keep loop children that are not part of any conditional branch.
+    const children = data.filter(
+      (b) => b.parentId === block.id && !branchLabels.has(b.block.label),
+    );
+    const adderNodeId = nanoid();
+
+    if (children.length === 0) {
+      edges.push(defaultEdge(startNodeId, adderNodeId));
+      nodes.push(nodeAdderNode(adderNodeId, block.id));
+      return;
+    }
+
+    // Chain children by walking next_block_label from the in-degree-zero
+    // child rather than by array order. Same Approach B logic as the
+    // top-level loader - see findChainRoot.
+    const childBlocks = children.map((c) => c.block);
+    const childByLabel = new Map(children.map((c) => [c.block.label, c]));
+    const orderedChildren = orderLoopChildrenByChain(childBlocks, childByLabel);
+
+    edges.push(edgeWithAddButton(startNodeId, orderedChildren[0]!.id));
+    for (let i = 0; i < orderedChildren.length - 1; i++) {
+      edges.push(
+        edgeWithAddButton(orderedChildren[i]!.id, orderedChildren[i + 1]!.id),
+      );
+    }
+
+    const lastChild = orderedChildren[orderedChildren.length - 1]!;
+    nodes.push(nodeAdderNode(adderNodeId, block.id));
+    edges.push(defaultEdge(lastChild.id, adderNodeId));
+  });
+
+  // Reconstruct conditional hierarchy and create conditional edges
+  const conditionalResult = reconstructConditionalStructure(
+    blocks,
+    nodes,
+    labelToNode,
+    blocksByLabel,
+  );
+  nodes.length = 0;
+  nodes.push(...conditionalResult.nodes);
+  edges.push(...conditionalResult.edges);
+
+  // Create top-level edges based on next_block_label (not array order!)
+  // We'll filter out conditional branch blocks below by checking conditionalNodeId
+  //
+  // Detect cycles by walking the next_block_label chain (not array order, since the
+  // two can differ). React Flow crashes when rendering cyclic edge graphs.
+  const cycleBackEdgeLabels = new Set<string>();
+  {
+    const visited = new Set<string>();
+    const chainRoot = findChainRoot(blocks);
+    let current = chainRoot?.label ?? null;
+    while (current && !visited.has(current)) {
+      visited.add(current);
+      const block = blocksByLabel.get(current);
+      if (!block) break;
+      const next = block.next_block_label ?? null;
+      if (next && visited.has(next)) {
+        // This block's next_block_label closes a cycle — mark it
+        cycleBackEdgeLabels.add(current);
+        break;
+      }
+      current = next;
+    }
+  }
+
+  blocks.forEach((block) => {
+    const sourceNode = labelToNode.get(block.label);
+    if (!sourceNode || !isWorkflowBlockNode(sourceNode)) {
+      return;
+    }
+
+    // Skip if this block is inside a conditional branch (edges already created above)
+    if (sourceNode.data.conditionalNodeId) {
+      return;
+    }
+
+    // Find target block using next_block_label
+    const nextLabel = block.next_block_label;
+    if (nextLabel) {
+      // Skip edges that close a cycle in the next_block_label chain
+      if (cycleBackEdgeLabels.has(block.label)) {
+        return;
+      }
+      const targetNode = labelToNode.get(nextLabel);
+      if (targetNode) {
+        edges.push(edgeWithAddButton(sourceNode.id, targetNode.id));
+      }
+    }
+  });
+
+  // Connect workflow START to the chain root (computed via adjacency, not
+  // array order - see findChainRoot / Approach B in SKY-9051 design doc).
+  if (blocks.length > 0) {
+    const chainRoot = findChainRoot(blocks);
+    const rootNode = chainRoot ? labelToNode.get(chainRoot.label) : null;
+    if (rootNode) {
+      edges.push(edgeWithAddButton(startNodeId, rootNode.id));
+    }
+  }
+
+  // Create final NodeAdder at the end of the workflow
+  const adderNodeId = nanoid();
+  nodes.push(nodeAdderNode(adderNodeId));
+
+  if (blocks.length === 0) {
+    edges.push(defaultEdge(startNodeId, adderNodeId));
+  } else {
+    // Find a top-level terminal block: one whose next_block_label is null OR
+    // whose chain edge was skipped as a cycle break, and not inside a
+    // conditional branch. Position in blocks[] is irrelevant.
+    const lastBlock = blocks.find((block) => {
+      if (
+        block.next_block_label !== null &&
+        !cycleBackEdgeLabels.has(block.label)
+      ) {
+        return false;
+      }
+      const node = labelToNode.get(block.label);
+      return node && isWorkflowBlockNode(node) && !node.data.conditionalNodeId;
+    });
+
+    if (lastBlock) {
+      const lastNode = labelToNode.get(lastBlock.label);
+      if (lastNode) {
+        edges.push(defaultEdge(lastNode.id, adderNodeId));
+      }
+    }
+  }
+
+  // Determine the initial active branch for each conditional node.
+  // Walk the nodes array (not blocks) so nested conditionals inside
+  // loops or other conditionals are included.
+  const conditionalNodeToActiveBranch = new Map<string, string>();
+  nodes.forEach((node) => {
+    if (!isConditionalNode(node)) {
+      return;
+    }
+    const activeBranch = node.data.activeBranchId;
+    if (activeBranch) {
+      conditionalNodeToActiveBranch.set(node.id, activeBranch);
+    }
+  });
+
+  // Hide branch nodes that are not part of the active branch
+  nodes.forEach((node) => {
+    if (!isWorkflowBlockNode(node)) {
+      return;
+    }
+    const conditionalNodeId = node.data.conditionalNodeId;
+    const branchId = node.data.conditionalBranchId;
+    if (!conditionalNodeId || !branchId) {
+      return;
+    }
+
+    const activeBranchId = conditionalNodeToActiveBranch.get(conditionalNodeId);
+    node.hidden = Boolean(
+      activeBranchId && branchId !== activeBranchId && branchId !== null,
+    );
+  });
+
+  // Cascade visibility to descendants (for nested conditionals)
+  // Collect all nodes that had their visibility set
+  const nodesWithVisibilitySet = nodes.filter(
+    (node) =>
+      isWorkflowBlockNode(node) &&
+      node.data.conditionalNodeId &&
+      node.data.conditionalBranchId,
+  );
+
+  nodesWithVisibilitySet.forEach((node) => {
+    if (node.hidden) {
+      // Cascade hide to all descendants
+      const allNodes = updateNodeAndDescendantsVisibility(nodes, node.id, true);
+      // Update nodes array with cascaded visibility
+      allNodes.forEach((updatedNode) => {
+        const index = nodes.findIndex((n) => n.id === updatedNode.id);
+        if (index !== -1) {
+          nodes[index] = updatedNode;
+        }
+      });
+    }
+  });
+
+  const hiddenNodeIds = new Set(
+    nodes.filter((node) => node.hidden).map((node) => node.id),
+  );
+
+  edges.forEach((edge) => {
+    const edgeData = edge.data as ConditionalEdgeData | undefined;
+    const conditionalNodeId = edgeData?.conditionalNodeId;
+    const conditionalBranchId = edgeData?.conditionalBranchId;
+    const activeBranchId = conditionalNodeId
+      ? conditionalNodeToActiveBranch.get(conditionalNodeId)
+      : null;
+    const branchHidden =
+      Boolean(
+        conditionalNodeId &&
+        conditionalBranchId &&
+        activeBranchId &&
+        conditionalBranchId !== activeBranchId,
+      ) ?? false;
+
+    const nodeHidden =
+      hiddenNodeIds.has(edge.source) || hiddenNodeIds.has(edge.target);
+
+    edge.hidden = branchHidden || nodeHidden;
+  });
+
+  return { nodes, edges, validationError };
+}
+
+function createNode(
+  identifiers: { id: string; parentId?: string },
+  nodeType: NonNullable<WorkflowBlockNode["type"]>,
+  label: string,
+): WorkflowBlockNode {
+  const common = {
+    draggable: false,
+    position: { x: 0, y: 0 },
+  };
+  switch (nodeType) {
+    case "task": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "task",
+        data: {
+          ...taskNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "taskv2": {
+      // Defensive fallback for stale callers that still request the removed
+      // add-menu type. Persisted task_v2 blocks are preserved by blockToNode.
+      return {
+        ...identifiers,
+        ...common,
+        type: "navigation",
+        data: {
+          ...navigationNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "validation": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "validation",
+        data: {
+          ...validationNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "human_interaction": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "human_interaction",
+        data: {
+          ...humanInteractionNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "action": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "action",
+        data: {
+          ...actionNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "navigation": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "navigation",
+        data: {
+          ...navigationNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "extraction": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "extraction",
+        data: {
+          ...extractionNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "login": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "login",
+        data: {
+          ...loginNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "wait": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "wait",
+        data: {
+          ...waitNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "fileDownload": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "fileDownload",
+        data: {
+          ...fileDownloadNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "loop": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "loop",
+        data: {
+          ...loopNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "codeBlock": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "codeBlock",
+        data: {
+          ...codeBlockNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "download": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "download",
+        data: {
+          ...downloadNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "upload": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "upload",
+        data: {
+          ...uploadNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "sendEmail": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "sendEmail",
+        data: {
+          ...sendEmailNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "textPrompt": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "textPrompt",
+        data: {
+          ...textPromptNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "fileParser": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "fileParser",
+        data: {
+          ...fileParserNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "pdfParser": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "pdfParser",
+        data: {
+          ...pdfParserNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "url": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "url",
+        data: {
+          ...urlNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "fileUpload": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "fileUpload",
+        data: {
+          ...fileUploadNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "http_request": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "http_request",
+        data: {
+          ...httpRequestNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "printPage": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "printPage",
+        data: {
+          ...printPageNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "workflowTrigger": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "workflowTrigger",
+        data: {
+          ...workflowTriggerNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "googleSheetsRead": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "googleSheetsRead",
+        data: {
+          ...googleSheetsReadNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "googleSheetsWrite": {
+      return {
+        ...identifiers,
+        ...common,
+        type: "googleSheetsWrite",
+        data: {
+          ...googleSheetsWriteNodeDefaultData,
+          label,
+        },
+      };
+    }
+    case "conditional": {
+      const branches = createDefaultBranchConditions();
+      return {
+        ...identifiers,
+        ...common,
+        type: "conditional",
+        data: {
+          ...conditionalNodeDefaultData,
+          label,
+          branches,
+          activeBranchId: branches[0]?.id ?? null,
+        },
+      };
+    }
+  }
+}
+
+function JSONParseSafe(json: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function JSONSafeOrString(
+  json: string,
+): Record<string, unknown> | string | null {
+  if (!json) {
+    return null;
+  }
+  try {
+    return JSON.parse(json);
+  } catch {
+    return json;
+  }
+}
+
+function serializeLoopNodeToYAML(
+  node: LoopNode,
+  loopChildren: Array<BlockYAML>,
+  nextBlockLabel: string | null,
+): ForLoopBlockYAML | WhileLoopBlockYAML {
+  const loopKind = node.data.loopKind;
+  if (loopKind === "while") {
+    return serializeLoopNodeWhileBranchToYAML(
+      node,
+      loopChildren,
+      nextBlockLabel,
+    );
+  }
+  return {
+    label: node.data.label,
+    continue_on_failure: node.data.continueOnFailure,
+    next_loop_on_failure: node.data.nextLoopOnFailure ?? false,
+    next_block_label: nextBlockLabel,
+    ignore_workflow_system_prompt:
+      node.data.ignoreWorkflowSystemPrompt ?? false,
+    loop_blocks: loopChildren,
+    block_type: "for_loop",
+    loop_variable_reference: node.data.loopVariableReference,
+    complete_if_empty: node.data.completeIfEmpty,
+    data_schema: JSONSafeOrString(node.data.dataSchema),
+    loop_over_parameter_key: node.data.loopValue ?? "",
+  };
+}
+
+function findNextBlockLabel(
+  nodeId: string,
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): string | null {
+  const currentNode = nodes.find((n) => n.id === nodeId);
+
+  // Helper: get conditional node's merge label
+  const getConditionalMergeLabel = (): string | null => {
+    if (!currentNode || !isWorkflowBlockNode(currentNode)) {
+      return null;
+    }
+
+    // If this node itself is a conditional, compute merge label from edges
+    // (not node.data.mergeLabel which may be stale from deserialization)
+    if (currentNode.type === "conditional") {
+      return findConditionalMergeLabel(
+        currentNode as ConditionalNode,
+        nodes,
+        edges,
+      );
+    }
+
+    const conditionalNodeId = currentNode.data.conditionalNodeId;
+    if (!conditionalNodeId) {
+      return null;
+    }
+
+    // Find the conditional node itself
+    const conditionalNode = nodes.find((n) => n.id === conditionalNodeId);
+    if (!conditionalNode || !isWorkflowBlockNode(conditionalNode)) {
+      return null;
+    }
+
+    // Use the conditional node's next_block_label (computed from edges)
+    return findNextBlockLabel(conditionalNodeId, nodes, edges);
+  };
+
+  // Find the outgoing edge from this node
+  const outgoingEdge = edges.find((edge) => edge.source === nodeId);
+
+  if (!outgoingEdge) {
+    // No outgoing edge - check if this node is inside a conditional branch
+    // If so, it should merge to the conditional's merge point
+    return getConditionalMergeLabel();
+  }
+
+  // Follow edges until we find a workflow block (skip NodeAdder, Start nodes)
+  let currentTargetId = outgoingEdge.target;
+  const visited = new Set<string>();
+  const maxIterations = 100; // Prevent infinite loops
+  let iterations = 0;
+
+  while (currentTargetId && iterations < maxIterations) {
+    if (visited.has(currentTargetId)) {
+      // Cycle detected
+      return null;
+    }
+    visited.add(currentTargetId);
+    iterations++;
+
+    const targetNode = nodes.find((n) => n.id === currentTargetId);
+
+    if (!targetNode) {
+      return null;
+    }
+
+    // If we found a workflow block node, return its label
+    if (isWorkflowBlockNode(targetNode)) {
+      return targetNode.data.label;
+    }
+
+    // If it's a utility node (NodeAdder, Start), keep following edges
+    if (targetNode.type === "nodeAdder" || targetNode.type === "start") {
+      const nextEdge = edges.find((edge) => edge.source === currentTargetId);
+      if (!nextEdge) {
+        // Reached end of edges at a utility node
+        // If the original node is inside a conditional branch, look up the conditional's merge point
+        return getConditionalMergeLabel();
+      }
+      currentTargetId = nextEdge.target;
+      continue;
+    }
+
+    // Unknown node type
+    return null;
+  }
+
+  return null;
+}
+
+function getWorkflowBlock(
+  node: WorkflowBlockNode,
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): BlockYAML {
+  // Compute next_block_label from edges/graph structure
+  const nextBlockLabel = findNextBlockLabel(node.id, nodes, edges);
+
+  const base = {
+    label: node.data.label,
+    continue_on_failure: node.data.continueOnFailure,
+    next_loop_on_failure: node.data.nextLoopOnFailure,
+    model: node.data.model,
+    next_block_label: nextBlockLabel,
+    ignore_workflow_system_prompt:
+      node.data.ignoreWorkflowSystemPrompt ?? false,
+  };
+  switch (node.type) {
+    case "task": {
+      return {
+        ...base,
+        block_type: "task",
+        url: node.data.url,
+        title: node.data.label,
+        navigation_goal: node.data.navigationGoal,
+        data_extraction_goal: node.data.dataExtractionGoal,
+        complete_criterion: node.data.completeCriterion,
+        terminate_criterion: node.data.terminateCriterion,
+        data_schema: JSONSafeOrString(node.data.dataSchema),
+        error_code_mapping: JSONParseSafe(node.data.errorCodeMapping) as Record<
+          string,
+          string
+        > | null,
+        ...(node.data.maxRetries !== null && {
+          max_retries: node.data.maxRetries,
+        }),
+        max_steps_per_run: node.data.maxStepsOverride,
+        complete_on_download: node.data.allowDownloads,
+        download_suffix: node.data.downloadSuffix,
+        parameter_keys: node.data.parameterKeys,
+        totp_identifier: node.data.totpIdentifier,
+        totp_verification_url: node.data.totpVerificationUrl,
+        disable_cache: node.data.disableCache ?? false,
+        include_action_history_in_verification:
+          node.data.includeActionHistoryInVerification,
+        engine: node.data.engine,
+      };
+    }
+    case "taskv2": {
+      return {
+        ...base,
+        block_type: "task_v2",
+        prompt: node.data.prompt,
+        max_steps: node.data.maxSteps,
+        totp_identifier: node.data.totpIdentifier,
+        totp_verification_url: node.data.totpVerificationUrl,
+        url: node.data.url,
+        disable_cache: node.data.disableCache ?? false,
+      };
+    }
+    case "validation": {
+      return {
+        ...base,
+        block_type: "validation",
+        complete_criterion: node.data.completeCriterion,
+        terminate_criterion: node.data.terminateCriterion,
+        error_code_mapping: JSONParseSafe(node.data.errorCodeMapping) as Record<
+          string,
+          string
+        > | null,
+        parameter_keys: node.data.parameterKeys,
+      };
+    }
+    case "human_interaction": {
+      return {
+        ...base,
+        block_type: "human_interaction",
+        instructions: node.data.instructions,
+        positive_descriptor: node.data.positiveDescriptor,
+        negative_descriptor: node.data.negativeDescriptor,
+        timeout_seconds: node.data.timeoutSeconds,
+        recipients: node.data.recipients
+          .split(",")
+          .map((recipient) => recipient.trim()),
+        subject: node.data.subject,
+        body: node.data.body,
+        sender: node.data.sender === "" ? EMAIL_BLOCK_SENDER : node.data.sender,
+      };
+    }
+    case "action": {
+      return {
+        ...base,
+        block_type: "action",
+        title: node.data.label,
+        navigation_goal: node.data.navigationGoal,
+        error_code_mapping: JSONParseSafe(node.data.errorCodeMapping) as Record<
+          string,
+          string
+        > | null,
+        url: node.data.url,
+        ...(node.data.maxRetries !== null && {
+          max_retries: node.data.maxRetries,
+        }),
+        complete_on_download: node.data.allowDownloads,
+        download_suffix: node.data.downloadSuffix,
+        parameter_keys: node.data.parameterKeys,
+        totp_identifier: node.data.totpIdentifier,
+        totp_verification_url: node.data.totpVerificationUrl,
+        disable_cache: node.data.disableCache ?? false,
+        engine: node.data.engine,
+      };
+    }
+    case "navigation": {
+      // If engine is SkyvernV2, convert to task_v2 block
+      if (node.data.engine === RunEngine.SkyvernV2) {
+        return {
+          ...base,
+          block_type: "task_v2",
+          prompt: node.data.prompt,
+          max_steps: node.data.maxSteps,
+          totp_identifier: node.data.totpIdentifier,
+          totp_verification_url: node.data.totpVerificationUrl,
+          url: node.data.url,
+          disable_cache: node.data.disableCache ?? false,
+        };
+      }
+      // Otherwise, create a navigation block
+      return {
+        ...base,
+        block_type: "navigation",
+        title: node.data.label,
+        navigation_goal: node.data.navigationGoal,
+        error_code_mapping: JSONParseSafe(node.data.errorCodeMapping) as Record<
+          string,
+          string
+        > | null,
+        url: node.data.url,
+        ...(node.data.maxRetries !== null && {
+          max_retries: node.data.maxRetries,
+        }),
+        max_steps_per_run: node.data.maxStepsOverride,
+        complete_on_download: node.data.allowDownloads,
+        download_suffix: node.data.downloadSuffix,
+        parameter_keys: node.data.parameterKeys,
+        totp_identifier: node.data.totpIdentifier,
+        totp_verification_url: node.data.totpVerificationUrl,
+        disable_cache: node.data.disableCache ?? false,
+        complete_criterion: node.data.completeCriterion,
+        terminate_criterion: node.data.terminateCriterion,
+        engine: node.data.engine,
+        include_action_history_in_verification:
+          node.data.includeActionHistoryInVerification,
+      };
+    }
+    case "extraction": {
+      return {
+        ...base,
+        block_type: "extraction",
+        url: node.data.url,
+        title: node.data.label,
+        data_extraction_goal: node.data.dataExtractionGoal,
+        data_schema: JSONSafeOrString(node.data.dataSchema),
+        ...(node.data.maxRetries !== null && {
+          max_retries: node.data.maxRetries,
+        }),
+        max_steps_per_run: node.data.maxStepsOverride,
+        parameter_keys: node.data.parameterKeys,
+        disable_cache: node.data.disableCache ?? false,
+        engine: node.data.engine,
+      };
+    }
+    case "login": {
+      return {
+        ...base,
+        block_type: "login",
+        title: node.data.label,
+        navigation_goal: node.data.navigationGoal,
+        error_code_mapping: JSONParseSafe(node.data.errorCodeMapping) as Record<
+          string,
+          string
+        > | null,
+        url: node.data.url,
+        ...(node.data.maxRetries !== null && {
+          max_retries: node.data.maxRetries,
+        }),
+        max_steps_per_run: node.data.maxStepsOverride,
+        parameter_keys: node.data.parameterKeys,
+        totp_identifier: node.data.totpIdentifier,
+        totp_verification_url: node.data.totpVerificationUrl,
+        disable_cache: node.data.disableCache ?? false,
+        complete_criterion: node.data.completeCriterion,
+        terminate_criterion: node.data.terminateCriterion,
+        engine: node.data.engine,
+      };
+    }
+    case "wait": {
+      return {
+        ...base,
+        block_type: "wait",
+        wait_sec: Number(node.data.waitInSeconds),
+      };
+    }
+    case "fileDownload": {
+      return {
+        ...base,
+        block_type: "file_download",
+        title: node.data.label,
+        navigation_goal: node.data.navigationGoal,
+        error_code_mapping: JSONParseSafe(node.data.errorCodeMapping) as Record<
+          string,
+          string
+        > | null,
+        url: node.data.url,
+        ...(node.data.maxRetries !== null && {
+          max_retries: node.data.maxRetries,
+        }),
+        max_steps_per_run: node.data.maxStepsOverride,
+        download_suffix: node.data.downloadSuffix,
+        parameter_keys: node.data.parameterKeys,
+        totp_identifier: node.data.totpIdentifier,
+        totp_verification_url: node.data.totpVerificationUrl,
+        disable_cache: node.data.disableCache ?? false,
+        engine: node.data.engine,
+        download_timeout: node.data.downloadTimeout, // seconds
+      };
+    }
+    case "sendEmail": {
+      return {
+        ...base,
+        block_type: "send_email",
+        body: node.data.body,
+        file_attachments: node.data.fileAttachments
+          .split(",")
+          .map((attachment) => attachment.trim()),
+        recipients: node.data.recipients
+          .split(",")
+          .map((recipient) => recipient.trim()),
+        subject: node.data.subject,
+        sender: node.data.sender === "" ? EMAIL_BLOCK_SENDER : node.data.sender,
+        smtp_host_secret_parameter_key: node.data.smtpHostSecretParameterKey,
+        smtp_port_secret_parameter_key: node.data.smtpPortSecretParameterKey,
+        smtp_username_secret_parameter_key:
+          node.data.smtpUsernameSecretParameterKey,
+        smtp_password_secret_parameter_key:
+          node.data.smtpPasswordSecretParameterKey,
+      };
+    }
+    case "codeBlock": {
+      return {
+        ...base,
+        block_type: "code",
+        parameter_keys: node.data.parameterKeys,
+        code: node.data.code,
+      };
+    }
+    case "download": {
+      return {
+        ...base,
+        block_type: "download_to_s3",
+        url: node.data.url,
+      };
+    }
+    case "upload": {
+      return {
+        ...base,
+        block_type: "upload_to_s3",
+        path: node.data.path,
+      };
+    }
+    case "fileUpload": {
+      return {
+        ...base,
+        block_type: "file_upload",
+        path: node.data.path,
+        storage_type: node.data.storageType,
+        s3_bucket: node.data.s3Bucket ?? "",
+        aws_access_key_id: node.data.awsAccessKeyId ?? "",
+        aws_secret_access_key: node.data.awsSecretAccessKey ?? "",
+        region_name: node.data.regionName ?? "",
+        azure_storage_account_name: node.data.azureStorageAccountName ?? "",
+        azure_storage_account_key: node.data.azureStorageAccountKey ?? "",
+        azure_blob_container_name: node.data.azureBlobContainerName ?? "",
+      };
+    }
+    case "fileParser": {
+      return {
+        ...base,
+        block_type: "file_url_parser",
+        file_url: node.data.fileUrl,
+        file_type: node.data.fileType,
+        json_schema: JSONParseSafe(node.data.jsonSchema),
+      };
+    }
+    case "textPrompt": {
+      return {
+        ...base,
+        block_type: "text_prompt",
+        llm_key: "",
+        prompt: node.data.prompt,
+        json_schema: JSONParseSafe(node.data.jsonSchema),
+        parameter_keys: node.data.parameterKeys,
+      };
+    }
+    case "pdfParser": {
+      return {
+        ...base,
+        block_type: "pdf_parser",
+        file_url: node.data.fileUrl,
+        json_schema: JSONParseSafe(node.data.jsonSchema),
+      };
+    }
+    case "url": {
+      return {
+        ...base,
+        block_type: "goto_url",
+        url: node.data.url,
+      };
+    }
+    case "http_request": {
+      return {
+        ...base,
+        block_type: "http_request",
+        method: node.data.method,
+        url: node.data.url,
+        headers: JSONParseSafe(node.data.headers) as Record<
+          string,
+          string
+        > | null,
+        body: JSONParseSafe(node.data.body) as Record<string, unknown> | null,
+        files: (() => {
+          const parsed = JSONParseSafe(node.data.files) as Record<
+            string,
+            string
+          > | null;
+          // Convert empty object to null to match backend's "if not self.files" check
+          if (parsed && Object.keys(parsed).length === 0) {
+            return null;
+          }
+          return parsed;
+        })(),
+        timeout: node.data.timeout,
+        follow_redirects: node.data.followRedirects,
+        parameter_keys: node.data.parameterKeys,
+        download_filename: node.data.downloadFilename || null,
+        save_response_as_file: node.data.saveResponseAsFile,
+      };
+    }
+    case "printPage": {
+      return {
+        ...base,
+        block_type: "print_page",
+        include_timestamp: node.data.includeTimestamp,
+        custom_filename: node.data.customFilename || null,
+        format: node.data.format,
+        landscape: node.data.landscape,
+        print_background: node.data.printBackground,
+        parameter_keys: node.data.parameterKeys,
+      };
+    }
+    case "workflowTrigger": {
+      const parsedPayload = JSONParseSafe(node.data.payload) as Record<
+        string,
+        unknown
+      > | null;
+      return {
+        ...base,
+        block_type: "workflow_trigger",
+        workflow_permanent_id: node.data.workflowPermanentId,
+        payload:
+          parsedPayload && Object.keys(parsedPayload).length > 0
+            ? parsedPayload
+            : null,
+        wait_for_completion: node.data.waitForCompletion,
+        browser_session_id: node.data.browserSessionId || null,
+        use_parent_browser_session: node.data.useParentBrowserSession,
+        parameter_keys: node.data.parameterKeys,
+      };
+    }
+    case "googleSheetsRead": {
+      return {
+        ...base,
+        block_type: "google_sheets_read",
+        spreadsheet_url: node.data.spreadsheetUrl,
+        sheet_name: node.data.sheetName || null,
+        range: node.data.range || null,
+        credential_id: node.data.credentialId || null,
+        has_header_row: node.data.hasHeaderRow,
+        parameter_keys: node.data.parameterKeys,
+      };
+    }
+    case "googleSheetsWrite": {
+      let parsedColumnMapping: Record<string, string> | null = null;
+      if (node.data.columnMapping) {
+        try {
+          parsedColumnMapping = JSON.parse(node.data.columnMapping);
+        } catch {
+          // ignore invalid JSON
+        }
+      }
+      return {
+        ...base,
+        block_type: "google_sheets_write",
+        spreadsheet_url: node.data.spreadsheetUrl,
+        sheet_name: node.data.sheetName || null,
+        range: node.data.range || null,
+        credential_id: node.data.credentialId || null,
+        write_mode: node.data.writeMode,
+        values: node.data.values,
+        column_mapping: parsedColumnMapping,
+        create_sheet_if_missing: node.data.createSheetIfMissing,
+        parameter_keys: node.data.parameterKeys,
+      };
+    }
+    case "conditional": {
+      return serializeConditionalBlock(node as ConditionalNode, nodes, edges);
+    }
+    default: {
+      throw new Error(
+        `Invalid node type, '${node.type}', for getWorkflowBlock`,
+      );
+    }
+  }
+}
+
+function getOrderedChildrenBlocks(
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+  parentId: string,
+): Array<BlockYAML> {
+  const nodesById = new Map(nodes.map((n) => [n.id, n]));
+  const includedIds = new Set<string>();
+
+  const hasAncestor = (nodeId: string | null, ancestorId: string): boolean => {
+    let current = nodeId ? nodesById.get(nodeId) : undefined;
+    while (current) {
+      if (current.parentId === ancestorId) {
+        return true;
+      }
+      current = current.parentId ? nodesById.get(current.parentId) : undefined;
+    }
+    return false;
+  };
+
+  // This prevents nested loop children from being added to the parent loop.
+  const isInsideIncludedLoop = (nodeId: string): boolean => {
+    let current = nodesById.get(nodeId);
+    while (current?.parentId) {
+      const parent = nodesById.get(current.parentId);
+      if (parent?.type === "loop" && includedIds.has(parent.id)) {
+        return true;
+      }
+      current = parent;
+    }
+    return false;
+  };
+
+  const parentNode = nodes.find((node) => node.id === parentId);
+  if (!parentNode) {
+    return [];
+  }
+  const blockStartNode = nodes.find(
+    (node) => node.type === "start" && node.parentId === parentId,
+  );
+  if (!blockStartNode) {
+    return [];
+  }
+  const firstChildId = edges.find(
+    (edge) => edge.source === blockStartNode.id,
+  )?.target;
+  const firstChild = nodes.find((node) => node.id === firstChildId);
+  if (!firstChild || !isWorkflowBlockNode(firstChild)) {
+    return [];
+  }
+
+  const children: Array<BlockYAML> = [];
+  let currentNode: WorkflowBlockNode | undefined = firstChild;
+  while (currentNode) {
+    includedIds.add(currentNode.id);
+    if (currentNode.type === "loop") {
+      const loopChildren = getOrderedChildrenBlocks(
+        nodes,
+        edges,
+        currentNode.id,
+      );
+      // Compute next_block_label for nested loops (same as regular blocks)
+      const nextBlockLabel = findNextBlockLabel(currentNode.id, nodes, edges);
+      children.push(
+        serializeLoopNodeToYAML(
+          currentNode as LoopNode,
+          loopChildren,
+          nextBlockLabel,
+        ),
+      );
+    } else {
+      children.push(getWorkflowBlock(currentNode, nodes, edges));
+    }
+    const nextId = edges.find(
+      (edge) => edge.source === currentNode?.id,
+    )?.target;
+    const next = nodes.find((node) => node.id === nextId);
+    currentNode = next && isWorkflowBlockNode(next) ? next : undefined;
+  }
+
+  // Add any additional workflow block nodes that belong under this parent (e.g., conditional branches)
+  nodes.forEach((node) => {
+    if (!isWorkflowBlockNode(node)) {
+      return;
+    }
+    if (includedIds.has(node.id)) {
+      return;
+    }
+    if (!hasAncestor(node.id, parentId)) {
+      return;
+    }
+    if (isInsideIncludedLoop(node.id)) {
+      return;
+    }
+
+    if (node.type === "loop") {
+      const loopChildren = getOrderedChildrenBlocks(nodes, edges, node.id);
+      const nextBlockLabel = findNextBlockLabel(node.id, nodes, edges);
+      children.push(
+        serializeLoopNodeToYAML(node as LoopNode, loopChildren, nextBlockLabel),
+      );
+      includedIds.add(node.id);
+      return;
+    }
+
+    children.push(getWorkflowBlock(node, nodes, edges));
+    includedIds.add(node.id);
+  });
+
+  return children;
+}
+
+function getWorkflowBlocksUtil(
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): Array<BlockYAML> {
+  const nodesById = new Map(nodes.map((n) => [n.id, n]));
+
+  const isInsideLoop = (nodeId: string): boolean => {
+    let current = nodesById.get(nodeId);
+    while (current?.parentId) {
+      const parent = nodesById.get(current.parentId);
+      if (parent?.type === "loop") {
+        return true;
+      }
+      current = parent;
+    }
+    return false;
+  };
+
+  const emit = (node: AppNode): BlockYAML | null => {
+    if (node.type === "loop") {
+      const nextBlockLabel = findNextBlockLabel(node.id, nodes, edges);
+      return serializeLoopNodeToYAML(
+        node as LoopNode,
+        getOrderedChildrenBlocks(nodes, edges, node.id),
+        nextBlockLabel,
+      );
+    }
+    if (isWorkflowBlockNode(node)) {
+      return getWorkflowBlock(node as WorkflowBlockNode, nodes, edges);
+    }
+    return null;
+  };
+
+  const result: Array<BlockYAML> = [];
+  const includedIds = new Set<string>();
+
+  // Phase 1: walk the top-level chain from the workflow start node via
+  // edges so blocks[] array order matches the next_block_label chain. This
+  // keeps the persisted form in chain order for BE consumers that still rely
+  // on array position (the FE loader now resolves the chain via adjacency).
+  const workflowStartNode = nodes.find(
+    (node) => node.type === "start" && !node.parentId,
+  );
+  if (workflowStartNode) {
+    let cursorId: string | undefined = edges.find(
+      (edge) => edge.source === workflowStartNode.id,
+    )?.target;
+    const visited = new Set<string>();
+    while (cursorId && !visited.has(cursorId)) {
+      visited.add(cursorId);
+      const cursorNode = nodesById.get(cursorId);
+      if (!cursorNode || cursorNode.type === "nodeAdder") {
+        break;
+      }
+      const emitted = emit(cursorNode);
+      if (emitted) {
+        result.push(emitted);
+        includedIds.add(cursorNode.id);
+      }
+      const currentId: string = cursorId;
+      cursorId = edges.find((edge) => edge.source === currentId)?.target;
+    }
+  }
+
+  // Phase 2: append any remaining top-level-eligible blocks the chain walk
+  // did not visit. In practice these are conditional-branch children (nodes
+  // with parentId pointing at a conditional and a conditionalNodeId set).
+  // Their relative position in blocks[] is load-irrelevant; getElements
+  // discovers them via reconstructConditionalStructure keyed off
+  // conditionalNodeId rather than array order.
+  nodes.forEach((node) => {
+    if (includedIds.has(node.id)) return;
+    if (node.type === "start" || node.type === "nodeAdder") return;
+    if (isInsideLoop(node.id)) return;
+
+    const isConditionalBranchNode =
+      isWorkflowBlockNode(node) && Boolean(node.data.conditionalNodeId);
+    if (node.parentId && !isConditionalBranchNode) return;
+
+    const emitted = emit(node);
+    if (emitted) {
+      result.push(emitted);
+    }
+  });
+
+  return result;
+}
+
+function getWorkflowBlocks(
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+): Array<BlockYAML> {
+  return getWorkflowBlocksUtil(nodes, edges);
+}
+
+function getWorkflowSettings(nodes: Array<AppNode>): WorkflowSettings {
+  const defaultSettings = {
+    persistBrowserSession: false,
+    browserProfileId: null,
+    proxyLocation: ProxyLocation.Residential,
+    webhookCallbackUrl: null,
+    model: null,
+    maxScreenshotScrolls: null,
+    maxElapsedTimeMinutes: null,
+    extraHttpHeaders: null,
+    cdpConnectHeaders: null,
+    runWith: "code",
+    codeVersion: 2,
+    scriptCacheKey: null,
+    aiFallback: true,
+    runSequentially: false,
+    sequentialKey: null,
+    finallyBlockLabel: null,
+    workflowSystemPrompt: null,
+  };
+  const startNodes = nodes.filter(isStartNode);
+  const startNodeWithWorkflowSettings = startNodes.find(
+    (node) => node.data.withWorkflowSettings,
+  );
+  if (!startNodeWithWorkflowSettings) {
+    return defaultSettings;
+  }
+  const data = startNodeWithWorkflowSettings.data;
+  if (isWorkflowStartNodeData(data)) {
+    return {
+      persistBrowserSession: data.persistBrowserSession,
+      browserProfileId: data.browserProfileId,
+      proxyLocation: data.proxyLocation,
+      webhookCallbackUrl: data.webhookCallbackUrl,
+      model: data.model,
+      maxScreenshotScrolls: data.maxScreenshotScrolls,
+      maxElapsedTimeMinutes: data.maxElapsedTimeMinutes,
+      extraHttpHeaders:
+        data.extraHttpHeaders && typeof data.extraHttpHeaders === "object"
+          ? JSON.stringify(data.extraHttpHeaders)
+          : data.extraHttpHeaders,
+      cdpConnectHeaders:
+        data.cdpConnectHeaders && typeof data.cdpConnectHeaders === "object"
+          ? JSON.stringify(data.cdpConnectHeaders)
+          : data.cdpConnectHeaders,
+      runWith: data.runWith,
+      codeVersion: data.codeVersion,
+      scriptCacheKey: data.scriptCacheKey,
+      aiFallback: data.aiFallback,
+      runSequentially: data.runSequentially,
+      sequentialKey: data.sequentialKey,
+      finallyBlockLabel: data.finallyBlockLabel ?? null,
+      workflowSystemPrompt: data.workflowSystemPrompt ?? null,
+    };
+  }
+  return defaultSettings;
+}
+
+function generateNodeLabel(existingLabels: Array<string>) {
+  for (let i = 1; i < existingLabels.length + 2; i++) {
+    const label = NEW_NODE_LABEL_PREFIX + i;
+    if (!existingLabels.includes(label)) {
+      return label;
+    }
+  }
+  throw new Error("Failed to generate a new node label");
+}
+
+/**
+ * If a parameter is not displayed in the editor, we should echo its value back when saved.
+ */
+function convertEchoParameters(
+  parameters: Array<AWSSecretParameter>,
+): Array<ParameterYAML> {
+  return parameters.map((parameter) => {
+    if (parameter.parameter_type === "aws_secret") {
+      return {
+        key: parameter.key,
+        parameter_type: "aws_secret",
+        aws_key: parameter.aws_key,
+      };
+    }
+    throw new Error("Unknown parameter type");
+  });
+}
+
+function getOutputParameterKey(label: string) {
+  return label + "_output";
+}
+
+function isOutputParameterKey(value: string) {
+  return value.endsWith("_output");
+}
+
+function getBlockNameOfOutputParameterKey(value: string) {
+  if (isOutputParameterKey(value)) {
+    return value.substring(0, value.length - 7);
+  }
+  return value;
+}
+
+// Jinja-reference helpers live in a standalone module (`./jinjaReferences`)
+// so test code can import them without transitively loading the editor
+// runtime (node registry, AxiosClient, React Query hooks). The re-exports
+// below keep existing in-repo call sites (rename flow, parameter-key
+// updater) compiling unchanged; source of truth is `jinjaReferences.ts`.
+
+// Maximum recursion depth to prevent stack overflow from malicious deeply nested objects
+const MAX_TRANSFORM_DEPTH = 50;
+
+/**
+ * Recursively processes all string fields in an object and applies a transformation function.
+ * @param obj - The object to process
+ * @param transform - Function that transforms string values
+ * @param skipKeys - Set of keys to skip (e.g., 'label' which shouldn't be modified)
+ * @param depth - Current recursion depth (internal use)
+ * @returns A new object with transformed string values
+ */
+function transformStringFieldsInObject<T>(
+  obj: T,
+  transform: (value: string) => string,
+  skipKeys: Set<string>,
+  depth: number = 0,
+): T {
+  // Prevent stack overflow from deeply nested objects
+  if (depth > MAX_TRANSFORM_DEPTH) {
+    return obj;
+  }
+
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (typeof obj === "string") {
+    return transform(obj) as T;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) =>
+      transformStringFieldsInObject(item, transform, skipKeys, depth + 1),
+    ) as T;
+  }
+
+  if (typeof obj === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (skipKeys.has(key)) {
+        result[key] = value;
+      } else {
+        result[key] = transformStringFieldsInObject(
+          value,
+          transform,
+          skipKeys,
+          depth + 1,
+        );
+      }
+    }
+    return result as T;
+  }
+
+  return obj;
+}
+
+// Keys to skip when transforming string fields in node data
+const SKIP_KEYS_FOR_JINJA_TRANSFORM = new Set([
+  "label",
+  "key",
+  "type",
+  "id",
+  "nodeId",
+  "parameterKeys", // handled separately
+]);
+
+/**
+ * Replaces all jinja-style references to a variable across all nodes.
+ * Handles patterns like {{oldKey}}, {{oldKey.field}}, {{oldKey | filter}}.
+ * Returns a new array of nodes with updated data (immutable).
+ *
+ * Note: This only handles inline {{ variable }} references in string fields.
+ * The parameterKeys array should be updated separately.
+ */
+function replaceJinjaReferenceInNodes<T extends Node>(
+  nodes: T[],
+  oldKey: string,
+  newKey: string,
+): T[] {
+  return nodes.map((node) => {
+    if (!node.data) {
+      return node;
+    }
+    return {
+      ...node,
+      data: transformStringFieldsInObject(
+        node.data,
+        (text) => replaceJinjaReference(text, oldKey, newKey),
+        SKIP_KEYS_FOR_JINJA_TRANSFORM,
+      ),
+    };
+  });
+}
+
+/**
+ * Removes all jinja-style references to a variable across all nodes.
+ * Handles patterns like {{key}}, {{key.field}}, {{key | filter}}.
+ * Returns a new array of nodes with updated data (immutable).
+ *
+ * Note: This only handles inline {{ variable }} references in string fields.
+ * The parameterKeys array should be updated separately.
+ */
+function removeJinjaReferenceFromNodes<T extends Node>(
+  nodes: T[],
+  key: string,
+): T[] {
+  return nodes.map((node) => {
+    if (!node.data) {
+      return node;
+    }
+    return {
+      ...node,
+      data: transformStringFieldsInObject(
+        node.data,
+        (text) => removeJinjaReference(text, key),
+        SKIP_KEYS_FOR_JINJA_TRANSFORM,
+      ),
+    };
+  });
+}
+
+/**
+ * Removes a key from all nodes' parameterKeys arrays and handles special cases.
+ * Used when deleting a block output or parameter.
+ *
+ * @param nodes - Array of nodes to process
+ * @param keyToRemove - The key to remove from parameterKeys arrays
+ * @param deletedBlockLabel - Optional label of deleted block (for finallyBlockLabel cleanup)
+ * @returns New array of nodes with the key removed
+ */
+function removeKeyFromNodesParameterKeys<T extends Node>(
+  nodes: T[],
+  keyToRemove: string,
+  deletedBlockLabel?: string,
+): T[] {
+  return nodes.map((node) => {
+    if (!node.data) {
+      return node;
+    }
+
+    // Handle start node's finallyBlockLabel
+    if (
+      node.type === "start" &&
+      deletedBlockLabel &&
+      (node.data as Record<string, unknown>).withWorkflowSettings &&
+      (node.data as Record<string, unknown>).finallyBlockLabel ===
+        deletedBlockLabel
+    ) {
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          finallyBlockLabel: null,
+        },
+      } as T;
+    }
+
+    // Handle loop node's loopVariableReference
+    if (node.type === "loop") {
+      const loopData = node.data as Record<string, unknown>;
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          loopVariableReference:
+            loopData.loopVariableReference === keyToRemove
+              ? ""
+              : loopData.loopVariableReference,
+        },
+      } as T;
+    }
+
+    // Handle parameterKeys for all other node types
+    const parameterKeys = (node.data as Record<string, unknown>)
+      .parameterKeys as Array<string> | null | undefined;
+    if (parameterKeys !== undefined) {
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          parameterKeys: parameterKeys?.filter((key) => key !== keyToRemove),
+        },
+      } as T;
+    }
+
+    return node;
+  });
+}
+
+function getUpdatedNodesAfterLabelUpdateForParameterKeys(
+  id: string,
+  newLabel: string,
+  nodes: Array<Node>,
+): Array<Node> {
+  const labelUpdatedNode = nodes.find((node) => node.id === id);
+  if (!labelUpdatedNode) {
+    return nodes;
+  }
+  const oldLabel = labelUpdatedNode.data.label as string;
+  const oldOutputKey = getOutputParameterKey(oldLabel);
+  const newOutputKey = getOutputParameterKey(newLabel);
+
+  // Step 1: Update inline {{ old_output }} references to {{ new_output }}
+  const nodesWithUpdatedRefs = replaceJinjaReferenceInNodes(
+    nodes,
+    oldOutputKey,
+    newOutputKey,
+  );
+
+  // Step 2: Update parameterKeys arrays and the label of the renamed node
+  return nodesWithUpdatedRefs.map((node) => {
+    if (node.type === "nodeAdder" || node.type === "start") {
+      // Update label if this is the node being renamed
+      if (node.id === id) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            label: newLabel,
+          },
+        };
+      }
+      return node;
+    }
+
+    // Handle loop node's loopVariableReference (the active field displayed in UI).
+    // Note: loopValue is a legacy field populated during conversion for backward compatibility.
+    // It's not displayed in UI or sent to backend, so we only update loopVariableReference.
+    if (node.type === "loop") {
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          loopVariableReference:
+            node.data.loopVariableReference === oldOutputKey
+              ? newOutputKey
+              : node.data.loopVariableReference,
+          label: node.id === id ? newLabel : node.data.label,
+        },
+      };
+    }
+
+    // Handle parameterKeys (it's an array of key names, not jinja text)
+    const parameterKeys = node.data.parameterKeys as Array<string> | null;
+    const updatedParameterKeys = parameterKeys?.map((key) =>
+      key === oldOutputKey ? newOutputKey : key,
+    );
+
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        // Update parameterKeys if present
+        ...(parameterKeys !== undefined && {
+          parameterKeys: updatedParameterKeys,
+        }),
+        // Update the label for the node being renamed
+        label: node.id === id ? newLabel : node.data.label,
+      },
+    };
+  });
+}
+
+function getUpdatedParametersAfterLabelUpdateForSourceParameterKey(
+  id: string,
+  newLabel: string,
+  nodes: Array<Node>,
+  parameters: ParametersState,
+): ParametersState {
+  const node = nodes.find((node) => node.id === id);
+  if (!node) {
+    return parameters;
+  }
+  const oldLabel = node.data.label as string;
+  const oldOutputParameterKey = getOutputParameterKey(oldLabel);
+  const newOutputParameterKey = getOutputParameterKey(newLabel);
+  return parameters.map((parameter) => {
+    if (
+      parameter.parameterType === "context" &&
+      parameter.sourceParameterKey === oldOutputParameterKey
+    ) {
+      return {
+        ...parameter,
+        sourceParameterKey: newOutputParameterKey,
+      };
+    }
+    return parameter;
+  });
+}
+
+const sendEmailExpectedParameters = [
+  {
+    key: SMTP_HOST_PARAMETER_KEY,
+    aws_key: SMTP_HOST_AWS_KEY,
+    parameter_type: WorkflowParameterTypes.AWS_Secret,
+  },
+  {
+    key: SMTP_PORT_PARAMETER_KEY,
+    aws_key: SMTP_PORT_AWS_KEY,
+    parameter_type: WorkflowParameterTypes.AWS_Secret,
+  },
+  {
+    key: SMTP_USERNAME_PARAMETER_KEY,
+    aws_key: SMTP_USERNAME_AWS_KEY,
+    parameter_type: WorkflowParameterTypes.AWS_Secret,
+  },
+  {
+    key: SMTP_PASSWORD_PARAMETER_KEY,
+    aws_key: SMTP_PASSWORD_AWS_KEY,
+    parameter_type: WorkflowParameterTypes.AWS_Secret,
+  },
+] as const;
+
+function getBlocksOfType(
+  blocks: Array<BlockYAML>,
+  blockType: WorkflowBlockType,
+): Array<BlockYAML> {
+  const blocksOfType: Array<BlockYAML> = [];
+  for (const block of blocks) {
+    if (
+      block.block_type === WorkflowBlockTypes.ForLoop ||
+      block.block_type === WorkflowBlockTypes.WhileLoop
+    ) {
+      const subBlocks = block.loop_blocks;
+      const subBlocksOfType = getBlocksOfType(subBlocks, blockType);
+      blocksOfType.push(...subBlocksOfType);
+    } else {
+      if (block.block_type === blockType) {
+        blocksOfType.push(block);
+      }
+    }
+  }
+  return blocksOfType;
+}
+
+function getAdditionalParametersForEmailBlock(
+  blocks: Array<BlockYAML>,
+  parameters: Array<ParameterYAML>,
+): Array<ParameterYAML> {
+  const emailBlocks = getBlocksOfType(blocks, WorkflowBlockTypes.SendEmail);
+  if (emailBlocks.length === 0) {
+    return [];
+  }
+  const sendEmailParameters = sendEmailExpectedParameters.flatMap(
+    (parameter) => {
+      const existingParameter = parameters.find((p) => p.key === parameter.key);
+      if (existingParameter) {
+        return [];
+      }
+      return [parameter];
+    },
+  );
+
+  return sendEmailParameters;
+}
+
+function getUniqueLabelForExistingNode(
+  label: string,
+  existingLabels: Array<string>,
+) {
+  if (!existingLabels.includes(label)) {
+    return label;
+  }
+  for (let i = 2; i < existingLabels.length + 1; i++) {
+    const candidate = `${label}_${i}`;
+    if (!existingLabels.includes(candidate)) {
+      return candidate;
+    }
+  }
+  return label;
+}
+
+function getDefaultValueForParameterType(
+  parameterType: WorkflowParameterValueType,
+): unknown {
+  switch (parameterType) {
+    case "json": {
+      return "{}";
+    }
+    case "string": {
+      return "";
+    }
+    case "boolean": {
+      return false;
+    }
+    case "float":
+    case "integer": {
+      return 0;
+    }
+    case "file_url": {
+      return null;
+    }
+    case "credential_id": {
+      return null;
+    }
+  }
+}
+
+function getPreviousNodeIds(
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+  target: string,
+): Array<string> {
+  const nodeIds: string[] = [];
+  const node = nodes.find((node) => node.id === target);
+  if (!node) {
+    return nodeIds;
+  }
+  let current = edges.find((edge) => edge.target === target);
+  if (current) {
+    while (current) {
+      nodeIds.push(current.source);
+      current = edges.find((edge) => edge.target === current!.source);
+    }
+  }
+  if (!node.parentId) {
+    return nodeIds;
+  }
+  return [...nodeIds, ...getPreviousNodeIds(nodes, edges, node.parentId)];
+}
+
+function getAvailableOutputParameterKeys(
+  nodes: Array<AppNode>,
+  edges: Array<Edge>,
+  id: string,
+): Array<string> {
+  const previousNodeIds = getPreviousNodeIds(nodes, edges, id);
+  const previousNodes = nodes.filter((node) =>
+    previousNodeIds.includes(node.id),
+  );
+  const labels = previousNodes
+    .filter(isWorkflowBlockNode)
+    .map((node) => node.data.label);
+  const outputParameterKeys = labels.map((label) =>
+    getOutputParameterKey(label),
+  );
+
+  return outputParameterKeys;
+}
+
+function convertParametersToParameterYAML(
+  parameters: Array<Exclude<Parameter, OutputParameter>>,
+): Array<ParameterYAML> {
+  return parameters
+    .map((parameter) => {
+      const base = {
+        key: parameter.key,
+        description: parameter.description,
+        parameter_type: parameter.parameter_type,
+      };
+      switch (parameter.parameter_type) {
+        case WorkflowParameterTypes.AWS_Secret: {
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.AWS_Secret,
+            aws_key: parameter.aws_key,
+          };
+        }
+        case WorkflowParameterTypes.Bitwarden_Login_Credential: {
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.Bitwarden_Login_Credential,
+            bitwarden_collection_id: parameter.bitwarden_collection_id,
+            bitwarden_item_id: parameter.bitwarden_item_id,
+            url_parameter_key: parameter.url_parameter_key,
+            bitwarden_client_id_aws_secret_key:
+              parameter.bitwarden_client_id_aws_secret_key,
+            bitwarden_client_secret_aws_secret_key:
+              parameter.bitwarden_client_secret_aws_secret_key,
+            bitwarden_master_password_aws_secret_key:
+              parameter.bitwarden_master_password_aws_secret_key,
+          };
+        }
+        case WorkflowParameterTypes.Bitwarden_Sensitive_Information: {
+          return {
+            ...base,
+            parameter_type:
+              WorkflowParameterTypes.Bitwarden_Sensitive_Information,
+            bitwarden_collection_id: parameter.bitwarden_collection_id,
+            bitwarden_identity_key: parameter.bitwarden_identity_key,
+            bitwarden_identity_fields: parameter.bitwarden_identity_fields,
+            bitwarden_client_id_aws_secret_key:
+              parameter.bitwarden_client_id_aws_secret_key,
+            bitwarden_client_secret_aws_secret_key:
+              parameter.bitwarden_client_secret_aws_secret_key,
+            bitwarden_master_password_aws_secret_key:
+              parameter.bitwarden_master_password_aws_secret_key,
+          };
+        }
+        case WorkflowParameterTypes.Bitwarden_Credit_Card_Data: {
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.Bitwarden_Credit_Card_Data,
+            bitwarden_collection_id: parameter.bitwarden_collection_id,
+            bitwarden_item_id: parameter.bitwarden_item_id,
+            bitwarden_client_id_aws_secret_key:
+              parameter.bitwarden_client_id_aws_secret_key,
+            bitwarden_client_secret_aws_secret_key:
+              parameter.bitwarden_client_secret_aws_secret_key,
+            bitwarden_master_password_aws_secret_key:
+              parameter.bitwarden_master_password_aws_secret_key,
+          };
+        }
+        case WorkflowParameterTypes.Context: {
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.Context,
+            source_parameter_key: parameter.source.key,
+          };
+        }
+        case WorkflowParameterTypes.Workflow: {
+          // Convert default values to strings for backend when needed
+          let defaultValue = parameter.default_value;
+          if (
+            parameter.workflow_parameter_type === "boolean" &&
+            typeof parameter.default_value === "boolean"
+          ) {
+            defaultValue = String(parameter.default_value);
+          } else if (
+            (parameter.workflow_parameter_type === "integer" ||
+              parameter.workflow_parameter_type === "float") &&
+            (typeof parameter.default_value === "number" ||
+              typeof parameter.default_value === "string")
+          ) {
+            defaultValue =
+              parameter.default_value === null
+                ? parameter.default_value
+                : String(parameter.default_value);
+          }
+
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.Workflow,
+            workflow_parameter_type: parameter.workflow_parameter_type,
+            default_value: defaultValue,
+          };
+        }
+        case WorkflowParameterTypes.Credential: {
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.Credential,
+            credential_id: parameter.credential_id,
+          };
+        }
+        case WorkflowParameterTypes.OnePassword: {
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.OnePassword,
+            vault_id: parameter.vault_id,
+            item_id: parameter.item_id,
+          };
+        }
+        case WorkflowParameterTypes.Azure_Vault_Credential: {
+          return {
+            ...base,
+            parameter_type: WorkflowParameterTypes.Azure_Vault_Credential,
+            vault_name: parameter.vault_name,
+            username_key: parameter.username_key,
+            password_key: parameter.password_key,
+            totp_secret_key: parameter.totp_secret_key,
+          };
+        }
+      }
+    })
+    .filter(Boolean);
+}
+
+function clone<T>(objectToClone: T): T {
+  return JSON.parse(JSON.stringify(objectToClone));
+}
+
+export function upgradeWorkflowBlocksV1toV2(
+  blocks: Array<WorkflowBlock>,
+): Array<WorkflowBlock> {
+  if (!blocks || blocks.length === 0) {
+    return blocks;
+  }
+
+  return blocks.map((block, index) => {
+    const nextBlock = blocks[index + 1];
+    const upgradedBlock = {
+      ...block,
+      next_block_label: nextBlock?.label ?? null,
+    };
+
+    // Recursively handle loop blocks
+    if (isNestedLoopWorkflowBlock(block)) {
+      return {
+        ...upgradedBlock,
+        loop_blocks: upgradeWorkflowBlocksV1toV2(block.loop_blocks),
+      } as WorkflowBlock;
+    }
+
+    return upgradedBlock;
+  });
+}
+
+export function upgradeWorkflowDefinitionToVersionTwo(
+  blocks: Array<BlockYAML>,
+  currentVersion?: number | null,
+): { blocks: Array<BlockYAML>; version: number } {
+  const clonedBlocks = clone(blocks);
+  const baseVersion = currentVersion ?? 1;
+
+  // Just ensure version is at least 2
+  // next_block_label values are already correctly computed by getWorkflowBlocks from the graph
+  const targetVersion = baseVersion >= 2 ? baseVersion : 2;
+
+  return { blocks: clonedBlocks, version: targetVersion };
+}
+
+function convertBlocksToBlockYAML(
+  blocks: Array<WorkflowBlock>,
+): Array<BlockYAML> {
+  return blocks.map((block) => {
+    const base = {
+      label: block.label,
+      continue_on_failure: block.continue_on_failure,
+      next_loop_on_failure: block.next_loop_on_failure,
+      next_block_label: block.next_block_label,
+      ignore_workflow_system_prompt:
+        block.ignore_workflow_system_prompt ?? false,
+    };
+    switch (block.block_type) {
+      case "task": {
+        const blockYaml: TaskBlockYAML = {
+          ...base,
+          block_type: "task",
+          title: block.title,
+          url: block.url,
+          navigation_goal: block.navigation_goal,
+          data_extraction_goal: block.data_extraction_goal,
+          complete_criterion: block.complete_criterion,
+          terminate_criterion: block.terminate_criterion,
+          data_schema: block.data_schema,
+          error_code_mapping: block.error_code_mapping,
+          max_retries: block.max_retries,
+          max_steps_per_run: block.max_steps_per_run,
+          complete_on_download: block.complete_on_download,
+          download_suffix: block.download_suffix,
+          parameter_keys: block.parameters.map((p) => p.key),
+          totp_identifier: block.totp_identifier,
+          totp_verification_url: block.totp_verification_url,
+          disable_cache: block.disable_cache ?? false,
+          include_action_history_in_verification:
+            block.include_action_history_in_verification,
+          engine: block.engine,
+        };
+        return blockYaml;
+      }
+      case "task_v2": {
+        const blockYaml: Taskv2BlockYAML = {
+          ...base,
+          block_type: "task_v2",
+          prompt: block.prompt,
+          url: block.url,
+          max_steps: block.max_steps,
+          totp_identifier: block.totp_identifier,
+          totp_verification_url: block.totp_verification_url,
+          disable_cache: block.disable_cache ?? false,
+        };
+        return blockYaml;
+      }
+      case "validation": {
+        const blockYaml: ValidationBlockYAML = {
+          ...base,
+          block_type: "validation",
+          complete_criterion: block.complete_criterion,
+          terminate_criterion: block.terminate_criterion,
+          error_code_mapping: block.error_code_mapping,
+          parameter_keys: block.parameters.map((p) => p.key),
+        };
+        return blockYaml;
+      }
+      case "conditional": {
+        const blockYaml: ConditionalBlockYAML = {
+          ...base,
+          block_type: "conditional",
+          branch_conditions: block.branch_conditions.map((condition) => ({
+            ...condition,
+            criteria: condition.criteria
+              ? {
+                  ...condition.criteria,
+                }
+              : null,
+          })),
+        };
+        return blockYaml;
+      }
+      case "human_interaction": {
+        const blockYaml: HumanInteractionBlockYAML = {
+          ...base,
+          block_type: "human_interaction",
+          // --
+          instructions: block.instructions,
+          positive_descriptor: block.positive_descriptor,
+          negative_descriptor: block.negative_descriptor,
+          timeout_seconds: block.timeout_seconds,
+          // --
+          sender: block.sender,
+          recipients: block.recipients,
+          subject: block.subject,
+          body: block.body,
+        };
+        return blockYaml;
+      }
+      case "action": {
+        const blockYaml: ActionBlockYAML = {
+          ...base,
+          block_type: "action",
+          url: block.url,
+          title: block.title,
+          navigation_goal: block.navigation_goal,
+          error_code_mapping: block.error_code_mapping,
+          max_retries: block.max_retries,
+          complete_on_download: block.complete_on_download,
+          download_suffix: block.download_suffix,
+          parameter_keys: block.parameters.map((p) => p.key),
+          totp_identifier: block.totp_identifier,
+          totp_verification_url: block.totp_verification_url,
+          disable_cache: block.disable_cache ?? false,
+          engine: block.engine,
+        };
+        return blockYaml;
+      }
+      case "navigation": {
+        const blockYaml: NavigationBlockYAML = {
+          ...base,
+          block_type: "navigation",
+          url: block.url,
+          title: block.title,
+          engine: block.engine,
+          model: block.model,
+          navigation_goal: block.navigation_goal,
+          error_code_mapping: block.error_code_mapping,
+          max_retries: block.max_retries,
+          max_steps_per_run: block.max_steps_per_run,
+          complete_on_download: block.complete_on_download,
+          download_suffix: block.download_suffix,
+          parameter_keys: block.parameters.map((p) => p.key),
+          totp_identifier: block.totp_identifier,
+          totp_verification_url: block.totp_verification_url,
+          disable_cache: block.disable_cache ?? false,
+          complete_criterion: block.complete_criterion,
+          terminate_criterion: block.terminate_criterion,
+          include_action_history_in_verification:
+            block.include_action_history_in_verification,
+        };
+        return blockYaml;
+      }
+      case "extraction": {
+        const blockYaml: ExtractionBlockYAML = {
+          ...base,
+          block_type: "extraction",
+          url: block.url,
+          title: block.title,
+          data_extraction_goal: block.data_extraction_goal,
+          data_schema: block.data_schema,
+          max_retries: block.max_retries,
+          max_steps_per_run: block.max_steps_per_run,
+          parameter_keys: block.parameters.map((p) => p.key),
+          disable_cache: block.disable_cache ?? false,
+          engine: block.engine,
+        };
+        return blockYaml;
+      }
+      case "login": {
+        const blockYaml: LoginBlockYAML = {
+          ...base,
+          block_type: "login",
+          url: block.url,
+          title: block.title,
+          navigation_goal: block.navigation_goal,
+          error_code_mapping: block.error_code_mapping,
+          max_retries: block.max_retries,
+          max_steps_per_run: block.max_steps_per_run,
+          parameter_keys: block.parameters.map((p) => p.key),
+          totp_identifier: block.totp_identifier,
+          totp_verification_url: block.totp_verification_url,
+          disable_cache: block.disable_cache ?? false,
+          complete_criterion: block.complete_criterion,
+          terminate_criterion: block.terminate_criterion,
+          engine: block.engine,
+        };
+        return blockYaml;
+      }
+      case "wait": {
+        const blockYaml: WaitBlockYAML = {
+          ...base,
+          block_type: "wait",
+          wait_sec: block.wait_sec,
+        };
+        return blockYaml;
+      }
+      case "file_download": {
+        const blockYaml: FileDownloadBlockYAML = {
+          ...base,
+          block_type: "file_download",
+          url: block.url,
+          title: block.title,
+          navigation_goal: block.navigation_goal,
+          error_code_mapping: block.error_code_mapping,
+          max_retries: block.max_retries,
+          max_steps_per_run: block.max_steps_per_run,
+          download_suffix: block.download_suffix,
+          parameter_keys: block.parameters.map((p) => p.key),
+          totp_identifier: block.totp_identifier,
+          totp_verification_url: block.totp_verification_url,
+          disable_cache: block.disable_cache ?? false,
+          engine: block.engine,
+          download_timeout: null, // seconds
+        };
+        return blockYaml;
+      }
+      case "for_loop": {
+        const blockYaml: ForLoopBlockYAML = {
+          ...base,
+          block_type: "for_loop",
+          loop_over_parameter_key: block.loop_over?.key ?? "",
+          loop_blocks: convertBlocksToBlockYAML(block.loop_blocks),
+          loop_variable_reference: block.loop_variable_reference,
+          complete_if_empty: block.complete_if_empty,
+          data_schema: block.data_schema,
+        };
+        return blockYaml;
+      }
+      case "while_loop": {
+        const wblock = block as WhileLoopBlock;
+        const blockYaml: WhileLoopBlockYAML = {
+          ...base,
+          block_type: "while_loop",
+          loop_blocks: convertBlocksToBlockYAML(wblock.loop_blocks),
+          condition: {
+            criteria_type: wblock.condition.criteria_type,
+            expression: wblock.condition.expression,
+            description: wblock.condition.description ?? null,
+          },
+        };
+        return blockYaml;
+      }
+      case "code": {
+        const blockYaml: CodeBlockYAML = {
+          ...base,
+          block_type: "code",
+          code: block.code,
+          parameter_keys: block.parameters.map((p) => p.key),
+        };
+        return blockYaml;
+      }
+      case "text_prompt": {
+        const blockYaml: TextPromptBlockYAML = {
+          ...base,
+          block_type: "text_prompt",
+          llm_key: block.llm_key,
+          prompt: block.prompt,
+          json_schema: block.json_schema,
+          parameter_keys: block.parameters.map((p) => p.key),
+        };
+        return blockYaml;
+      }
+      case "download_to_s3": {
+        const blockYaml: DownloadToS3BlockYAML = {
+          ...base,
+          block_type: "download_to_s3",
+          url: block.url,
+        };
+        return blockYaml;
+      }
+      case "upload_to_s3": {
+        const blockYaml: UploadToS3BlockYAML = {
+          ...base,
+          block_type: "upload_to_s3",
+          path: block.path,
+        };
+        return blockYaml;
+      }
+      case "file_upload": {
+        const blockYaml: FileUploadBlockYAML = {
+          ...base,
+          block_type: "file_upload",
+          path: block.path,
+          storage_type: block.storage_type,
+          s3_bucket: block.s3_bucket ?? "",
+          aws_access_key_id: block.aws_access_key_id ?? "",
+          aws_secret_access_key: block.aws_secret_access_key ?? "",
+          region_name: block.region_name ?? "",
+          azure_storage_account_name: block.azure_storage_account_name ?? "",
+          azure_storage_account_key: block.azure_storage_account_key ?? "",
+          azure_blob_container_name: block.azure_blob_container_name ?? "",
+        };
+        return blockYaml;
+      }
+      case "file_url_parser": {
+        const blockYaml: FileUrlParserBlockYAML = {
+          ...base,
+          block_type: "file_url_parser",
+          file_url: block.file_url,
+          file_type: block.file_type,
+          json_schema: block.json_schema,
+        };
+        return blockYaml;
+      }
+      case "pdf_parser": {
+        const blockYaml: PDFParserBlockYAML = {
+          ...base,
+          block_type: "pdf_parser",
+          file_url: block.file_url,
+          json_schema: block.json_schema,
+        };
+        return blockYaml;
+      }
+      case "send_email": {
+        const blockYaml: SendEmailBlockYAML = {
+          ...base,
+          block_type: "send_email",
+          smtp_host_secret_parameter_key: block.smtp_host?.key,
+          smtp_port_secret_parameter_key: block.smtp_port?.key,
+          smtp_username_secret_parameter_key: block.smtp_username?.key,
+          smtp_password_secret_parameter_key: block.smtp_password?.key,
+          sender: block.sender,
+          recipients: block.recipients,
+          subject: block.subject,
+          body: block.body,
+          file_attachments: block.file_attachments,
+        };
+        return blockYaml;
+      }
+      case "goto_url": {
+        const blockYaml: URLBlockYAML = {
+          ...base,
+          block_type: "goto_url",
+          url: block.url,
+        };
+        return blockYaml;
+      }
+      case "http_request": {
+        const blockYaml: HttpRequestBlockYAML = {
+          ...base,
+          block_type: "http_request",
+          method: block.method,
+          url: block.url,
+          headers: block.headers,
+          body: block.body,
+          files: block.files,
+          timeout: block.timeout,
+          follow_redirects: block.follow_redirects,
+          parameter_keys: block.parameters.map((p) => p.key),
+          download_filename: block.download_filename,
+        };
+        return blockYaml;
+      }
+      case "print_page": {
+        const blockYaml: PrintPageBlockYAML = {
+          ...base,
+          block_type: "print_page",
+          include_timestamp: block.include_timestamp,
+          custom_filename: block.custom_filename,
+          format: block.format,
+          landscape: block.landscape,
+          print_background: block.print_background,
+          parameter_keys: block.parameters.map((p) => p.key),
+        };
+        return blockYaml;
+      }
+      case "workflow_trigger": {
+        const blockYaml: WorkflowTriggerBlockYAML = {
+          ...base,
+          block_type: "workflow_trigger",
+          workflow_permanent_id: block.workflow_permanent_id,
+          payload: block.payload,
+          wait_for_completion: block.wait_for_completion,
+          browser_session_id: block.browser_session_id,
+          use_parent_browser_session: block.use_parent_browser_session,
+          parameter_keys: block.parameters.map((p) => p.key),
+        };
+        return blockYaml;
+      }
+      case "google_sheets_read": {
+        const blockYaml: GoogleSheetsReadBlockYAML = {
+          ...base,
+          block_type: "google_sheets_read",
+          spreadsheet_url: block.spreadsheet_url,
+          sheet_name: block.sheet_name,
+          range: block.range,
+          credential_id: block.credential_id,
+          has_header_row: block.has_header_row,
+          parameter_keys: block.parameters.map((p) => p.key),
+        };
+        return blockYaml;
+      }
+      case "google_sheets_write": {
+        const blockYaml: GoogleSheetsWriteBlockYAML = {
+          ...base,
+          block_type: "google_sheets_write",
+          spreadsheet_url: block.spreadsheet_url,
+          sheet_name: block.sheet_name,
+          range: block.range,
+          credential_id: block.credential_id,
+          write_mode: block.write_mode,
+          values: block.values,
+          column_mapping: block.column_mapping,
+          create_sheet_if_missing: block.create_sheet_if_missing,
+          parameter_keys: block.parameters.map((p) => p.key),
+        };
+        return blockYaml;
+      }
+    }
+  });
+}
+
+function convert(workflow: WorkflowApiResponse): WorkflowCreateYAMLRequest {
+  const workflowDefinitionVersion = workflow.workflow_definition.version ?? 1;
+  const userParameters = workflow.workflow_definition.parameters.filter(
+    (parameter) => parameter.parameter_type !== WorkflowParameterTypes.Output,
+  );
+  return {
+    title: workflow.title,
+    description: workflow.description,
+    proxy_location: workflow.proxy_location,
+    webhook_callback_url: workflow.webhook_callback_url,
+    persist_browser_session: workflow.persist_browser_session,
+    browser_profile_id: workflow.browser_profile_id ?? null,
+    model: workflow.model,
+    totp_verification_url: workflow.totp_verification_url,
+    max_screenshot_scrolls: workflow.max_screenshot_scrolls,
+    max_elapsed_time_minutes: workflow.max_elapsed_time_minutes,
+    extra_http_headers: workflow.extra_http_headers,
+    workflow_definition: {
+      version: workflowDefinitionVersion,
+      parameters: convertParametersToParameterYAML(userParameters),
+      blocks: convertBlocksToBlockYAML(workflow.workflow_definition.blocks),
+      finally_block_label: workflow.workflow_definition.finally_block_label,
+      workflow_system_prompt:
+        workflow.workflow_definition.workflow_system_prompt,
+    },
+    is_saved_task: workflow.is_saved_task,
+    status: workflow.status,
+    run_with: workflow.run_with ?? "agent",
+    adaptive_caching: workflow.adaptive_caching ?? undefined,
+    code_version: workflow.code_version ?? undefined,
+    cache_key: workflow.cache_key,
+    ai_fallback: workflow.ai_fallback ?? undefined,
+    run_sequentially: workflow.run_sequentially ?? undefined,
+    sequential_key: workflow.sequential_key ?? undefined,
+  };
+}
+
+function getWorkflowErrors(nodes: Array<AppNode>): Array<string> {
+  const errors: Array<string> = [];
+
+  const workflowBlockNodes = nodes.filter(isWorkflowBlockNode);
+  if (
+    workflowBlockNodes.length > 0 &&
+    workflowBlockNodes[0]!.type === "validation"
+  ) {
+    const label = workflowBlockNodes[0]!.data.label;
+    errors.push(
+      `${label}: Validation block can't be the first block in a workflow.`,
+    );
+  }
+
+  const actionNodes = nodes.filter(isActionNode);
+  actionNodes.forEach((node) => {
+    if (node.data.navigationGoal.length === 0) {
+      errors.push(`${node.data.label}: Action Instruction is required.`);
+    }
+    errors.push(
+      ...validateErrorCodeMapping(node.data.label, node.data.errorCodeMapping),
+    );
+  });
+
+  // check loop node parameters
+  const loopNodes: Array<LoopNode> = nodes.filter(isLoopNode);
+  const emptyForEachLoops = loopNodes.filter(
+    (node: LoopNode) =>
+      node.data.loopKind === "for_each" &&
+      node.data.loopVariableReference === "",
+  );
+  if (emptyForEachLoops.length > 0) {
+    emptyForEachLoops.forEach((node) => {
+      errors.push(`${node.data.label}: Loop value is required.`);
+    });
+  }
+  const whileLoopsMissingCondition = loopNodes.filter(
+    (node: LoopNode) =>
+      node.data.loopKind === "while" &&
+      node.data.whileConditionExpression.trim() === "",
+  );
+  if (whileLoopsMissingCondition.length > 0) {
+    whileLoopsMissingCondition.forEach((node) => {
+      errors.push(`${node.data.label}: While loop condition is required.`);
+    });
+  }
+
+  // check task node json fields
+  const taskNodes = nodes.filter(isTaskNode);
+  taskNodes.forEach((node) => {
+    errors.push(
+      ...validateErrorCodeMapping(node.data.label, node.data.errorCodeMapping),
+    );
+    // Validate Task data schema JSON when enabled (value different from "null")
+    if (node.data.dataSchema && node.data.dataSchema !== "null") {
+      const result = TSON.parse(node.data.dataSchema);
+
+      if (!result.success) {
+        errors.push(
+          `${node.data.label}: Data schema has invalid templated JSON: ${result.error ?? "-"}`,
+        );
+      }
+    }
+  });
+
+  const validationNodes = nodes.filter(isValidationNode);
+  validationNodes.forEach((node) => {
+    errors.push(
+      ...validateErrorCodeMapping(node.data.label, node.data.errorCodeMapping),
+    );
+    if (
+      node.data.completeCriterion.length === 0 &&
+      node.data.terminateCriterion.length === 0
+    ) {
+      errors.push(
+        `${node.data.label}: At least one of completion or termination criteria must be provided`,
+      );
+    }
+  });
+
+  const interactionNodes = nodes.filter(isHumanInteractionNode);
+  interactionNodes.forEach((node) => {
+    if (node.data.recipients.trim().length === 0) {
+      errors.push(`${node.data.label}: Recipients is required.`);
+    }
+  });
+
+  const navigationNodes = nodes.filter(isNavigationNode);
+  navigationNodes.forEach((node) => {
+    // V2 mode uses prompt, V1 mode uses navigationGoal
+    if (node.data.engine === RunEngine.SkyvernV2) {
+      if (!node.data.prompt || node.data.prompt.length === 0) {
+        errors.push(`${node.data.label}: Prompt is required.`);
+      }
+    } else {
+      if (!node.data.navigationGoal || node.data.navigationGoal.length === 0) {
+        errors.push(`${node.data.label}: Prompt is required.`);
+      }
+    }
+    errors.push(
+      ...validateErrorCodeMapping(node.data.label, node.data.errorCodeMapping),
+    );
+  });
+
+  const loginNodes = nodes.filter(isLoginNode);
+  loginNodes.forEach((node) => {
+    errors.push(
+      ...validateErrorCodeMapping(node.data.label, node.data.errorCodeMapping),
+    );
+  });
+
+  const fileDownloadNodes = nodes.filter(isFileDownloadNode);
+  fileDownloadNodes.forEach((node) => {
+    errors.push(
+      ...validateErrorCodeMapping(node.data.label, node.data.errorCodeMapping),
+    );
+  });
+
+  const conditionalNodes = nodes.filter((node) => node.type === "conditional");
+  conditionalNodes.forEach((node) => {
+    const branches = (node as ConditionalNode).data.branches ?? [];
+    branches.forEach((branch, index) => {
+      if (branch.is_default) {
+        return;
+      }
+      const expression = branch.criteria?.expression ?? "";
+      if (!expression.trim()) {
+        errors.push(
+          `${(node as ConditionalNode).data.label}: Expression is required for branch ${index + 1}.`,
+        );
+      }
+    });
+  });
+
+  const extractionNodes = nodes.filter(isExtractionNode);
+  extractionNodes.forEach((node) => {
+    if (node.data.dataExtractionGoal.length === 0) {
+      errors.push(`${node.data.label}: Data extraction goal is required.`);
+    }
+    // Validate Extraction data schema JSON when enabled (value different from "null")
+    if (node.data.dataSchema && node.data.dataSchema !== "null") {
+      const result = TSON.parse(node.data.dataSchema);
+
+      if (!result.success) {
+        errors.push(
+          `${node.data.label}: Data schema has invalid templated JSON: ${result.error ?? "-"}`,
+        );
+      }
+    }
+  });
+
+  const textPromptNodes = nodes.filter(isTextPromptNode);
+  textPromptNodes.forEach((node) => {
+    try {
+      JSON.parse(node.data.jsonSchema);
+    } catch {
+      errors.push(`${node.data.label}: Data schema is not valid JSON.`);
+    }
+  });
+
+  const pdfParserNodes = nodes.filter(isPdfParserNode);
+  pdfParserNodes.forEach((node) => {
+    try {
+      JSON.parse(node.data.jsonSchema);
+    } catch {
+      errors.push(`${node.data.label}: Data schema is not valid JSON.`);
+    }
+  });
+
+  const fileParserNodes = nodes.filter(isFileParserNode);
+  fileParserNodes.forEach((node) => {
+    try {
+      JSON.parse(node.data.jsonSchema);
+    } catch {
+      errors.push(`${node.data.label}: Data schema is not valid JSON.`);
+    }
+  });
+
+  const waitNodes = nodes.filter(isWaitNode);
+  waitNodes.forEach((node) => {
+    const waitTimeString = node.data.waitInSeconds.trim();
+
+    const decimalRegex = new RegExp("^\\d+$");
+    const isNumber = decimalRegex.test(waitTimeString);
+
+    if (!isNumber) {
+      errors.push(`${node.data.label}: Invalid input for wait time.`);
+    }
+  });
+
+  const httpRequestNodes = nodes.filter(isHttpRequestNode);
+  httpRequestNodes.forEach((node) => {
+    // Validate URL - required and must be valid format
+    const urlValidation = validateUrl(node.data.url);
+    if (!urlValidation.valid) {
+      errors.push(`${node.data.label}: ${urlValidation.message}`);
+    }
+
+    // Validate JSON fields - optional but must be valid if provided
+    const jsonFields = [
+      { value: node.data.headers, name: "Headers" },
+      { value: node.data.body, name: "Body" },
+      { value: node.data.files, name: "Files" },
+    ];
+    jsonFields.forEach(({ value, name }) => {
+      const result = validateJson(value);
+      if (!result.valid && result.message) {
+        errors.push(`${node.data.label}: ${name} - ${result.message}`);
+      }
+    });
+  });
+
+  const workflowTriggerNodes = nodes.filter(isWorkflowTriggerNode);
+  workflowTriggerNodes.forEach((node) => {
+    if (!node.data.workflowPermanentId.trim()) {
+      errors.push(`${node.data.label}: Workflow Permanent ID is required.`);
+    }
+    const payloadResult = validateJson(node.data.payload);
+    if (!payloadResult.valid && payloadResult.message) {
+      errors.push(`${node.data.label}: Payload - ${payloadResult.message}`);
+    }
+  });
+
+  nodes
+    .filter(isGoogleSheetsReadNode)
+    .forEach((node) => errors.push(...validateGoogleSheetsReadNode(node)));
+
+  nodes
+    .filter(isGoogleSheetsWriteNode)
+    .forEach((node) => errors.push(...validateGoogleSheetsWriteNode(node)));
+
+  return errors;
+}
+
+function getLabelForWorkflowParameterType(type: WorkflowParameterValueType) {
+  if (type === WorkflowParameterValueType.String) {
+    return "string";
+  }
+  if (type === WorkflowParameterValueType.Float) {
+    return "float";
+  }
+  if (type === WorkflowParameterValueType.Integer) {
+    return "integer";
+  }
+  if (type === WorkflowParameterValueType.Boolean) {
+    return "boolean";
+  }
+  if (type === WorkflowParameterValueType.FileURL) {
+    return "file_url";
+  }
+  if (type === WorkflowParameterValueType.JSON) {
+    return "json";
+  }
+  if (type === WorkflowParameterValueType.CredentialId) {
+    return "credential";
+  }
+  return type;
+}
+
+/**
+ * Check if a node is inside a for loop block
+ * @param nodes - Array of all nodes in the workflow
+ * @param nodeId - ID of the node to check
+ * @returns true if the node is inside a for loop block, false otherwise
+ */
+function isNodeInsideForLoop(nodes: Array<AppNode>, nodeId: string): boolean {
+  const currentNode = nodes.find((n) => n.id === nodeId);
+  if (!currentNode) {
+    return false;
+  }
+  let current: AppNode | undefined = currentNode;
+  while (current?.parentId) {
+    const parent = nodes.find((n) => n.id === current!.parentId);
+    if (parent?.type === "loop") return true;
+    current = parent;
+  }
+  return false;
+}
+
+function getParentLoopSkipsOnFail(
+  nodes: Array<AppNode>,
+  nodeId: string,
+): boolean {
+  const currentNode = nodes.find((n) => n.id === nodeId);
+  if (!currentNode) return false;
+  let current: AppNode | undefined = currentNode;
+  while (current?.parentId) {
+    const parent = nodes.find((n) => n.id === current!.parentId);
+    if (parent?.type === "loop") {
+      const data = parent.data as { nextLoopOnFailure?: boolean };
+      return data.nextLoopOnFailure === true;
+    }
+    current = parent;
+  }
+  return false;
+}
+
+export {
+  containsJinjaReference,
+  convert,
+  convertEchoParameters,
+  convertToNode,
+  createNode,
+  generateNodeData,
+  generateNodeLabel,
+  getAffectedBlocks,
+  getNestingLevel,
+  getAdditionalParametersForEmailBlock,
+  getAvailableOutputParameterKeys,
+  getBlockNameOfOutputParameterKey,
+  getDefaultValueForParameterType,
+  getElements,
+  getLabelForWorkflowParameterType,
+  maxNestingLevel,
+  getWorkflowSettings,
+  getOrderedChildrenBlocks,
+  getOutputParameterKey,
+  getPreviousNodeIds,
+  getUniqueLabelForExistingNode,
+  getUpdatedNodesAfterLabelUpdateForParameterKeys,
+  getUpdatedParametersAfterLabelUpdateForSourceParameterKey,
+  getWorkflowBlocks,
+  getWorkflowErrors,
+  isNodeInsideForLoop,
+  getParentLoopSkipsOnFail,
+  isOutputParameterKey,
+  layout,
+  removeJinjaReferenceFromNodes,
+  removeKeyFromNodesParameterKeys,
+  replaceJinjaReferenceInNodes,
+};
+
+export type { AffectedBlock };

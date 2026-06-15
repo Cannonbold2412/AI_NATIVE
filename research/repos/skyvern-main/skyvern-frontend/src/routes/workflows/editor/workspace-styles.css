@@ -1,0 +1,96 @@
+.vertical-line-gradient-soft {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(115, 115, 115, 0.1) 20%,
+    rgba(115, 115, 115, 0.5) 50%,
+    rgba(115, 115, 115, 0.1) 80%,
+    transparent 100%
+  );
+}
+
+.vertical-line-gradient {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(115, 115, 115, 0.3) 20%,
+    rgba(115, 115, 115, 1) 50%,
+    rgba(115, 115, 115, 0.3) 80%,
+    transparent 100%
+  );
+}
+
+.vertical-gradient-error {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(51, 0, 0, 0.3) 5%,
+    rgba(51, 0, 0, 0.4) 50%,
+    rgba(51, 0, 0, 0.3) 95%,
+    transparent 100%
+  );
+}
+
+.vertical-gradient-success {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 51, 0, 0.3) 5%,
+    rgba(0, 51, 0, 0.4) 50%,
+    rgba(0, 51, 0, 0.3) 95%,
+    transparent 100%
+  );
+}
+
+.skyvern-animate-nudge {
+  animation: nudge 0.3s ease-in-out forwards;
+}
+
+.skyvern-animate-ghost {
+  animation: ghost 0.3s ease-in-out forwards;
+}
+
+/* nudge right and little, and then back */
+@keyframes nudge {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* ghost */
+@keyframes ghost {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.block-sidebar-resize-handle {
+  position: relative;
+}
+.block-sidebar-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background-color: rgb(148 163 184 / 0);
+  transition: background-color 120ms ease-out;
+}
+.block-sidebar-resize-handle:hover::after,
+.block-sidebar-resize-handle:active::after {
+  background-color: rgb(148 163 184 / 0.4);
+}
