@@ -1077,7 +1077,6 @@ class Backend:
             else:
                 browsers_dir = runtime_dir / "chromium"
 
-            sink({"kind": "workflow_test", "message": "Checking Playwright browser runtime…"})
             ensure_chromium_installed(
                 browsers_dir,
                 runtime_dir,
@@ -1514,6 +1513,36 @@ class Backend:
         self._install_proxy_router(usage_class="human_edit")
         try:
             doc = apply_recording_event_visual_to_step_or_raise(doc, step_index, event_index)
+        except EntitlementBlocked as exc:
+            raise _CommandError(exc.code, self._entitlement_error_message(exc.code)) from exc
+        except QuotaExceeded as exc:
+            raise _CommandError("quota_exceeded", str(exc)) from exc
+        except CloudUnreachable as exc:
+            raise _CommandError("cloud_unreachable", str(exc)) from exc
+        self._push_undo(skill_id, snapshot)
+        write_skill(skill_id, doc)
+        result = self._skill_response(skill_id, doc)
+        result.update(self._history_flags(skill_id))
+        return result
+
+    def cmd_apply_step_frame(self, payload: dict[str, Any], _rid: str) -> dict[str, Any]:
+        import copy
+        from conxa_core.storage.json_store import read_skill, write_skill
+        from conxa_compile.editor.recording_visual import apply_step_frame_or_raise
+        from services.llm_proxy_client import CloudUnreachable, EntitlementBlocked, QuotaExceeded
+
+        skill_id = _safe_id(payload.get("skill_id"), "skill_id")
+        step_index = int(payload.get("step_index") or 0)
+        frame_label = str(payload.get("frame_label") or "").strip()
+        if not frame_label:
+            raise _CommandError("invalid_frame_label", "frame_label is required")
+        doc = read_skill(skill_id)
+        if doc is None:
+            raise _CommandError("skill_not_found", f"No skill {skill_id}")
+        snapshot = copy.deepcopy(doc)
+        self._install_proxy_router(usage_class="human_edit")
+        try:
+            doc = apply_step_frame_or_raise(doc, step_index, frame_label)
         except EntitlementBlocked as exc:
             raise _CommandError(exc.code, self._entitlement_error_message(exc.code)) from exc
         except QuotaExceeded as exc:

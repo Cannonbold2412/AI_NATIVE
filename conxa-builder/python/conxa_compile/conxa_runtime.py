@@ -123,24 +123,65 @@ def sync_skill_pack(
             pass
 
 
+def _find_local_runtime_source() -> Path | None:
+    """Return the repo-local runtime/ source tree when running from a dev checkout.
+
+    The packed exe (runtime-win.exe) has no package.json, so npx playwright install
+    would pick up the globally-installed Playwright instead of the version the runtime
+    was built against.  The source tree fixes this by supplying the correct package.json.
+    """
+    # conxa_runtime.py lives at conxa-builder/python/conxa_compile/conxa_runtime.py
+    # The repo-local runtime source is three parents up, then "runtime/".
+    candidate = Path(__file__).parents[3] / "runtime"
+    if (candidate / "server.js").is_file() and (candidate / "package.json").is_file():
+        return candidate
+    return None
+
+
+def _chromium_exe_in_browsers_dir(browsers_dir: Path) -> Path | None:
+    """Return the Chromium executable if already installed in browsers_dir, else None.
+
+    Playwright stores browsers as: browsers_dir/chromium-REVISION/<platform-dir>/<exe>.
+    Checking for the binary directly avoids the multi-second npx startup cost on
+    every test run when nothing needs to be downloaded.
+    """
+    if not browsers_dir.is_dir():
+        return None
+    if sys.platform == "win32":
+        patterns = ["chromium-*/chrome-win64/chrome.exe", "chromium-*/chrome-win/chrome.exe"]
+    elif sys.platform == "darwin":
+        patterns = [
+            "chromium-*/chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium",
+            "chromium-*/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+        ]
+    else:
+        patterns = ["chromium-*/chrome-linux/chrome"]
+    for pattern in patterns:
+        hits = sorted(browsers_dir.glob(pattern), reverse=True)
+        if hits:
+            return hits[0]
+    return None
+
+
 def ensure_chromium_installed(
     browsers_dir: Path,
     runtime_dir: Path,
     log_sink=None,
 ) -> None:
-    """Install Playwright Chromium into browsers_dir if not already present.
+    """Install Playwright Chromium into browsers_dir using the correct Playwright version.
 
-    browsers_dir is where server.js will look (CONXA_DIR/chromium).
-    Runs `npx playwright install chromium` inside runtime_dir with the
-    correct PLAYWRIGHT_BROWSERS_PATH override.  No-op if already installed.
+    When runtime_dir is a packed-exe directory (no package.json), the install runs
+    from the repo-local runtime/ source tree so that the Playwright version in
+    node_modules — not the global npx — determines which chromium revision to fetch.
+
+    Skips the npx call entirely when the Chromium binary is already present —
+    this avoids the multi-second Node/npx startup overhead on every test run.
     """
     import shutil as _shutil
 
-    # Consider it installed if there is at least one chromium-* subdirectory
-    if browsers_dir.is_dir() and any(
-        d.is_dir() and d.name.startswith("chromium-")
-        for d in browsers_dir.iterdir()
-    ):
+    browsers_dir.mkdir(parents=True, exist_ok=True)
+
+    if _chromium_exe_in_browsers_dir(browsers_dir) is not None:
         return
 
     node = _shutil.which("node")
@@ -148,23 +189,44 @@ def ensure_chromium_installed(
     if not npx or not node:
         raise RuntimeError("Node.js / npx not found. Install Node.js to continue.")
 
-    if log_sink:
-        log_sink("Installing Playwright Chromium for the test runtime (one-time setup)…")
+    # Prefer the repo-local runtime/ source (correct Playwright version in node_modules)
+    # over the packed-exe directory, which has no package.json and causes npx to fall
+    # back to whatever Playwright version is installed globally — potentially a
+    # different chromium revision than what the packed runtime expects.
+    install_dir = runtime_dir
+    if not (runtime_dir / "package.json").is_file():
+        local_src = _find_local_runtime_source()
+        if local_src is not None:
+            install_dir = local_src
 
-    browsers_dir.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(browsers_dir)}
 
-    result = subprocess.run(
+    if log_sink:
+        log_sink("Installing Playwright Chromium for the test runtime…")
+
+    proc = subprocess.Popen(
         [npx, "playwright", "install", "chromium"],
-        cwd=str(runtime_dir),
+        cwd=str(install_dir),
         env=env,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
+        encoding='utf-8',
+        errors='replace',
     )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Playwright install failed:\n{result.stderr or result.stdout}"
-        )
+    assert proc.stdout is not None
+    output_lines: list[str] = []
+    for raw_line in proc.stdout:
+        line = raw_line.strip()
+        if not line:
+            continue
+        output_lines.append(line)
+        if log_sink:
+            log_sink(line)
+    returncode = proc.wait()
+    if returncode != 0:
+        tail = "\n".join(output_lines[-10:])
+        raise RuntimeError(f"Playwright install failed:\n{tail}")
 
 
 def call_runtime_tool(
@@ -209,6 +271,8 @@ def call_runtime_tool(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding='utf-8',
+        errors='replace',
         bufsize=1,
     )
 

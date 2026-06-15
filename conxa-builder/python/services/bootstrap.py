@@ -375,7 +375,8 @@ def _run_playwright_install(cmd: list[str], on_event: EventSink | None) -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        errors="replace",
+        encoding='utf-8',
+        errors='replace',
     )
     assert proc.stdout is not None
     for line in proc.stdout:
