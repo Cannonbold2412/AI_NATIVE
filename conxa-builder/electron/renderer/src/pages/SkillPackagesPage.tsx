@@ -33,15 +33,25 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import {
+  ArrowUpDown,
+  Clock,
   Copy,
   FileCode2,
   FileJson,
   FileText,
   FolderKanban,
   FolderOpen,
+  GitBranch,
   ImageIcon,
   Package,
   Pencil,
@@ -50,12 +60,16 @@ import {
   Trash2,
 } from 'lucide-react'
 
+// ─── constants ───────────────────────────────────────────────────────────────
+
 const ROOT_FILE_ORDER = [
   'plugin.json', 'plugin.config.json', 'README.md', 'CLAUDE.md', 'Claude.md', 'index.md', 'LICENSE',
   'schema.json', 'package.json', 'index.js', 'skill.json', 'README.md', 'index.json',
 ]
 const SKILL_FILE_ORDER = ['SKILL.md', 'execution.json', 'recovery.json', 'input.json', 'manifest.json']
 const ROW_TRANSITION = 'transition-colors duration-200 motion-reduce:transition-none'
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function orderedSkillPackageKeys(keys: string[]): string[] {
   const set = new Set(keys)
@@ -166,6 +180,15 @@ function formatBytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function relativeTime(unixSeconds: number): string {
+  const diffSec = Math.floor(Date.now() / 1000) - unixSeconds
+  if (diffSec < 60) return 'Just now'
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
+  if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)}h ago`
+  if (diffSec < 86_400 * 7) return `${Math.floor(diffSec / 86_400)}d ago`
+  return formatModifiedAt(unixSeconds)
+}
+
 function leafFileName(filename: string): string {
   return filename.includes('/') ? filename.slice(filename.lastIndexOf('/') + 1) : filename
 }
@@ -187,6 +210,8 @@ function labelForFile(filename: string) {
   if (leaf.endsWith('.json')) return 'JSON'
   return 'File'
 }
+
+// ─── primitives ───────────────────────────────────────────────────────────────
 
 function TreeItem({
   active = false,
@@ -326,6 +351,70 @@ function PanelChrome({ children, className }: { children: ReactNode; className?:
   )
 }
 
+// ─── stats strip ─────────────────────────────────────────────────────────────
+
+function StatsStrip({ packages }: { packages: SkillPackageSummary[] }) {
+  const totalWorkflows = packages.reduce((s, p) => s + p.workflows.length, 0)
+  const totalFiles = packages.reduce((s, p) => s + p.files.length, 0)
+  const lastModified = packages.reduce((max, p) => Math.max(max, p.modified_at), 0)
+
+  const stats = [
+    {
+      label: 'Packages',
+      value: packages.length,
+      icon: Package,
+      iconClass: 'text-zinc-300',
+      ringClass: 'border-white/10 bg-white/[0.06]',
+    },
+    {
+      label: 'Workflows',
+      value: totalWorkflows,
+      icon: GitBranch,
+      iconClass: 'text-emerald-300',
+      ringClass: 'border-emerald-500/20 bg-emerald-500/[0.08]',
+    },
+    {
+      label: 'Files',
+      value: totalFiles,
+      icon: FileCode2,
+      iconClass: 'text-blue-300',
+      ringClass: 'border-blue-500/20 bg-blue-500/[0.08]',
+    },
+    {
+      label: 'Last updated',
+      value: lastModified > 0 ? relativeTime(lastModified) : '—',
+      icon: Clock,
+      iconClass: 'text-zinc-400',
+      ringClass: 'border-white/10 bg-white/[0.06]',
+    },
+  ] as const
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {stats.map(({ label, value, icon: Icon, iconClass, ringClass }) => (
+        <PanelChrome
+          key={label}
+          className="flex-row items-center gap-3.5 px-4 py-3.5 rounded-[1.2rem]"
+        >
+          <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl border', ringClass)}>
+            <Icon className={cn('size-4', iconClass)} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xl font-semibold leading-none tracking-tight text-white">{value}</p>
+            <p className="mt-1.5 truncate text-[11px] leading-none text-zinc-500">{label}</p>
+          </div>
+        </PanelChrome>
+      ))}
+    </div>
+  )
+}
+
+// ─── sort types ───────────────────────────────────────────────────────────────
+
+type SortOrder = 'modified' | 'name' | 'workflows'
+
+// ─── main page ────────────────────────────────────────────────────────────────
+
 export function SkillPackagesPage() {
   const qc = useQueryClient()
   const PACKAGES_PANE_WIDTH_KEY = 'ai-native-packages-pane-width'
@@ -344,6 +433,7 @@ export function SkillPackagesPage() {
   const [selectedPackageName, setSelectedPackageName] = useState<string | null>(null)
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const [searchValue, setSearchValue] = useState('')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('modified')
   const [packagesPaneWidth, setPackagesPaneWidth] = useState(286)
   const [structurePaneWidth, setStructurePaneWidth] = useState(280)
   const [isResizingPackagesPane, setIsResizingPackagesPane] = useState(false)
@@ -361,6 +451,7 @@ export function SkillPackagesPage() {
   const bundleRoot = q.data?.bundle_root ?? ''
   const bundleRootDisplay = bundleRoot ? bundleRoot.split(/[\\/]/).slice(-2).join('/') : 'skill-packs'
   const searchNeedle = searchValue.trim().toLowerCase()
+
   const filteredPackages = useMemo(() => {
     if (!searchNeedle) return packages
     return packages.filter((pkg) => {
@@ -374,13 +465,24 @@ export function SkillPackagesPage() {
       return haystack.includes(searchNeedle)
     })
   }, [packages, searchNeedle])
+
+  const displayPackages = useMemo(() => {
+    return [...filteredPackages].sort((a, b) => {
+      if (sortOrder === 'name') return a.package_name.localeCompare(b.package_name)
+      if (sortOrder === 'workflows') return b.workflows.length - a.workflows.length
+      // 'modified' (default)
+      return b.modified_at - a.modified_at
+    })
+  }, [filteredPackages, sortOrder])
+
   const resolvedSelectedPackageName = useMemo(() => {
-    if (filteredPackages.length === 0) return null
-    if (selectedPackageName && filteredPackages.some((pkg) => pkg.package_name === selectedPackageName)) {
+    if (displayPackages.length === 0) return null
+    if (selectedPackageName && displayPackages.some((pkg) => pkg.package_name === selectedPackageName)) {
       return selectedPackageName
     }
-    return filteredPackages[0].package_name
-  }, [filteredPackages, selectedPackageName])
+    return displayPackages[0].package_name
+  }, [displayPackages, selectedPackageName])
+
   const filesQ = useQuery({
     queryKey: ['skillPackageFiles', resolvedSelectedPackageName],
     queryFn: () => fetchSkillPackageFiles(resolvedSelectedPackageName ?? ''),
@@ -569,7 +671,7 @@ export function SkillPackagesPage() {
     <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto">
       <PageHeader
         title="Packages"
-        description="Inspect Build Plugin output. Click the folder icon to open a package in Finder/Explorer."
+        description="Inspect compiled skill packages. Click the folder icon to open in Explorer."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="border-white/10 bg-white/[0.04] text-zinc-300">
@@ -593,7 +695,14 @@ export function SkillPackagesPage() {
           </div>
         }
       />
+
       <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4">
+        {/* ── Stats strip ── */}
+        {!q.isLoading && !q.isError && pkgCount > 0 ? (
+          <StatsStrip packages={packages} />
+        ) : null}
+
+        {/* ── Loading skeleton ── */}
         {q.isLoading ? (
           <div className="flex min-h-[min(640px,calc(100vh-9rem))] min-w-0 flex-col gap-3 md:flex-row md:items-stretch">
             <PanelChrome className="w-full shrink-0 p-3 md:w-[15rem] lg:w-[18rem]">
@@ -615,6 +724,7 @@ export function SkillPackagesPage() {
           </div>
         ) : null}
 
+        {/* ── Error ── */}
         {q.isError ? (
           <Card className="rounded-[1.5rem] border-red-500/25 bg-red-500/[0.06] shadow-none">
             <CardContent className="p-5 text-sm text-red-100">
@@ -623,6 +733,7 @@ export function SkillPackagesPage() {
           </Card>
         ) : null}
 
+        {/* ── Empty (no packages at all) ── */}
         {!q.isLoading && !q.isError && pkgCount === 0 ? (
           <PanelChrome className="items-center justify-center py-18 text-center">
             <div className="flex max-w-md flex-col items-center gap-4 px-6">
@@ -639,21 +750,25 @@ export function SkillPackagesPage() {
           </PanelChrome>
         ) : null}
 
+        {/* ── 3-pane inspector ── */}
         {!q.isLoading && !q.isError && pkgCount > 0 ? (
           <section
             ref={outerSplitRef}
             className="relative grid min-h-[min(640px,calc(100vh-9rem))] min-w-0 grid-cols-1 gap-3 overflow-hidden md:grid-cols-[var(--packages-pane-width)_minmax(0,1fr)] md:gap-0 md:items-stretch"
             style={outerSplitStyle}
           >
+            {/* ── Left pane: package list ── */}
             <PanelChrome className="w-full shrink-0 overflow-hidden md:max-w-none md:w-[min(100%,var(--packages-pane-width))]">
-              <div className="border-b border-white/10 px-3 py-2.5">
+              {/* Search + sort controls */}
+              <div className="border-b border-white/10 px-3 py-2.5 space-y-2">
+                {/* Search row */}
                 <div className="flex items-center gap-2">
                   <div className="relative min-w-0 flex-1">
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-500" />
                     <Input
                       value={searchValue}
                       onChange={(event) => setSearchValue(event.target.value)}
-                      placeholder="Search…"
+                      placeholder="Search packages or files…"
                       className="h-9 border-white/10 bg-white/[0.05] py-2 pl-8 text-sm text-zinc-100 placeholder:text-zinc-500"
                       aria-label="Search packages or files"
                     />
@@ -670,10 +785,36 @@ export function SkillPackagesPage() {
                     </Button>
                   ) : null}
                 </div>
+
+                {/* Sort + result count row */}
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as SortOrder)}>
+                      <SelectTrigger className="h-7 w-full border-white/10 bg-white/[0.04] text-xs text-zinc-400 focus:ring-0 focus:ring-offset-0">
+                        <ArrowUpDown className="mr-1.5 size-3 shrink-0 text-zinc-600" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="modified">Recently modified</SelectItem>
+                        <SelectItem value="name">Name A → Z</SelectItem>
+                        <SelectItem value="workflows">Most workflows</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {searchNeedle ? (
+                    <span className="shrink-0 whitespace-nowrap text-[11px] text-zinc-500">
+                      {displayPackages.length} of {packages.length}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 whitespace-nowrap text-[11px] text-zinc-600">
+                      {packages.length} package{packages.length === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <ScrollArea className="min-h-0 min-w-0 max-w-full flex-1 [&_[data-slot=scroll-area-viewport]]:max-w-full [&_[data-slot=scroll-area-viewport]]:!overflow-x-hidden [&_[data-slot=scroll-area-viewport]]:!overflow-y-auto">
-                {filteredPackages.length === 0 ? (
+                {displayPackages.length === 0 ? (
                   <div className="flex h-full min-h-[16rem] flex-col items-center justify-center px-3 text-center">
                     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
                       <Search className="size-4 text-zinc-300" />
@@ -682,14 +823,24 @@ export function SkillPackagesPage() {
                     <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-zinc-500">
                       Try a different term — search includes file names inside each package.
                     </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3 cursor-pointer text-xs text-zinc-400 hover:bg-white/[0.06] hover:text-white"
+                      onClick={() => setSearchValue('')}
+                    >
+                      Clear search
+                    </Button>
                   </div>
                 ) : (
                   <nav className="box-border w-full min-w-0 max-w-full px-2 pb-2 pt-2" aria-label="Skill package bundles">
                     <ul className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
-                      {filteredPackages.map((pkg) => {
+                      {displayPackages.map((pkg) => {
                         const selected = pkg.package_name === resolvedSelectedPackageName
                         const busy = openingFolder === pkg.package_name
                         const wfCount = pkg.workflows.length
+                        const fileCount = pkg.files.length
                         return (
                           <li key={pkg.package_name} className="w-full min-w-0 max-w-full">
                             <div
@@ -738,6 +889,12 @@ export function SkillPackagesPage() {
                                         className="border-white/10 bg-white/[0.04] text-[11px] text-zinc-300"
                                       >
                                         {wfCount} workflow{wfCount === 1 ? '' : 's'}
+                                      </Badge>
+                                      <Badge
+                                        variant="outline"
+                                        className="border-white/[0.06] bg-transparent text-[11px] text-zinc-500"
+                                      >
+                                        {fileCount} file{fileCount === 1 ? '' : 's'}
                                       </Badge>
                                     </span>
                                   </span>
@@ -796,6 +953,8 @@ export function SkillPackagesPage() {
                 )}
               </ScrollArea>
             </PanelChrome>
+
+            {/* Resizer: packages pane */}
             <div
               className="group absolute inset-y-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize md:block"
               style={{ left: packagesPaneWidth }}
@@ -810,7 +969,9 @@ export function SkillPackagesPage() {
               <div className="mx-auto h-full w-px bg-white/10 transition-colors group-hover:bg-white/35 group-active:bg-white/45" />
             </div>
 
+            {/* ── Right pane: inspector ── */}
             <PanelChrome className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {/* Inspector header */}
               <div className="shrink-0 border-b border-white/10 px-3 py-2.5 sm:px-4">
                 <div className="flex flex-wrap items-start justify-between gap-2 gap-y-2">
                   <div className="min-w-0 flex flex-wrap items-center gap-2">
@@ -822,6 +983,8 @@ export function SkillPackagesPage() {
                         <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
                           {selectedPackage.workflows.length} workflow folder
                           {selectedPackage.workflows.length === 1 ? '' : 's'}
+                          {' · '}
+                          {selectedPackage.files.length} file{selectedPackage.files.length === 1 ? '' : 's'}
                         </p>
                       ) : null}
                     </div>
@@ -862,6 +1025,7 @@ export function SkillPackagesPage() {
                 </div>
               </div>
 
+              {/* Inspector body */}
               <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-2 sm:p-3">
                 {filesQ.isError ? (
                   <div className="rounded-2xl border border-red-500/25 bg-red-500/[0.06] p-4 text-sm text-red-100">
@@ -880,6 +1044,7 @@ export function SkillPackagesPage() {
                         'md:grid-cols-[var(--structure-pane-width)_minmax(0,1fr)] md:grid-rows-none md:min-h-[14rem]',
                       )}
                     >
+                      {/* Structure tree */}
                       <div className="flex min-h-[8rem] min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2 md:min-h-0">
                         <div className="mb-2 flex shrink-0 items-start justify-between gap-2">
                           <div className="min-w-0 font-mono text-white">
@@ -903,6 +1068,8 @@ export function SkillPackagesPage() {
                           </div>
                         </ScrollArea>
                       </div>
+
+                      {/* Resizer: structure pane */}
                       <div
                         className="group absolute inset-y-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize md:block"
                         style={{ left: structurePaneWidth }}
@@ -917,6 +1084,7 @@ export function SkillPackagesPage() {
                         <div className="mx-auto h-full w-px bg-white/10 transition-colors group-hover:bg-white/35 group-active:bg-white/45" />
                       </div>
 
+                      {/* File preview */}
                       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#05070c]">
                         <div className="shrink-0 border-b border-white/10 px-2.5 py-2">
                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -967,13 +1135,13 @@ export function SkillPackagesPage() {
                   </div>
                 ) : null}
 
-                {!filesQ.isLoading && !filesQ.isError && pkgCount > 0 && filteredPackages.length === 0 ? (
+                {!filesQ.isLoading && !filesQ.isError && pkgCount > 0 && displayPackages.length === 0 ? (
                   <div className="flex min-h-[20rem] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 text-center text-sm text-zinc-500">
                     No package matches the current search query.
                   </div>
                 ) : null}
 
-                {!filesQ.isLoading && !filesQ.isError && filteredPackages.length > 0 && visibleFiles.length === 0 ? (
+                {!filesQ.isLoading && !filesQ.isError && displayPackages.length > 0 && visibleFiles.length === 0 ? (
                   <div className="flex min-h-[20rem] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 text-center text-sm text-zinc-500">
                     Select a package to browse its files.
                   </div>
@@ -984,6 +1152,7 @@ export function SkillPackagesPage() {
         ) : null}
       </div>
 
+      {/* ── Rename dialog ── */}
       <Dialog
         open={pendingRename !== null}
         onOpenChange={(open) => {
@@ -1044,6 +1213,7 @@ export function SkillPackagesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Delete confirm ── */}
       <AlertDialog
         open={pendingDelete !== null}
         onOpenChange={(open) => {

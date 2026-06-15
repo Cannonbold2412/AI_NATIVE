@@ -143,6 +143,7 @@ type Props = {
   recordingShotDragActive?: boolean
   onDroppedRecordingScreenshot?: (stepIndex: number, eventIndex: number) => void | Promise<void>
   onClearStepVisual?: (stepIndex: number) => void | Promise<void>
+  onApplyStepFrame?: (frameLabel: string) => void | Promise<void>
 }
 
 export type StepEditorPanelHandle = {
@@ -228,6 +229,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
       recordingShotDragActive,
       onDroppedRecordingScreenshot,
       onClearStepVisual,
+      onApplyStepFrame,
     },
     ref,
   ) {
@@ -556,6 +558,7 @@ export const StepEditorPanel = forwardRef<StepEditorPanelHandle, Props>(
         recordingShotDragActive={recordingShotDragActive}
         onDroppedRecordingScreenshot={onDroppedRecordingScreenshot}
         onClearStepVisual={onClearStepVisual}
+        onApplyStepFrame={onApplyStepFrame}
         isScrollStep={step.flags.is_scroll}
         onSaveVisualBbox={!step.flags.is_scroll ? saveVisualBbox : undefined}
       />

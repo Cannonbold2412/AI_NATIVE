@@ -152,6 +152,21 @@ export function postApplyRecordingVisual(
   return cmd('apply_recording_visual', { skill_id: skillId, step_index: stepIndex, ...body })
 }
 
+export function postApplyStepFrame(
+  skillId: string,
+  stepIndex: number,
+  frameLabel: string,
+): Promise<{
+  skill_id: string
+  meta: Record<string, unknown>
+  revalidation: Record<string, unknown>
+  workflow: WorkflowResponse
+  can_undo?: boolean
+  can_redo?: boolean
+}> {
+  return cmd('apply_step_frame', { skill_id: skillId, step_index: stepIndex, frame_label: frameLabel })
+}
+
 export function postClearStepVisual(
   skillId: string,
   stepIndex: number,

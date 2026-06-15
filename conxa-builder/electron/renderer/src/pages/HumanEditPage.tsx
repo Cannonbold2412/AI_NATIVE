@@ -13,12 +13,11 @@ import {
   fetchSkillList,
   fetchWorkflow,
   postApplyRecordingVisual,
+  postApplyStepFrame,
   postClearStepVisual,
-  postCompileUpdated,
   postInsertStep,
   postReorder,
   postSignOff,
-  postValidate,
   redoWorkflow,
   undoWorkflow,
 } from '@/api/workflowApi'
@@ -101,12 +100,14 @@ export function HumanEditPage() {
     queryKey: ['workflow', skillId],
     queryFn: () => fetchWorkflow(skillId as string),
     enabled: Boolean(skillId),
+    staleTime: 30_000,
   })
 
+  // Deferred: reading session events is expensive — only fetch when the pane is open.
   const recordingShotsQ = useQuery({
     queryKey: ['recordingScreenshots', skillId],
     queryFn: () => fetchRecordingScreenshots(skillId as string),
-    enabled: Boolean(skillId && q.isSuccess),
+    enabled: Boolean(skillId && activeToolsPane === 'screenshots'),
     staleTime: 30_000,
   })
 
@@ -224,19 +225,6 @@ export function HumanEditPage() {
       document.body.style.userSelect = ''
     }
   }, [isResizingToolsPane])
-
-  const runValidate = () => {
-    if (!skillId) return
-    postValidate(skillId)
-      .then((r) => {
-        setValidationReport(r)
-        toast.success('Validation complete')
-      })
-      .catch(() => {
-        setValidationReport({ error: 'validate failed' })
-        toast.error('Validation failed')
-      })
-  }
 
   const handleUndo = useCallback(async () => {
     if (!skillId || !canUndo) return
@@ -360,22 +348,6 @@ export function HumanEditPage() {
     }
   }
 
-  const bumpSkillVersion = () => {
-    if (!skillId) return
-    const ok = window.confirm(
-      'Bump the version of this skill? This increments the version counter in the metadata. It does not recompile from the original recording — your saved edits remain intact.',
-    )
-    if (!ok) return
-    postCompileUpdated(skillId)
-      .then(() => {
-        void q.refetch()
-        toast.success('Skill version bumped')
-      })
-      .catch((e: Error) => {
-        toast.error(e.message)
-      })
-  }
-
   const finishEditing = async () => {
     if (!skillId) return
     const savedOk = await (stepEditorRef.current?.submitIfDirty() ?? Promise.resolve(true))
@@ -438,6 +410,22 @@ export function HumanEditPage() {
       }
     },
     [onWorkflowUpdated, setHistoryState, skillId],
+  )
+
+  const onApplyStepFrame = useCallback(
+    async (frameLabel: string) => {
+      if (!skillId || selected === null) return
+      try {
+        const res = await postApplyStepFrame(skillId, selected, frameLabel)
+        onWorkflowUpdated(res.workflow)
+        if (res.can_undo !== undefined) setHistoryState(res.can_undo, res.can_redo ?? false)
+        useEditorStore.getState().clearStepDirty(selected)
+        toast.success('Frame applied — anchors recomputed')
+      } catch (err) {
+        toast.error(errorMessage(err, 'Could not apply frame'))
+      }
+    },
+    [onWorkflowUpdated, selected, setHistoryState, skillId],
   )
 
   const openSkillForEdit = useCallback(
@@ -722,124 +710,89 @@ export function HumanEditPage() {
       title={`Skill: ${skillTitle}`}
       description={
         skillId ? (
-          <div className="flex max-w-full flex-wrap items-center gap-0.5">
-            <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide leading-none text-zinc-600">
-              Skill id
-            </span>
-            <span className={cn(SKILL_ID_CAPTION_CLASS, 'min-w-0 text-left')} title={skillId}>
-              {skillId}
-            </span>
-            <span
-              className="inline-flex shrink-0 text-zinc-600 hover:text-zinc-400"
-              title="Edits overwrite this skill's package on disk. Same skill id and title unless you rebuild from recording."
-            >
-              <Info className="size-3 shrink-0" aria-hidden />
-              <span className="sr-only">Skill id persists on disk</span>
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="h-5 w-5 shrink-0 p-0 text-zinc-500 hover:bg-white/10 hover:text-zinc-200 [&_svg]:size-2.5"
-              title="Copy skill id"
-              aria-label="Copy skill id"
-              onClick={() =>
-                navigator.clipboard
-                  .writeText(skillId)
-                  .then(() => toast.success('Skill id copied'))
-                  .catch(() => toast.error('Could not copy'))
-              }
-            >
-              <Copy className="size-2.5" />
-            </Button>
+          <div className="flex max-w-full flex-wrap items-center gap-2">
+            <div className="flex items-center gap-0.5">
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide leading-none text-zinc-600">
+                Skill id
+              </span>
+              <span className={cn(SKILL_ID_CAPTION_CLASS, 'min-w-0 text-left')} title={skillId}>
+                {skillId}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="h-5 w-5 shrink-0 p-0 text-zinc-500 hover:bg-white/10 hover:text-zinc-200 [&_svg]:size-2.5"
+                title="Copy skill id"
+                aria-label="Copy skill id"
+                onClick={() =>
+                  navigator.clipboard
+                    .writeText(skillId)
+                    .then(() => toast.success('Skill id copied'))
+                    .catch(() => toast.error('Could not copy'))
+                }
+              >
+                <Copy className="size-2.5" />
+              </Button>
+            </div>
+            {version > 0 && (
+              <Badge variant="outline" className="border-white/10 font-mono text-[0.65rem] text-zinc-500">
+                v{version}
+              </Badge>
+            )}
           </div>
         ) : null
       }
       actions={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] disabled:opacity-40"
-            onClick={() => void handleUndo()}
-            disabled={!canUndo}
-            title="Undo last edit (Ctrl+Z)"
-          >
-            <Undo2 className="size-3.5" />
-            <span className="hidden sm:inline">Undo</span>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] disabled:opacity-40"
-            onClick={() => void handleRedo()}
-            disabled={!canRedo}
-            title="Redo (Ctrl+Y)"
-          >
-            <Redo2 className="size-3.5" />
-            <span className="hidden sm:inline">Redo</span>
-          </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center overflow-hidden rounded-md border border-white/10 bg-white/[0.03]">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-none px-2.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-30"
+              onClick={() => void handleUndo()}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              aria-label="Undo"
+            >
+              <Undo2 className="size-3.5" />
+            </Button>
+            <div className="h-4 w-px bg-white/10" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-none px-2.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-30"
+              onClick={() => void handleRedo()}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y)"
+              aria-label="Redo"
+            >
+              <Redo2 className="size-3.5" />
+            </Button>
+          </div>
           {fromPath && (
             <Button
               variant="outline"
               size="sm"
-              className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]"
+              className="h-8 border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-white"
               onClick={() => navigate(fromPath)}
               title="Back to plugin"
             >
               <ChevronLeft className="size-3.5" />
-              <span className="hidden sm:inline">Back to Plugin</span>
+              <span className="hidden sm:inline">Back</span>
             </Button>
           )}
-          <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]" asChild>
-            <Link to="/dashboard" title="Start a new recording (home)">
-              <Home className="size-3.5" />
-              <span className="hidden sm:inline">New recording</span>
-            </Link>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 bg-white px-4 text-sm font-semibold text-black hover:bg-zinc-100"
+            onClick={() => void finishEditing()}
+            title="Save all changes and return to the skill list"
+          >
+            Finish editing
           </Button>
-          <span className="inline-flex items-center gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="relative border-white/10 bg-black pr-7 text-white hover:bg-zinc-900"
-              onClick={runValidate}
-              title="Runs fast static checks on the skill you're editing"
-            >
-              Check Issues
-              <Info className="absolute top-1 right-1 size-3 shrink-0 opacity-80" aria-hidden />
-              <span className="sr-only">About Check Issues</span>
-            </Button>
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="relative border-white/10 bg-white/[0.04] pr-7 text-zinc-200 hover:bg-white/[0.08]"
-              onClick={bumpSkillVersion}
-              title="Increments the skill version counter in metadata. Your saved edits are preserved."
-            >
-              Bump version
-              <Info className="absolute top-1 right-1 size-3 shrink-0 opacity-80" aria-hidden />
-              <span className="sr-only">About bumping version</span>
-            </Button>
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Button
-              type="button"
-              size="default"
-              className="relative h-10 bg-white px-5 pr-8 text-[0.9375rem] font-medium text-black hover:bg-zinc-200 sm:min-w-[6.75rem]"
-              onClick={() => void finishEditing()}
-              title="Saves the open step if dirty, then returns to the skill list. Keeps this skill id — no duplicate skill."
-            >
-              Finish
-              <Info className="absolute top-1 right-1 size-3 shrink-0 opacity-80" aria-hidden />
-              <span className="sr-only">About Finish</span>
-            </Button>
-          </span>
         </div>
       }
     />
@@ -886,6 +839,7 @@ export function HumanEditPage() {
           recordingShotDragActive={recordingShotDragActive}
           onDroppedRecordingScreenshot={onDroppedRecordingScreenshot}
           onClearStepVisual={onClearStepVisual}
+          onApplyStepFrame={onApplyStepFrame}
         />
         <div
           className="group absolute inset-y-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize md:block"
@@ -1018,14 +972,14 @@ export function HumanEditPage() {
                       activeToolsPane === 'screenshots' ? 'border-black/20 text-black' : 'border-white/15 text-zinc-300',
                     )}
                   >
-                    {recordingShotsQ.data?.items?.length ?? '—'}
+                    {currentStep?.screenshot?.frames?.length ?? '—'}
                   </Badge>
                   <span
                     className={cn(
                       'absolute top-1 right-1 inline-flex shrink-0',
                       activeToolsPane === 'screenshots' ? 'text-zinc-700' : 'text-zinc-400',
                     )}
-                    title="Recording frames plus 'No image' (default): drag onto the preview or a step - swap frame, attach, or strip the screenshot."
+                    title="5 video frames per step (−0.5 s to +0.5 s): click or drag to set the representative, or drag 'No image' to detach."
                   >
                     <Info className="size-3" />
                   </span>
@@ -1067,17 +1021,10 @@ export function HumanEditPage() {
             <div id="recording-screenshots-pane" className="h-full min-h-0 px-1 py-2">
               {activeToolsPane === 'screenshots' ? (
                 <RecordingScreenshotsPanel
-                  loading={recordingShotsQ.isLoading || recordingShotsQ.isFetching}
-                  error={(recordingShotsQ.error as Error) ?? null}
-                  items={recordingShotsQ.data?.items ?? []}
-                  recordingDragEnabled={
-                    !!(recordingShotsQ.data?.session_id && recordingShotsQ.data?.items?.length)
-                  }
-                  emptyDetail={
-                    !recordingShotsQ.data?.session_id
-                      ? 'This skill has no linked recording session — only packages compiled from a session can replay frames.'
-                      : null
-                  }
+                  frames={currentStep?.screenshot?.frames ?? []}
+                  activeFrameLabel={currentStep?.screenshot?.default_frame_label ?? null}
+                  clearVisualDragEnabled={!!currentStep && !currentStep.flags.is_scroll}
+                  onApplyFrame={currentStep && !currentStep.flags.is_scroll ? onApplyStepFrame : undefined}
                   onDragShotStart={() => setRecordingShotDragActive(true)}
                   onDragShotEnd={() => setRecordingShotDragActive(false)}
                 />

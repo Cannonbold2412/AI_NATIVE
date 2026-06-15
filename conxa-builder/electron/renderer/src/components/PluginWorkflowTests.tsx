@@ -34,6 +34,19 @@ type InputSpec = {
 
 const TEMPLATE_INPUT_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g
 
+function formatRuntimeError(msg: string): string {
+  // Strip "Runtime log tail: {...}" suffix from timeout errors
+  const tailIdx = msg.indexOf('Runtime log tail:')
+  const cleaned = tailIdx !== -1 ? msg.slice(0, tailIdx).trim() : msg.trim()
+
+  // Playwright "Executable doesn't exist at <path>" → short user-facing message
+  if (/browserType\.launch.*Executable doesn't exist/i.test(cleaned)) {
+    return 'Playwright browser not found. Restarting Build Studio should trigger an automatic install.'
+  }
+
+  return cleaned || 'Test failed'
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }
@@ -132,7 +145,7 @@ function WorkflowLogSection({
             {logs.map((line, i) => (
               <div key={i} className="flex gap-1.5">
                 <span className="shrink-0 text-zinc-600">›</span>
-                <span>{line}</span>
+                <span className="min-w-0 break-all">{line}</span>
               </div>
             ))}
           </div>
@@ -146,9 +159,9 @@ function WorkflowLogSection({
       )}
       {runError && (
         <div className="space-y-2">
-          <div className="flex items-start gap-2 text-xs text-red-300">
+          <div className="flex min-w-0 items-start gap-2 text-xs text-red-300">
             <XCircle className="mt-0.5 size-3.5 shrink-0" />
-            <span className="whitespace-pre-line">{runError}</span>
+            <span className="min-w-0 break-all">{runError}</span>
           </div>
           {onRetry && (
             <Button size="sm" variant="outline" onClick={onRetry} className="border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10">
@@ -315,7 +328,7 @@ export function WorkflowTestRow({
       setRunDone(true)
       onComplete()
     } catch (err) {
-      setRunError(err instanceof Error ? err.message : 'Test failed')
+      setRunError(err instanceof Error ? formatRuntimeError(err.message) : 'Test failed')
       onComplete()
     } finally {
       setRunning(false)
@@ -336,16 +349,16 @@ export function WorkflowTestRow({
   const canRun = !stale && !running && Boolean(wf.skill_id)
 
   return (
-    <div className="rounded-lg border border-white/8 bg-white/[0.02]">
+    <div className="overflow-hidden rounded-lg border border-white/8 bg-white/[0.02]">
       {/* Header row */}
       <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-        <div className="min-w-0">
+        <div className="min-w-0 overflow-hidden">
           <p className="truncate text-sm font-medium text-white">{wf.name}</p>
           {stale && (
             <p className="mt-0.5 text-xs text-amber-400">Edited since last build — rebuild before testing</p>
           )}
           {wf.last_test_status === 'failed' && wf.last_test_error && !runError && logs.length === 0 && (
-            <p className="mt-0.5 truncate text-xs text-red-300">{wf.last_test_error}</p>
+            <p className="mt-0.5 truncate text-xs text-red-300">{formatRuntimeError(wf.last_test_error)}</p>
           )}
         </div>
 

@@ -379,6 +379,8 @@ export type DropRecordingScreenshotHandlers = {
   recordingShotDragActive?: boolean
   onDroppedRecordingScreenshot?: (stepIndex: number, eventIndex: number) => void | Promise<void>
   onClearStepVisual?: (stepIndex: number) => void | Promise<void>
+  /** Called when a video frame (by label) is dragged onto the screenshot preview. */
+  onApplyStepFrame?: (frameLabel: string) => void | Promise<void>
 }
 
 type Props = {
@@ -402,6 +404,7 @@ export function ScreenshotViewer({
   recordingShotDragActive,
   onDroppedRecordingScreenshot,
   onClearStepVisual,
+  onApplyStepFrame,
   onSaveVisualBbox,
   isScrollStep = false,
 }: Props) {
@@ -443,9 +446,10 @@ export function ScreenshotViewer({
   const hasVisibleVisualBbox = !isWeakVisualBbox(effectiveBbox, isScrollStep)
 
   const canDropRecording = typeof onDroppedRecordingScreenshot === 'function'
+  const canDropFrame = typeof onApplyStepFrame === 'function'
   const canDropClear = typeof onClearStepVisual === 'function'
   const canDrop =
-    typeof stepIndex === 'number' && stepIndex >= 0 && (canDropRecording || canDropClear)
+    typeof stepIndex === 'number' && stepIndex >= 0 && (canDropRecording || canDropClear || canDropFrame)
 
   const [dropHighlight, setDropHighlight] = useState(false)
 
@@ -488,6 +492,7 @@ export function ScreenshotViewer({
           mode?: unknown
           event_index?: unknown
           preview_url?: unknown
+          frame_label?: unknown
         }
         if (parsed.mode === RECORDING_DRAG_MODE_CLEAR_VISUAL) {
           if (!canDropClear || !onClearStepVisual) return
@@ -498,6 +503,19 @@ export function ScreenshotViewer({
           })
           return
         }
+        // New: frame_label drag from the 5-frame panel
+        const frameLabel = typeof parsed.frame_label === 'string' && parsed.frame_label.trim() ? parsed.frame_label.trim() : null
+        if (frameLabel && onApplyStepFrame) {
+          const previewUrl =
+            typeof parsed.preview_url === 'string' && parsed.preview_url.trim() ? parsed.preview_url.trim() : null
+          setOptimisticNoImage(false)
+          if (previewUrl) setOptimisticSrc(previewUrl)
+          Promise.resolve(onApplyStepFrame(frameLabel)).catch(() => {
+            setOptimisticSrc(null)
+          })
+          return
+        }
+        // Legacy: event_index drag (backwards compat)
         if (!canDropRecording || !onDroppedRecordingScreenshot) return
         const evIdx = parsed.event_index
         const previewUrl =
@@ -514,7 +532,7 @@ export function ScreenshotViewer({
         setOptimisticNoImage(false)
       }
     },
-    [canDrop, canDropClear, canDropRecording, onClearStepVisual, onDroppedRecordingScreenshot, stepIndex],
+    [canDrop, canDropClear, canDropFrame, canDropRecording, onApplyStepFrame, onClearStepVisual, onDroppedRecordingScreenshot, stepIndex],
   )
 
   const dropAria =

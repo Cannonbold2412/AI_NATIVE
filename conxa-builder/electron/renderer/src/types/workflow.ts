@@ -6,6 +6,12 @@ export type StepFlags = {
   generic_intent: boolean
 }
 
+export type FrameDTO = {
+  label: string
+  offset_ms: number
+  url: string | null
+}
+
 export type StepScreenshotDTO = {
   full_url: string | null
   element_url: string | null
@@ -13,6 +19,8 @@ export type StepScreenshotDTO = {
   bbox: Record<string, number>
   viewport: string
   scroll_position: string
+  frames: FrameDTO[]
+  default_frame_label: string | null
 }
 
 export type StepEditorDTO = {
